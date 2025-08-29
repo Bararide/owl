@@ -4812,3 +4812,85 @@ events:
         
       exitCode: 0
 ...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "3dparty/boost/libs/cobalt/cmake/CheckRequirements.cmake:19 (try_compile)"
+      - "3dparty/boost/libs/cobalt/CMakeLists.txt:15 (include)"
+    directories:
+      source: "/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp"
+      binary: "/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/tools/cmake/include"
+      CMAKE_MSVC_RUNTIME_LIBRARY: "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+    buildResult:
+      variable: "BOOST_COBALT_HAS_COROUTINE_INCLUDE"
+      cached: true
+      stdout: |
+        Change Dir: '/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp'
+        
+        Run Build Command(s): /usr/bin/ninja -v cmTC_4ed20
+        [1/2] /usr/bin/clang++   -std=gnu++20 -MD -MT CMakeFiles/cmTC_4ed20.dir/coroutine.cpp.o -MF CMakeFiles/cmTC_4ed20.dir/coroutine.cpp.o.d -o CMakeFiles/cmTC_4ed20.dir/coroutine.cpp.o -c /home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/cobalt/cmake/coroutine.cpp
+        [2/2] : && /usr/bin/cmake -E rm -f libcmTC_4ed20.a && /usr/bin/llvm-ar qc libcmTC_4ed20.a  CMakeFiles/cmTC_4ed20.dir/coroutine.cpp.o && /usr/bin/llvm-ranlib libcmTC_4ed20.a && :
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "3dparty/boost/libs/cobalt/cmake/CheckRequirements.cmake:33 (try_compile)"
+      - "3dparty/boost/libs/cobalt/CMakeLists.txt:15 (include)"
+    directories:
+      source: "/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp"
+      binary: "/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/tools/cmake/include"
+      CMAKE_MSVC_RUNTIME_LIBRARY: "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+    buildResult:
+      variable: "BOOST_COBALT_HAS_CONCEPTS"
+      cached: true
+      stdout: |
+        Change Dir: '/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp'
+        
+        Run Build Command(s): /usr/bin/ninja -v cmTC_b8a97
+        [1/2] /usr/bin/clang++   -std=gnu++20 -MD -MT CMakeFiles/cmTC_b8a97.dir/concepts.cpp.o -MF CMakeFiles/cmTC_b8a97.dir/concepts.cpp.o.d -o CMakeFiles/cmTC_b8a97.dir/concepts.cpp.o -c /home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/cobalt/cmake/concepts.cpp
+        [2/2] : && /usr/bin/cmake -E rm -f libcmTC_b8a97.a && /usr/bin/llvm-ar qc libcmTC_b8a97.a  CMakeFiles/cmTC_b8a97.dir/concepts.cpp.o && /usr/bin/llvm-ranlib libcmTC_b8a97.a && :
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "3dparty/boost/libs/cobalt/cmake/CheckRequirements.cmake:49 (try_compile)"
+      - "3dparty/boost/libs/cobalt/CMakeLists.txt:15 (include)"
+    directories:
+      source: "/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp"
+      binary: "/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/tools/cmake/include"
+      CMAKE_MSVC_RUNTIME_LIBRARY: "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+    buildResult:
+      variable: "BOOST_COBALT_HAS_STD_PMR"
+      cached: true
+      stdout: |
+        Change Dir: '/home/bararide/code/sem6/Cpp/owl/build/3dparty/boost/libs/cobalt/CMakeFiles/CMakeTmp'
+        
+        Run Build Command(s): /usr/bin/ninja -v cmTC_dfdf8
+        [1/2] /usr/bin/clang++   -std=gnu++17 -MD -MT CMakeFiles/cmTC_dfdf8.dir/memory_resource.cpp.o -MF CMakeFiles/cmTC_dfdf8.dir/memory_resource.cpp.o.d -o CMakeFiles/cmTC_dfdf8.dir/memory_resource.cpp.o -c /home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/cobalt/cmake/memory_resource.cpp
+        [2/2] : && /usr/bin/cmake -E rm -f libcmTC_dfdf8.a && /usr/bin/llvm-ar qc libcmTC_dfdf8.a  CMakeFiles/cmTC_dfdf8.dir/memory_resource.cpp.o && /usr/bin/llvm-ranlib libcmTC_dfdf8.a && :
+        
+      exitCode: 0
+...

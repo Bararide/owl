@@ -56,3 +56,6 @@ getattr_callback: 1363 ns
 readdir_callback: 5210 ns
 getattr_callback: 811 ns
 getattr_callback: 3737 ns
+getattr_callback: 8666 ns
+getattr_callback: 9357 ns
+getattr_callback: 3456 ns
