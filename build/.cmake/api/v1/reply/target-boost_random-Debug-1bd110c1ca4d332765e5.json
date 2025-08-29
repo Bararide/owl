@@ -1,0 +1,209 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "3dparty/boost/libs/random/libboost_random.a"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_compile_definitions",
+			"target_link_libraries",
+			"target_compile_features"
+		],
+		"files" : 
+		[
+			"3dparty/boost/libs/random/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 13,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 43,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 53,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 26,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 41,
+				"parent" : 0
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -std=gnu++20"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_RANDOM_NO_LIB"
+				},
+				{
+					"backtrace" : 3,
+					"define" : "BOOST_RANDOM_STATIC_LINK"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 0,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/random/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/assert/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/config/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/core/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/static_assert/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/throw_exception/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/dynamic_bitset/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/container_hash/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/describe/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/mp11/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/integer/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/type_traits/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/move/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/io/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/system/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/variant2/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/winapi/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/predef/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/utility/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/preprocessor/include"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					5,
+					4,
+					4,
+					4
+				],
+				"standard" : "20"
+			},
+			"sourceIndexes" : 
+			[
+				0
+			]
+		}
+	],
+	"id" : "boost_random::@7689414a123eda82f754",
+	"name" : "boost_random",
+	"nameOnDisk" : "libboost_random.a",
+	"paths" : 
+	{
+		"build" : "3dparty/boost/libs/random",
+		"source" : "3dparty/boost/libs/random"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/random/src/random_device.cpp",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

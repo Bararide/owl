@@ -1,0 +1,18 @@
+[submodule "3dparty/boost"]
+	path = 3dparty/boost
+	url = https://github.com/boostorg/boost
+[submodule "3dparty/faiss"]
+	path = 3dparty/faiss
+	url = https://github.com/facebookresearch/faiss
+[submodule "3dparty/fastText"]
+	path = 3dparty/fastText
+	url = https://github.com/facebookresearch/fastText
+[submodule "3dparty/spdlog"]
+	path = 3dparty/spdlog
+	url = https://github.com/gabime/spdlog
+[submodule "3dparty/sentencepiece"]
+	path = 3dparty/sentencepiece
+	url = https://github.com/google/sentencepiece
+[submodule "faiss"]
+	path = faiss
+	url = https://github.com/facebookresearch/faiss

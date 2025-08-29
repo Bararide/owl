@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "3dparty/boost/libs/fusion",
+		"source" : "3dparty/boost/libs/fusion"
+	}
+}

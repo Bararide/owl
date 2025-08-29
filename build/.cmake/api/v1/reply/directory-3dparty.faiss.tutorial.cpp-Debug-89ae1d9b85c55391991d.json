@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "3dparty/faiss/tutorial/cpp",
+		"source" : "3dparty/faiss/tutorial/cpp"
+	}
+}

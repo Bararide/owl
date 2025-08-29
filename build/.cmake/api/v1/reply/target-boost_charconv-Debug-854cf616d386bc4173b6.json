@@ -1,0 +1,162 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "3dparty/boost/libs/charconv/libboost_charconv.a"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_compile_definitions",
+			"target_link_libraries",
+			"target_compile_features"
+		],
+		"files" : 
+		[
+			"3dparty/boost/libs/charconv/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 10,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 66,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 40,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 56,
+				"parent" : 0
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -std=gnu++20"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_CHARCONV_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_CHARCONV_SOURCE"
+				},
+				{
+					"backtrace" : 3,
+					"define" : "BOOST_CHARCONV_STATIC_LINK"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 0,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/charconv/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/config/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/assert/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/core/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/static_assert/include"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/throw_exception/include"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					5
+				],
+				"standard" : "20"
+			},
+			"sourceIndexes" : 
+			[
+				0,
+				1
+			]
+		}
+	],
+	"id" : "boost_charconv::@09ec88a0749b94faf324",
+	"name" : "boost_charconv",
+	"nameOnDisk" : "libboost_charconv.a",
+	"paths" : 
+	{
+		"build" : "3dparty/boost/libs/charconv",
+		"source" : "3dparty/boost/libs/charconv"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/charconv/src/from_chars.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/charconv/src/to_chars.cpp",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

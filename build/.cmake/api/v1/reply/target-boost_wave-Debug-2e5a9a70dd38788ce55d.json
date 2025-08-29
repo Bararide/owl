@@ -1,0 +1,566 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "3dparty/boost/libs/wave/libboost_wave.a"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_link_libraries",
+			"target_compile_definitions",
+			"target_compile_features"
+		],
+		"files" : 
+		[
+			"3dparty/boost/libs/wave/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 10,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 30,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 55,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 63,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 53,
+				"parent" : 0
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -std=gnu++20"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_ATOMIC_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_ATOMIC_STATIC_LINK"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_CHRONO_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_CHRONO_STATIC_LINK"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_CONTAINER_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_CONTAINER_STATIC_LINK"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_DATE_TIME_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_DATE_TIME_STATIC_LINK"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_FILESYSTEM_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_FILESYSTEM_STATIC_LINK=1"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_SERIALIZATION_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_SERIALIZATION_STATIC_LINK"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_THREAD_NO_LIB"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_THREAD_STATIC_LINK"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "BOOST_THREAD_USE_LIB"
+				},
+				{
+					"backtrace" : 3,
+					"define" : "BOOST_WAVE_NO_LIB"
+				},
+				{
+					"backtrace" : 3,
+					"define" : "BOOST_WAVE_SOURCE"
+				},
+				{
+					"backtrace" : 4,
+					"define" : "BOOST_WAVE_STATIC_LINK"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 0,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/wave/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/assert/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/config/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/concept_check/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/preprocessor/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/static_assert/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/type_traits/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/core/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/throw_exception/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/filesystem/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/container_hash/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/describe/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/mp11/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/detail/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/io/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/iterator/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/fusion/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/function_types/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/mpl/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/predef/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/utility/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/tuple/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/typeof/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/functional/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/function/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/bind/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/optional/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/smart_ptr/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/system/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/variant2/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/winapi/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/format/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/lexical_cast/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/container/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/intrusive/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/move/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/multi_index/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/integer/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/pool/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/serialization/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/array/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/spirit/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/endian/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/phoenix/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/proto/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/range/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/conversion/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/regex/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/thread/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/atomic/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/chrono/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/ratio/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/date_time/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/algorithm/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/exception/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/unordered/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/numeric/conversion/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/tokenizer/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/variant/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/bararide/code/sem6/Cpp/owl/3dparty/boost/libs/type_index/include"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					5,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2,
+					2
+				],
+				"standard" : "20"
+			},
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 2,
+			"id" : "boost_atomic::@8fdfe50993e6ea55ba97"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "boost_chrono::@4245e2f342974d9a18ce"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "boost_container::@6db6a4563ab279f64d58"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "boost_date_time::@56cf4dfc793f13994ee1"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "boost_filesystem::@81eb1a1171434c19a6e0"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "boost_optional::@a5466c47d37438243434"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "boost_serialization::@08db337f7d44c54c6526"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "boost_thread::@2747be019fce4dbe122d"
+		}
+	],
+	"id" : "boost_wave::@06b3a3aa3b70557fef52",
+	"name" : "boost_wave",
+	"nameOnDisk" : "libboost_wave.a",
+	"paths" : 
+	{
+		"build" : "3dparty/boost/libs/wave",
+		"source" : "3dparty/boost/libs/wave"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_re2c_lexer.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/token_ids.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_defined_grammar.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_cpp_literalgrs.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_cpp_exprgrammar.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_has_include_grammar.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_predef_macros.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_re2c_lexer_str.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/instantiate_cpp_grammar.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/wave_config_constant.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/cpplexer/re2clex/aq.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "3dparty/boost/libs/wave/src/cpplexer/re2clex/cpp_re.cpp",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

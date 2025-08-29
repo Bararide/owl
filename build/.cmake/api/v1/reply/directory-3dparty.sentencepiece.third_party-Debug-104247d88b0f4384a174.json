@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "3dparty/sentencepiece/third_party",
+		"source" : "3dparty/sentencepiece/third_party"
+	}
+}
