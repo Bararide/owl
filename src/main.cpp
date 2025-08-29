@@ -1,9 +1,11 @@
 #define FUSE_USE_VERSION 31
 #include <algorithm>
 #include <chrono>
+#include <codecvt>
 #include <cstring>
 #include <fstream>
 #include <fuse3/fuse.h>
+#include <locale>
 #include <map>
 #include <memory>
 #include <set>
@@ -11,8 +13,6 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
-#include <locale>
-#include <codecvt>
 
 #include <faiss/IndexFlat.h>
 #include <fasttext.h>
@@ -107,27 +107,27 @@ std::string normalize_text(const std::string &text) {
 }
 
 std::string url_decode(const std::string &str) {
-    std::string result;
-    result.reserve(str.size());
-    
-    for (size_t i = 0; i < str.size(); ++i) {
-        if (str[i] == '%' && i + 2 < str.size()) {
-            int value;
-            std::istringstream iss(str.substr(i + 1, 2));
-            if (iss >> std::hex >> value) {
-                result += static_cast<char>(value);
-                i += 2;
-            } else {
-                result += str[i];
-            }
-        } else if (str[i] == '+') {
-            result += ' ';
-        } else {
-            result += str[i];
-        }
+  std::string result;
+  result.reserve(str.size());
+
+  for (size_t i = 0; i < str.size(); ++i) {
+    if (str[i] == '%' && i + 2 < str.size()) {
+      int value;
+      std::istringstream iss(str.substr(i + 1, 2));
+      if (iss >> std::hex >> value) {
+        result += static_cast<char>(value);
+        i += 2;
+      } else {
+        result += str[i];
+      }
+    } else if (str[i] == '+') {
+      result += ' ';
+    } else {
+      result += str[i];
     }
-    
-    return result;
+  }
+
+  return result;
 }
 
 void update_embedding(const std::string &path) {
@@ -214,41 +214,41 @@ semantic_search(const std::string &query, int k) {
 }
 
 std::string generate_search_result(const std::string &query) {
-    spdlog::info("Processing search query: {}", query);
-    
-    auto results = semantic_search(query, 5);
-    
-    std::stringstream ss;
-    ss << "=== Semantic Search Results ===\n";
-    ss << "Query: " << query << "\n\n";
-    
-    if (results.empty()) {
-        ss << "No results found\n";
-        ss << "Indexed files: " << index_to_path.size() << "\n";
-        if (index_to_path.empty()) {
-            ss << "Hint: Create some files with content first!\n";
-        }
-    } else {
-        ss << "Found " << results.size() << " results:\n\n";
-        for (const auto &[file_path, score] : results) {
-            auto it = virtual_files.find(file_path);
-            ss << "📄 " << file_path << " (score: " << score << ")\n";
-            if (it != virtual_files.end()) {
-                ss << "   Content: "
-                   << (it->second.content.size() > 50
-                           ? it->second.content.substr(0, 50) + "..."
-                           : it->second.content)
-                   << "\n\n";
-            }
-        }
+  spdlog::info("Processing search query: {}", query);
+
+  auto results = semantic_search(query, 5);
+
+  std::stringstream ss;
+  ss << "=== Semantic Search Results ===\n";
+  ss << "Query: " << query << "\n\n";
+
+  if (results.empty()) {
+    ss << "No results found\n";
+    ss << "Indexed files: " << index_to_path.size() << "\n";
+    if (index_to_path.empty()) {
+      ss << "Hint: Create some files with content first!\n";
     }
-    
-    ss << "\n=== Search Info ===\n";
-    ss << "Total indexed files: " << index_to_path.size() << "\n";
-    ss << "Embedder dimension: " << (embedder ? embedder->getDimension() : 0)
-       << "\n";
-    
-    return ss.str();
+  } else {
+    ss << "Found " << results.size() << " results:\n\n";
+    for (const auto &[file_path, score] : results) {
+      auto it = virtual_files.find(file_path);
+      ss << "📄 " << file_path << " (score: " << score << ")\n";
+      if (it != virtual_files.end()) {
+        ss << "   Content: "
+           << (it->second.content.size() > 50
+                   ? it->second.content.substr(0, 50) + "..."
+                   : it->second.content)
+           << "\n\n";
+      }
+    }
+  }
+
+  ss << "\n=== Search Info ===\n";
+  ss << "Total indexed files: " << index_to_path.size() << "\n";
+  ss << "Embedder dimension: " << (embedder ? embedder->getDimension() : 0)
+     << "\n";
+
+  return ss.str();
 }
 
 static int getattr_callback(const char *path, struct stat *stbuf,
@@ -333,7 +333,8 @@ static int readdir_callback(const char *path, void *buf, fuse_fill_dir_t filler,
         filler(buf, "программирование", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, "машинное_обучение", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, "базы_данных", nullptr, 0, FUSE_FILL_DIR_PLUS);
-        filler(buf, "системное_программирование", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, "системное_программирование", nullptr, 0,
+               FUSE_FILL_DIR_PLUS);
       } else { return -ENOENT; })
   return 0;
 }
@@ -384,7 +385,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
   if (strncmp(path, "/.search/", 9) == 0) {
     return 0;
   }
-  
+
   if (strcmp(path, "/.reindex") == 0 || strcmp(path, "/.embeddings") == 0) {
     return 0;
   }
@@ -400,12 +401,12 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
                          struct fuse_file_info *) {
   if (strncmp(path, "/.search/", 9) == 0) {
     std::string query = path + 9;
-    
+
     query = url_decode(query);
     std::replace(query.begin(), query.end(), '_', ' ');
-    
+
     std::string content = generate_search_result(query);
-    
+
     if (offset >= content.size())
       return 0;
     size_t len = std::min(content.size() - offset, size);
@@ -634,10 +635,16 @@ void test_semantic_search() {
 
   spdlog::info("=== Тестирование семантического поиска ===");
 
-  virtual_files["/test1.txt"] = FileInfo(S_IFREG | 0644, 0, "Программирование на C++ и системное ПО", getuid(), getgid(), time(nullptr), time(nullptr), time(nullptr));
-  virtual_files["/test2.txt"] = FileInfo(S_IFREG | 0644, 0, "Машинное обучение и нейронные сети", getuid(), getgid(), time(nullptr), time(nullptr), time(nullptr));
-  virtual_files["/test3.txt"] = FileInfo(S_IFREG | 0644, 0, "Базы данных и SQL запросы", getuid(), getgid(), time(nullptr), time(nullptr), time(nullptr));
-  
+  virtual_files["/test1.txt"] =
+      FileInfo(S_IFREG | 0644, 0, "Программирование на C++ и системное ПО",
+               getuid(), getgid(), time(nullptr), time(nullptr), time(nullptr));
+  virtual_files["/test2.txt"] =
+      FileInfo(S_IFREG | 0644, 0, "Машинное обучение и нейронные сети",
+               getuid(), getgid(), time(nullptr), time(nullptr), time(nullptr));
+  virtual_files["/test3.txt"] =
+      FileInfo(S_IFREG | 0644, 0, "Базы данных и SQL запросы", getuid(),
+               getgid(), time(nullptr), time(nullptr), time(nullptr));
+
   update_embedding("/test1.txt");
   update_embedding("/test2.txt");
   update_embedding("/test3.txt");
