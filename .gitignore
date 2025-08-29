@@ -1,2 +1,28 @@
-*/build
-*/3dparty
+# Build directories
+build/
+*/build/
+*.build/
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Object files
+*.o
+*.obj
+
+# Dependency files
+*.d
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
