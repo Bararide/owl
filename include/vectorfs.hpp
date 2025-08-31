@@ -287,10 +287,6 @@ public:
     } else if (strcmp(path, "/.search") == 0) {
       filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
       filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
-      filler(buf, "программирование", nullptr, 0, FUSE_FILL_DIR_PLUS);
-      filler(buf, "машинное_обучение", nullptr, 0, FUSE_FILL_DIR_PLUS);
-      filler(buf, "базы_данных", nullptr, 0, FUSE_FILL_DIR_PLUS);
-      filler(buf, "системное_программирование", nullptr, 0, FUSE_FILL_DIR_PLUS);
     } else {
       return -ENOENT;
     }
