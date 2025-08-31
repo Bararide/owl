@@ -90,5 +90,6 @@
         "valarray": "cpp",
         "variant": "cpp",
         "rope": "cpp"
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

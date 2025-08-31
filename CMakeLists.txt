@@ -15,6 +15,8 @@ add_subdirectory(3dparty/sentencepiece EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
 
+include_directories(include)
+
 add_executable(owl src/main.cpp)
 target_include_directories(owl PRIVATE ${FUSE3_INCLUDE_DIRS}     
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
