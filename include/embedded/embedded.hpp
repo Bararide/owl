@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace embedded {
+namespace vfs::embedded {
 class FastTextEmbedder {
 private:
   std::unique_ptr<fasttext::FastText> fasttext_;

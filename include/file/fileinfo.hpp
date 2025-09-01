@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <vector>
 
-namespace fileinfo {
+namespace vfs::fileinfo {
 struct FileInfo {
   mode_t mode;
   size_t size;

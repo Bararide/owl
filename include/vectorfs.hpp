@@ -25,171 +25,11 @@
 #include "embedded/embedded.hpp"
 #include "file/fileinfo.hpp"
 
-namespace vectorfs {
+namespace vfs::vectorfs {
 
 using idx_t = faiss::idx_t;
 
 class VectorFS {
-private:
-  std::map<std::string, fileinfo::FileInfo> virtual_files;
-  std::set<std::string> virtual_dirs;
-  std::unique_ptr<embedded::FastTextEmbedder> embedder;
-  std::unique_ptr<faiss::IndexFlatL2> faiss_index;
-  bool index_needs_rebuild;
-  std::map<idx_t, std::string> index_to_path;
-  std::map<std::string, std::string> search_results_cache;
-
-  std::string normalize_text(const std::string &text) {
-    std::string result = text;
-    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
-    return result;
-  }
-
-  std::string url_decode(const std::string &str) {
-    std::string result;
-    result.reserve(str.size());
-
-    for (size_t i = 0; i < str.size(); ++i) {
-      if (str[i] == '%' && i + 2 < str.size()) {
-        int value;
-        std::istringstream iss(str.substr(i + 1, 2));
-        if (iss >> std::hex >> value) {
-          result += static_cast<char>(value);
-          i += 2;
-        } else {
-          result += str[i];
-        }
-      } else if (str[i] == '+') {
-        result += ' ';
-      } else {
-        result += str[i];
-      }
-    }
-
-    return result;
-  }
-
-  void update_embedding(const std::string &path) {
-    auto it = virtual_files.find(path);
-    if (it == virtual_files.end())
-      return;
-
-    if (embedder && !it->second.content.empty()) {
-      std::string normalized_content = normalize_text(it->second.content);
-      it->second.embedding = embedder->getSentenceEmbedding(normalized_content);
-      it->second.embedding_updated = true;
-      index_needs_rebuild = true;
-      spdlog::debug("Updated embedding for file: {}", path);
-    }
-  }
-
-  void rebuild_index() {
-    if (!index_needs_rebuild)
-      return;
-
-    spdlog::info("Rebuilding vector index");
-    index_to_path.clear();
-
-    std::vector<float> all_embeddings;
-    std::vector<std::string> indexed_paths;
-
-    idx_t idx = 0;
-    for (const auto &[path, file_info] : virtual_files) {
-      if (file_info.embedding_updated && !file_info.embedding.empty()) {
-        all_embeddings.insert(all_embeddings.end(), file_info.embedding.begin(),
-                              file_info.embedding.end());
-        index_to_path[idx] = path;
-        indexed_paths.push_back(path);
-        idx++;
-      }
-    }
-
-    if (!indexed_paths.empty()) {
-      if (!faiss_index) {
-        faiss_index =
-            std::make_unique<faiss::IndexFlatL2>(embedder->getDimension());
-      } else {
-        faiss_index->reset();
-      }
-
-      faiss_index->add(indexed_paths.size(), all_embeddings.data());
-      spdlog::info("Index rebuilt with {} files", indexed_paths.size());
-      index_needs_rebuild = false;
-    }
-  }
-
-  std::vector<std::pair<std::string, float>>
-  semantic_search(const std::string &query, int k) {
-    std::vector<std::pair<std::string, float>> results;
-
-    if (!embedder || !faiss_index) {
-      spdlog::error("Embedder or index not initialized");
-      return results;
-    }
-
-    rebuild_index();
-
-    if (index_to_path.empty()) {
-      spdlog::warn("No files indexed for search");
-      return results;
-    }
-
-    std::string normalized_query = normalize_text(query);
-    std::vector<float> query_embedding =
-        embedder->getSentenceEmbedding(normalized_query);
-
-    std::vector<idx_t> I(k);
-    std::vector<float> D(k);
-
-    faiss_index->search(1, query_embedding.data(), k, D.data(), I.data());
-
-    for (int i = 0; i < k; ++i) {
-      if (I[i] >= 0 && index_to_path.find(I[i]) != index_to_path.end()) {
-        results.push_back({index_to_path[I[i]], D[i]});
-      }
-    }
-
-    return results;
-  }
-
-  std::string generate_search_result(const std::string &query) {
-    spdlog::info("Processing search query: {}", query);
-
-    auto results = semantic_search(query, 5);
-
-    std::stringstream ss;
-    ss << "=== Semantic Search Results ===\n";
-    ss << "Query: " << query << "\n\n";
-
-    if (results.empty()) {
-      ss << "No results found\n";
-      ss << "Indexed files: " << index_to_path.size() << "\n";
-      if (index_to_path.empty()) {
-        ss << "Hint: Create some files with content first!\n";
-      }
-    } else {
-      ss << "Found " << results.size() << " results:\n\n";
-      for (const auto &[file_path, score] : results) {
-        auto it = virtual_files.find(file_path);
-        ss << "📄 " << file_path << " (score: " << score << ")\n";
-        if (it != virtual_files.end()) {
-          ss << "   Content: "
-             << (it->second.content.size() > 50
-                     ? it->second.content.substr(0, 50) + "..."
-                     : it->second.content)
-             << "\n\n";
-        }
-      }
-    }
-
-    ss << "\n=== Search Info ===\n";
-    ss << "Total indexed files: " << index_to_path.size() << "\n";
-    ss << "Embedder dimension: " << (embedder ? embedder->getDimension() : 0)
-       << "\n";
-
-    return ss.str();
-  }
-
 public:
   VectorFS() : virtual_dirs({"/"}), index_needs_rebuild(true) {}
 
@@ -324,8 +164,9 @@ public:
     size_t last_slash = parent_dir.find_last_of('/');
     if (last_slash != std::string::npos) {
       parent_dir = parent_dir.substr(0, last_slash);
-      if (parent_dir.empty())
+      if (parent_dir.empty()) {
         parent_dir = "/";
+      }
       if (virtual_dirs.count(parent_dir) == 0) {
         return -ENOENT;
       }
@@ -361,8 +202,9 @@ public:
 
       std::string content = generate_search_result(query);
 
-      if (offset >= content.size())
+      if (offset >= content.size()) {
         return 0;
+      }
       size_t len = std::min(content.size() - offset, size);
       memcpy(buf, content.c_str() + offset, len);
       return len;
@@ -377,8 +219,9 @@ public:
       ss << "Indexed files: " << index_to_path.size() << "\n";
 
       std::string content = ss.str();
-      if (offset >= content.size())
+      if (offset >= content.size()) {
         return 0;
+      }
       size_t len = std::min(content.size() - offset, size);
       memcpy(buf, content.c_str() + offset, len);
       return len;
@@ -412,8 +255,9 @@ public:
       ss << "Total with embeddings: " << count << "\n";
 
       std::string content = ss.str();
-      if (offset >= content.size())
+      if (offset >= content.size()) {
         return 0;
+      }
       size_t len = std::min(content.size() - offset, size);
       memcpy(buf, content.c_str() + offset, len);
       return len;
@@ -443,8 +287,9 @@ public:
     size_t last_slash = parent_dir.find_last_of('/');
     if (last_slash != std::string::npos) {
       parent_dir = parent_dir.substr(0, last_slash);
-      if (parent_dir.empty())
+      if (parent_dir.empty()) {
         parent_dir = "/";
+      }
       if (virtual_dirs.count(parent_dir) == 0) {
         return -ENOENT;
       }
@@ -695,8 +540,168 @@ public:
       spdlog::info("---");
     }
   }
+
+private:
+  std::map<std::string, fileinfo::FileInfo> virtual_files;
+  std::set<std::string> virtual_dirs;
+  std::unique_ptr<embedded::FastTextEmbedder> embedder;
+  std::unique_ptr<faiss::IndexFlatL2> faiss_index;
+  bool index_needs_rebuild;
+  std::map<idx_t, std::string> index_to_path;
+  std::map<std::string, std::string> search_results_cache;
+
+  std::string normalize_text(const std::string &text) {
+    std::string result = text;
+    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+    return result;
+  }
+
+  std::string url_decode(const std::string &str) {
+    std::string result;
+    result.reserve(str.size());
+
+    for (size_t i = 0; i < str.size(); ++i) {
+      if (str[i] == '%' && i + 2 < str.size()) {
+        int value;
+        std::istringstream iss(str.substr(i + 1, 2));
+        if (iss >> std::hex >> value) {
+          result += static_cast<char>(value);
+          i += 2;
+        } else {
+          result += str[i];
+        }
+      } else if (str[i] == '+') {
+        result += ' ';
+      } else {
+        result += str[i];
+      }
+    }
+
+    return result;
+  }
+
+  void update_embedding(const std::string &path) {
+    auto it = virtual_files.find(path);
+    if (it == virtual_files.end())
+      return;
+
+    if (embedder && !it->second.content.empty()) {
+      std::string normalized_content = normalize_text(it->second.content);
+      it->second.embedding = embedder->getSentenceEmbedding(normalized_content);
+      it->second.embedding_updated = true;
+      index_needs_rebuild = true;
+      spdlog::debug("Updated embedding for file: {}", path);
+    }
+  }
+
+  void rebuild_index() {
+    if (!index_needs_rebuild)
+      return;
+
+    spdlog::info("Rebuilding vector index");
+    index_to_path.clear();
+
+    std::vector<float> all_embeddings;
+    std::vector<std::string> indexed_paths;
+
+    idx_t idx = 0;
+    for (const auto &[path, file_info] : virtual_files) {
+      if (file_info.embedding_updated && !file_info.embedding.empty()) {
+        all_embeddings.insert(all_embeddings.end(), file_info.embedding.begin(),
+                              file_info.embedding.end());
+        index_to_path[idx] = path;
+        indexed_paths.push_back(path);
+        idx++;
+      }
+    }
+
+    if (!indexed_paths.empty()) {
+      if (!faiss_index) {
+        faiss_index =
+            std::make_unique<faiss::IndexFlatL2>(embedder->getDimension());
+      } else {
+        faiss_index->reset();
+      }
+
+      faiss_index->add(indexed_paths.size(), all_embeddings.data());
+      spdlog::info("Index rebuilt with {} files", indexed_paths.size());
+      index_needs_rebuild = false;
+    }
+  }
+
+  std::vector<std::pair<std::string, float>>
+  semantic_search(const std::string &query, int k) {
+    std::vector<std::pair<std::string, float>> results;
+
+    if (!embedder || !faiss_index) {
+      spdlog::error("Embedder or index not initialized");
+      return results;
+    }
+
+    rebuild_index();
+
+    if (index_to_path.empty()) {
+      spdlog::warn("No files indexed for search");
+      return results;
+    }
+
+    std::string normalized_query = normalize_text(query);
+    std::vector<float> query_embedding =
+        embedder->getSentenceEmbedding(normalized_query);
+
+    std::vector<idx_t> I(k);
+    std::vector<float> D(k);
+
+    faiss_index->search(1, query_embedding.data(), k, D.data(), I.data());
+
+    for (int i = 0; i < k; ++i) {
+      if (I[i] >= 0 && index_to_path.find(I[i]) != index_to_path.end()) {
+        results.push_back({index_to_path[I[i]], D[i]});
+      }
+    }
+
+    return results;
+  }
+
+  std::string generate_search_result(const std::string &query) {
+    spdlog::info("Processing search query: {}", query);
+
+    auto results = semantic_search(query, 5);
+
+    std::stringstream ss;
+    ss << "=== Semantic Search Results ===\n";
+    ss << "Query: " << query << "\n\n";
+
+    if (results.empty()) {
+      ss << "No results found\n";
+      ss << "Indexed files: " << index_to_path.size() << "\n";
+      if (index_to_path.empty()) {
+        ss << "Hint: Create some files with content first!\n";
+      }
+    } else {
+      ss << "Found " << results.size() << " results:\n\n";
+      for (const auto &[file_path, score] : results) {
+        auto it = virtual_files.find(file_path);
+        ss << "📄 " << file_path << " (score: " << score << ")\n";
+        if (it != virtual_files.end()) {
+          ss << "   Content: "
+             << (it->second.content.size() > 50
+                     ? it->second.content.substr(0, 50) + "..."
+                     : it->second.content)
+             << "\n\n";
+        }
+      }
+    }
+
+    ss << "\n=== Search Info ===\n";
+    ss << "Total indexed files: " << index_to_path.size() << "\n";
+    ss << "Embedder dimension: " << (embedder ? embedder->getDimension() : 0)
+       << "\n";
+
+    return ss.str();
+  }
 };
 
-} // namespace vectorfs
+} // namespace vfs::vectorfs
 
 #endif // VECTORFS_HPP
