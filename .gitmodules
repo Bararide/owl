@@ -16,3 +16,6 @@
 [submodule "faiss"]
 	path = faiss
 	url = https://github.com/facebookresearch/faiss
+[submodule "3dparty/drogon"]
+	path = 3dparty/drogon
+	url = https://github.com/drogonframework/drogon.git

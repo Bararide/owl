@@ -3,9 +3,6 @@ build/
 */build/
 *.build/
 
-3dparty/
-*/3dparty/
-
 # Executables
 *.exe
 *.out
