@@ -255,9 +255,7 @@ FileController::listFiles(const HttpRequestPtr req) {
   auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
 
   try {
-    // Получаем список файлов из корневой директории
     std::vector<std::string> files;
-    // Здесь должна быть логика получения списка файлов
     // files = vfs.list_directory("/");
 
     Json::Value jsonFiles(Json::arrayValue);
@@ -295,7 +293,6 @@ FileController::createDirectory(const HttpRequestPtr req, std::string path) {
   try {
     path = drogon::utils::urlDecode(path);
 
-    // Создаем директорию
     auto result = vfs.mkdir(path.c_str(), 0755);
 
     if (result != 0) {
@@ -330,7 +327,6 @@ FileController::listDirectory(const HttpRequestPtr req, std::string path) {
   try {
     path = drogon::utils::urlDecode(path);
 
-    // Проверяем существование директории
     struct stat st {};
     if (vfs.getattr(path.c_str(), &st, nullptr) != 0 || !S_ISDIR(st.st_mode)) {
       Json::Value errorJson;
@@ -340,9 +336,7 @@ FileController::listDirectory(const HttpRequestPtr req, std::string path) {
       co_return resp;
     }
 
-    // Получаем содержимое директории
     std::vector<std::string> entries;
-    // Здесь должна быть логика получения содержимого директории
     // entries = vfs.list_directory(path);
 
     Json::Value jsonEntries(Json::arrayValue);

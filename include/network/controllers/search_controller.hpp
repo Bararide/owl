@@ -11,7 +11,6 @@ using namespace drogon;
 class SearchController : public HttpController<SearchController> {
 public:
     METHOD_LIST_BEGIN
-    METHOD_ADD(SearchController::semanticSearch, "/semantic", Post);
     METHOD_ADD(SearchController::rebuildIndex, "/index/rebuild", Post);
     METHOD_ADD(SearchController::getIndexStatus, "/index/status", Get);
     METHOD_LIST_END
