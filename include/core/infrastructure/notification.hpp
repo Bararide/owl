@@ -1,5 +1,5 @@
-#ifndef CORE_NOTIFICATION_HPP
-#define CORE_NOTIFICATION_HPP
+#ifndef CORE_INFRASTUCTURE_NOTIFICATION_HPP
+#define CORE_INFRASTUCTURE_NOTIFICATION_HPP
 
 #include "concepts.hpp"
 #include "core/utils/error.hpp"

@@ -1,5 +1,5 @@
-#ifndef CORE_RESULT_HPP
-#define CORE_RESULT_HPP
+#ifndef CORE_INFRASTRUCTURE_RESULT_HPP
+#define CORE_INFRASTRUCTURE_RESULT_HPP
 
 #include <concepts>
 #include <exception>

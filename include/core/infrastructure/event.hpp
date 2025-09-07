@@ -1,5 +1,5 @@
-#ifndef CORE_EVENT_HPP
-#define CORE_EVENT_HPP
+#ifndef CORE_INFRASTRUCTURE_EVENT_HPP
+#define CORE_INFRASTRUCTURE_EVENT_HPP
 
 #include <algorithm>
 #include <atomic>

@@ -1,5 +1,5 @@
-#ifndef CONCEPTS_HPP
-#define CONCEPTS_HPP
+#ifndef CORE_INFRASTRUCTURE_CONCEPTS_HPP
+#define CORE_INFRASTRUCTURE_CONCEPTS_HPP
 
 #include <concepts>
 #include <functional>

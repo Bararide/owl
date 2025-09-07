@@ -26,6 +26,10 @@ private:
   std::string message_;
 };
 
+auto error_notification = [](const Error &error) {
+  spdlog::info("{}", error.message());
+};
+
 } // namespace core::utils
 
 #endif // CORE_UTILS_ERROR_NOTIFICATION_HPP
