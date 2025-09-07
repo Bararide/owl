@@ -19,214 +19,209 @@
 namespace vfs::network {
 namespace handler {
 
-auto success_notification =
-    core::Notification<core::utils::Success<Json::Value>>(
-        core::utils::success_notification<Json::Value>);
-auto error_notification =
-    core::Notification<core::utils::Error>(core::utils::error_notification);
+using HttpSuccess = core::utils::Success<Json::Value>;
+using HttpError = core::utils::Error;
 
-std::map<
-    std::string,
-    std::function<void(const drogon::HttpRequestPtr &,
-                       std::function<void(const drogon::HttpResponsePtr &)> &&,
-                       const std::vector<std::string> &)>>
-    handlers = {
-        {"/",
-         [](const drogon::HttpRequestPtr &req,
-            std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-            const std::vector<std::string> &path) {
-           auto resp = drogon::HttpResponse::newHttpResponse();
-           resp->setBody("Hello, World!");
-           callback(resp);
-         }}
+inline auto &get_success_notification() {
+  static auto notif =
+      core::make_notification<HttpSuccess>([](const HttpSuccess &success) {
+        spdlog::info("HTTP Success: {}", success.serialize());
+      });
+  return notif;
+}
 
-        {"/files/.*",
-         [](const drogon::HttpRequestPtr &req,
-            std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-            const std::vector<std::string> &path) {
-           try {
-             auto &vfs =
-                 vfs::instance::VFSInstance::getInstance().get_vector_fs();
-             auto json = req->getJsonObject();
+inline auto &get_error_notification() {
+  static auto notif =
+      core::make_notification<HttpError>([](const HttpError &error) {
+        spdlog::error("HTTP Error: {}", error.serialize());
+      });
+  return notif;
+}
 
-             if (!json || !json->isMember("content")) {
-               Json::Value errorJson;
-               errorJson["error"] = "Missing content";
-               auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-               resp->setStatusCode(drogon::k400BadRequest);
-               callback(resp);
-               return;
-             }
+inline void notify_success(const Json::Value &data) {
+  get_success_notification()(HttpSuccess{data});
+}
 
-             std::string full_path = req->path();
-             std::string base_path = "/files/";
-             std::string file_path = full_path.substr(base_path.length());
+inline void notify_error(const std::string &message) {
+  get_error_notification()(HttpError{message});
+}
 
-             boost::urls::url_view url_view(
-                 boost::urls::parse_uri(full_path).value());
-             std::string decoded_path = url_view.path();
-             decoded_path = decoded_path.substr(base_path.length());
+using HttpHandler = std::function<void(
+    const drogon::HttpRequestPtr &,
+    std::function<void(const drogon::HttpResponsePtr &)> &&)>;
 
-             struct fuse_file_info fi {};
-             auto result = vfs.create(decoded_path.c_str(), 0644, &fi);
+auto create_handler(auto handler_logic) {
+  return [handler_logic = std::move(handler_logic)](
+             const drogon::HttpRequestPtr &req,
+             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+    try {
+      std::vector<std::string> path;
+      auto result = handler_logic(req, path);
+      notify_success(result);
 
-             if (result != 0) {
-               Json::Value errorJson;
-               errorJson["error"] = "Failed to create file";
-               auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-               resp->setStatusCode(drogon::k500InternalServerError);
-               callback(resp);
-               return;
-             }
+      Json::Value responseJson;
+      responseJson["status"] = "success";
+      responseJson["data"] = result;
 
-             const std::string content = (*json)["content"].asString();
-             result = vfs.write(decoded_path.c_str(), content.c_str(),
-                                content.size(), 0, &fi);
+      auto resp = drogon::HttpResponse::newHttpJsonResponse(responseJson);
+      callback(resp);
 
-             if (result < 0) {
-               Json::Value errorJson;
-               errorJson["error"] = "Failed to write content";
-               auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-               resp->setStatusCode(drogon::k500InternalServerError);
-               callback(resp);
-               return;
-             }
+    } catch (const std::exception &e) {
+      notify_error(e.what());
 
-             struct stat st {};
-             vfs.getattr(decoded_path.c_str(), &st, nullptr);
+      Json::Value errorJson;
+      errorJson["status"] = "error";
+      errorJson["error"] = e.what();
 
-             Json::Value responseJson;
-             responseJson["path"] = decoded_path;
-             responseJson["size"] = static_cast<Json::UInt64>(st.st_size);
-             responseJson["created"] = true;
+      auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
+      resp->setStatusCode(drogon::k500InternalServerError);
+      callback(resp);
+    }
+  };
+}
 
-             auto resp =
-                 drogon::HttpResponse::newHttpJsonResponse(responseJson);
-             resp->setStatusCode(drogon::k201Created);
-             callback(resp);
+auto create_root_handler() {
+  return create_handler(
+      [](const drogon::HttpRequestPtr &req, const std::vector<std::string> &) {
+        Json::Value response;
+        response["message"] = "Hello, World!";
+        return response;
+      });
+}
 
-           } catch (const std::exception &e) {
-             Json::Value errorJson;
-             errorJson["error"] = e.what();
-             auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-             resp->setStatusCode(drogon::k500InternalServerError);
-             callback(resp);
-           }
-         }},
+auto create_file_handler() {
+  return create_handler([](const drogon::HttpRequestPtr &req,
+                           const std::vector<std::string> &) {
+    auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
+    auto json = req->getJsonObject();
 
-        {"/files/.*",
-         [](const drogon::HttpRequestPtr &req,
-            std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-            const std::vector<std::string> &path) {
-           try {
-             auto &vfs =
-                 vfs::instance::VFSInstance::getInstance().get_vector_fs();
+    if (!json || !json->isMember("content")) {
+      throw std::runtime_error("Missing content");
+    }
 
-             std::string full_path = req->path();
-             std::string base_path = "/files/";
-             std::string file_path = full_path.substr(base_path.length());
+    std::string full_path = req->path();
+    std::string base_path = "/files/";
 
-             boost::urls::url_view url_view(
-                 boost::urls::parse_uri(full_path).value());
-             std::string decoded_path = url_view.path();
-             decoded_path = decoded_path.substr(base_path.length());
+    boost::urls::url_view url_view(boost::urls::parse_uri(full_path).value());
+    std::string decoded_path = url_view.path();
 
-             struct stat st {};
-             if (vfs.getattr(decoded_path.c_str(), &st, nullptr) != 0) {
-               Json::Value errorJson;
-               errorJson["error"] = "File not found";
-               auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-               resp->setStatusCode(drogon::k404NotFound);
-               callback(resp);
-               return;
-             }
+    if (decoded_path.starts_with(base_path)) {
+      decoded_path = decoded_path.substr(base_path.length());
+    }
 
-             std::vector<char> buffer(st.st_size + 1);
-             auto result = vfs.read(decoded_path.c_str(), buffer.data(),
-                                    st.st_size, 0, nullptr);
+    struct fuse_file_info fi {};
+    auto result = vfs.create(decoded_path.c_str(), 0644, &fi);
 
-             if (result < 0) {
-               Json::Value errorJson;
-               errorJson["error"] = "Failed to read file";
-               auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-               resp->setStatusCode(drogon::k500InternalServerError);
-               callback(resp);
-               return;
-             }
+    if (result != 0) {
+      throw std::runtime_error("Failed to create file");
+    }
 
-             buffer[result] = '\0';
+    const std::string content = (*json)["content"].asString();
+    result = vfs.write(decoded_path.c_str(), content.c_str(), content.size(), 0,
+                       &fi);
 
-             Json::Value responseJson;
-             responseJson["path"] = decoded_path;
-             responseJson["content"] = std::string(buffer.data());
-             responseJson["size"] = static_cast<Json::UInt64>(st.st_size);
+    if (result < 0) {
+      throw std::runtime_error("Failed to write content");
+    }
 
-             auto resp =
-                 drogon::HttpResponse::newHttpJsonResponse(responseJson);
-             callback(resp);
+    struct stat st {};
+    vfs.getattr(decoded_path.c_str(), &st, nullptr);
 
-           } catch (const std::exception &e) {
-             Json::Value errorJson;
-             errorJson["error"] = e.what();
-             auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-             resp->setStatusCode(drogon::k500InternalServerError);
-             callback(resp);
-           }
-         }},
+    Json::Value responseJson;
+    responseJson["path"] = decoded_path;
+    responseJson["size"] = static_cast<Json::UInt64>(st.st_size);
+    responseJson["created"] = true;
 
-        {"/semantic",
-         [](const drogon::HttpRequestPtr &req,
-            std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-            const std::vector<std::string> &path) {
-           try {
-             auto &vfs =
-                 vfs::instance::VFSInstance::getInstance().get_vector_fs();
-             auto json = req->getJsonObject();
+    return responseJson;
+  });
+}
 
-             if (!json || !json->isMember("query")) {
-               Json::Value errorJson;
-               errorJson["error"] = "Missing query parameter";
-               auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-               resp->setStatusCode(drogon::k400BadRequest);
-               callback(resp);
-               return;
-             }
+auto read_file_handler() {
+  return create_handler([](const drogon::HttpRequestPtr &req,
+                           const std::vector<std::string> &) {
+    auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
 
-             const std::string query = (*json)["query"].asString();
-             int limit = json->get("limit", 5).asInt();
+    std::string full_path = req->path();
+    std::string base_path = "/files/";
 
-             auto results = vfs.semantic_search(query, limit);
+    boost::urls::url_view url_view(boost::urls::parse_uri(full_path).value());
+    std::string decoded_path = url_view.path();
 
-             Json::Value resultsJson(Json::arrayValue);
-             for (const auto &[path, score] : results) {
-               Json::Value resultJson;
-               resultJson["path"] = path;
-               resultJson["score"] = score;
-               resultsJson.append(resultJson);
-             }
+    if (decoded_path.starts_with(base_path)) {
+      decoded_path = decoded_path.substr(base_path.length());
+    }
 
-             Json::Value responseJson;
-             responseJson["query"] = query;
-             responseJson["results"] = resultsJson;
-             responseJson["count"] = static_cast<int>(results.size());
+    struct stat st {};
+    if (vfs.getattr(decoded_path.c_str(), &st, nullptr) != 0) {
+      throw std::runtime_error("File not found");
+    }
 
-             auto resp =
-                 drogon::HttpResponse::newHttpJsonResponse(responseJson);
-             callback(resp);
-           } catch (const std::exception &e) {
-             Json::Value errorJson;
-             errorJson["error"] = e.what();
-             auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-             resp->setStatusCode(drogon::k500InternalServerError);
-             callback(resp);
-           }
-         }},
-        {"/rebuild",
-         [](const drogon::HttpRequestPtr &req,
-            std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-            const std::vector<std::string> &path) {
+    std::vector<char> buffer(st.st_size + 1);
+    auto result =
+        vfs.read(decoded_path.c_str(), buffer.data(), st.st_size, 0, nullptr);
 
-         }}};
+    if (result < 0) {
+      throw std::runtime_error("Failed to read file");
+    }
+
+    buffer[result] = '\0';
+
+    Json::Value responseJson;
+    responseJson["path"] = decoded_path;
+    responseJson["content"] = std::string(buffer.data());
+    responseJson["size"] = static_cast<Json::UInt64>(st.st_size);
+
+    return responseJson;
+  });
+}
+
+auto semantic_search_handler() {
+  return create_handler(
+      [](const drogon::HttpRequestPtr &req, const std::vector<std::string> &) {
+        auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
+        auto json = req->getJsonObject();
+
+        if (!json || !json->isMember("query")) {
+          throw std::runtime_error("Missing query parameter");
+        }
+
+        const std::string query = (*json)["query"].asString();
+        int limit = json->get("limit", 5).asInt();
+
+        auto results = vfs.semantic_search(query, limit);
+
+        Json::Value resultsJson(Json::arrayValue);
+        for (const auto &[path, score] : results) {
+          Json::Value resultJson;
+          resultJson["path"] = path;
+          resultJson["score"] = score;
+          resultsJson.append(resultJson);
+        }
+
+        Json::Value responseJson;
+        responseJson["query"] = query;
+        responseJson["results"] = resultsJson;
+        responseJson["count"] = static_cast<int>(results.size());
+
+        return responseJson;
+      });
+}
+
+auto rebuild_handler() {
+  return create_handler(
+      [](const drogon::HttpRequestPtr &req, const std::vector<std::string> &) {
+        Json::Value response;
+        response["message"] = "Rebuild completed";
+        return response;
+      });
+}
+
+std::map<std::string, HttpHandler> handlers = {
+    {"/", create_root_handler()},
+    {"/files/.*", create_file_handler()},
+    {"/files/.*", read_file_handler()},
+    {"/semantic", semantic_search_handler()},
+    {"/rebuild", rebuild_handler()}};
 
 } // namespace handler
 } // namespace vfs::network

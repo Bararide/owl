@@ -6,8 +6,6 @@
 #include <drogon/HttpAppFramework.h>
 #include <memory>
 
-#include "core/infrastructure/notification.hpp"
-
 namespace vfs::network {
 
 class VectorFSApi {
@@ -39,17 +37,16 @@ public:
 
     drogon::app().setLogLevel(trantor::Logger::kInfo);
 
-    for (const auto &[pattern, handler] : handler::handlers) {
-      if (pattern == "/semantic") {
-        drogon::app().registerHandler(pattern, handler, {drogon::Post});
-      } else if (boost::regex_match(pattern, boost::regex(".*/files/.*"))) {
-        drogon::app().registerHandler(
-            pattern, handler,
-            {drogon::Get, drogon::Post, drogon::Put, drogon::Delete});
-      } else {
-        drogon::app().registerHandler(pattern, handler, {drogon::Get});
-      }
-    }
+    drogon::app().registerHandler("/", handler::handlers.at("/"),
+                                  {drogon::Get});
+    drogon::app().registerHandler(
+        "/semantic", handler::handlers.at("/semantic"), {drogon::Post});
+    drogon::app().registerHandler("/rebuild", handler::handlers.at("/rebuild"),
+                                  {drogon::Post});
+
+    auto file_handler = handler::handlers.at("/files/.*");
+    drogon::app().registerHandler("/files/.*", file_handler, {drogon::Get});
+    drogon::app().registerHandler("/files/.*", file_handler, {drogon::Post});
 
     spdlog::info("VectorFS API initialized with {} handlers",
                  handler::handlers.size());
@@ -62,7 +59,7 @@ public:
         .setDocumentRoot("./www")
         .setClientMaxBodySize(20 * 1024 * 1024)
         .setClientMaxMemoryBodySize(4 * 1024 * 1024)
-        .addListener("127.0.0.1", 9999)
+        .addListener("0.0.0.0", 9999)
         .setThreadNum(std::thread::hardware_concurrency())
         .setIdleConnectionTimeout(60s)
         .run();
