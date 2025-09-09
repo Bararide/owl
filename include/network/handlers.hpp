@@ -218,7 +218,7 @@ auto rebuild_handler() {
 
 std::map<std::string, HttpHandler> handlers = {
     {"/", create_root_handler()},
-    {"/files/.*", create_file_handler()},
+    {"/files/create/.*", create_file_handler()},
     {"/files/.*", read_file_handler()},
     {"/semantic", semantic_search_handler()},
     {"/rebuild", rebuild_handler()}};
