@@ -58,10 +58,9 @@ auto create_file_handler() {
       struct stat st {};
       vfs.getattr(path.c_str(), &st, nullptr);
 
-      Json::Value data;
-      data["path"] = path;
-      data["size"] = static_cast<Json::UInt64>(st.st_size);
-      data["created"] = true;
+      auto data = utils::create_success_response(
+          {"path", "size", "created"}, path,
+          static_cast<Json::UInt64>(st.st_size), true);
 
       return utils::success_result(data);
     };
@@ -69,19 +68,12 @@ auto create_file_handler() {
     auto result = process_request();
     result.match(
         [&callback](const Json::Value &data) {
-          Json::Value responseJson;
-          responseJson["status"] = "success";
-          responseJson["data"] = data;
-
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(responseJson);
+          auto resp = drogon::HttpResponse::newHttpJsonResponse(data);
           callback(resp);
         },
         [&callback](const std::runtime_error &error) {
-          Json::Value errorJson;
-          errorJson["status"] = "error";
-          errorJson["error"] = error.what();
-
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
+          auto error_response = utils::create_error_response(error.what());
+          auto resp = drogon::HttpResponse::newHttpJsonResponse(error_response);
           resp->setStatusCode(drogon::k500InternalServerError);
           callback(resp);
         });
@@ -113,10 +105,9 @@ auto read_file_handler() {
         return utils::error_result("Path is a directory: " + file_path);
       }
 
-      Json::Value data;
-      data["path"] = file_path;
-      data["content"] = file_info.content;
-      data["size"] = static_cast<Json::UInt64>(file_info.content.size());
+      auto data = utils::create_success_response(
+          {"path", "content", "size"}, file_path, file_info.content,
+          static_cast<Json::UInt64>(file_info.content.size()));
 
       return utils::success_result(data);
     };
@@ -124,21 +115,14 @@ auto read_file_handler() {
     auto result = process_request();
     result.match(
         [&callback](const Json::Value &data) {
-          Json::Value responseJson;
-          responseJson["status"] = "success";
-          responseJson["data"] = data;
-
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(responseJson);
+          auto resp = drogon::HttpResponse::newHttpJsonResponse(data);
           callback(resp);
         },
         [&callback](const std::runtime_error &error) {
           spdlog::error("Exception in read_file_handler: {}", error.what());
 
-          Json::Value errorJson;
-          errorJson["status"] = "error";
-          errorJson["error"] = error.what();
-
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
+          auto error_response = utils::create_error_response(error.what());
+          auto resp = drogon::HttpResponse::newHttpJsonResponse(error_response);
           resp->setStatusCode(drogon::k404NotFound);
           callback(resp);
         });
@@ -174,10 +158,9 @@ auto semantic_search_handler() {
           resultsJson.append(resultJson);
         }
 
-        Json::Value response;
-        response["query"] = query;
-        response["results"] = resultsJson;
-        response["count"] = static_cast<int>(results.size());
+        auto response = utils::create_success_response(
+            {"query", "results", "count"}, query, resultsJson,
+            static_cast<int>(results.size()));
 
         return utils::success_result(response);
       });
@@ -187,8 +170,8 @@ auto rebuild_handler() {
   return utils::create_handler(
       [](const drogon::HttpRequestPtr &,
          const std::vector<std::string> &) -> utils::HttpResult {
-        Json::Value response;
-        response["message"] = "Rebuild completed";
+        auto response =
+            utils::create_success_response({"message"}, "Rebuild completed");
         return utils::success_result(response);
       });
 }
