@@ -57,20 +57,15 @@ auto create_handler(ReturnsResult auto handler_logic) {
     result.match(
         [&callback](const Json::Value &data) {
           notify_success(data);
-
-          Json::Value responseJson;
-          responseJson["status"] = "success";
-          responseJson["data"] = data;
-
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(responseJson);
+          auto resp = drogon::HttpResponse::newHttpJsonResponse(data);
           callback(resp);
         },
         [&callback](const std::runtime_error &error) {
           notify_error(error.what());
-
           Json::Value errorJson;
           errorJson["status"] = "error";
           errorJson["error"] = error.what();
+          errorJson["code"] = static_cast<int>(drogon::k500InternalServerError);
 
           auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
           resp->setStatusCode(drogon::k500InternalServerError);
