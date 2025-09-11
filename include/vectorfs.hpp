@@ -546,9 +546,6 @@ public:
   }
 
   int create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-    spdlog::info("=== CREATE OPERATION STARTED ===");
-    spdlog::info("Creating file: {}", path);
-
     if (virtual_files.count(path) > 0 || virtual_dirs.count(path) > 0) {
       spdlog::error("File already exists: {}", path);
       return -EEXIST;
@@ -562,7 +559,6 @@ public:
         parent_dir = "/";
       }
       if (virtual_dirs.count(parent_dir) == 0) {
-        spdlog::error("Parent directory not found: {}", parent_dir);
         return -ENOENT;
       }
     }
@@ -570,9 +566,6 @@ public:
     time_t now = time(nullptr);
     virtual_files[path] = std::move(fileinfo::FileInfo(
         S_IFREG | (mode & 07777), 0, "", getuid(), getgid(), now, now, now));
-
-    spdlog::info("File created successfully: {}", path);
-    spdlog::info("=== CREATE OPERATION COMPLETED ===");
 
     return 0;
   }
@@ -592,40 +585,24 @@ public:
 
   int write(const char *path, const char *buf, size_t size, off_t offset,
             struct fuse_file_info *fi) {
-    spdlog::info("=== WRITE OPERATION STARTED ===");
-    spdlog::info("Writing to path: {}", path);
-    spdlog::info("Buffer size: {}, offset: {}", size, offset);
-
     auto it = virtual_files.find(path);
     if (it == virtual_files.end()) {
-      spdlog::error("File not found: {}", path);
       return -ENOENT;
     }
 
-    spdlog::info("Current file size: {}", it->second.content.size());
-    spdlog::info("Current content: '{}'", it->second.content);
-
     if ((it->second.mode & S_IWUSR) == 0) {
-      spdlog::error("Permission denied for writing");
       return -EACCES;
     }
 
     if (offset + size > it->second.content.size()) {
-      spdlog::info("Resizing content from {} to {}", it->second.content.size(),
-                   offset + size);
       it->second.content.resize(offset + size);
     }
 
-    spdlog::info("Copying {} bytes at offset {}", size, offset);
     memcpy(&it->second.content[offset], buf, size);
 
     it->second.size = it->second.content.size();
     it->second.modification_time = time(nullptr);
     it->second.access_time = it->second.modification_time;
-
-    spdlog::info("New file size: {}", it->second.size);
-    spdlog::info("New content: '{}'", it->second.content);
-    spdlog::info("=== WRITE OPERATION COMPLETED ===");
 
     update_embedding(path);
 

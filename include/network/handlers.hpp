@@ -145,42 +145,31 @@ auto read_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     try {
-      spdlog::info("=== READ FILE HANDLER STARTED ===");
-
       auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
 
       auto params = req->getParameters();
-      spdlog::info("Request parameters:");
       for (const auto &[key, value] : params) {
         spdlog::info("  {} = {}", key, value);
       }
 
       auto path_param = req->getParameter("path");
-      spdlog::info("Path parameter: '{}'", path_param);
 
       if (path_param.empty()) {
-        spdlog::error("Path parameter is empty");
         throw std::runtime_error("Path parameter is required");
       }
 
       std::string file_path = path_param;
-      spdlog::info("Processing file path: '{}'", file_path);
 
-      auto &virtual_files =
-          vfs.get_virtual_files();
+      auto &virtual_files = vfs.get_virtual_files();
 
       auto it = virtual_files.find(file_path);
       if (it == virtual_files.end()) {
-        spdlog::error("File not found in virtual_files: {}", file_path);
         throw std::runtime_error("File not found: " + file_path);
       }
 
       const auto &file_info = it->second;
-      spdlog::info("File found, size: {}, content length: {}", file_info.size,
-                   file_info.content.size());
 
       if (S_ISDIR(file_info.mode)) {
-        spdlog::error("Path is a directory, not a file: {}", file_path);
         throw std::runtime_error("Path is a directory: " + file_path);
       }
 
@@ -192,13 +181,6 @@ auto read_file_handler() {
       data["size"] = static_cast<Json::UInt64>(file_info.content.size());
 
       responseJson["data"] = data;
-
-      spdlog::info("Successfully read file: {}, content size: {}", file_path,
-                   file_info.content.size());
-      spdlog::info("Content preview: '{}'",
-                   file_info.content.substr(
-                       0, std::min(100, (int)file_info.content.size())));
-      spdlog::info("=== READ FILE HANDLER COMPLETED ===");
 
       auto resp = drogon::HttpResponse::newHttpJsonResponse(responseJson);
       callback(resp);
