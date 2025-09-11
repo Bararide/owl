@@ -90,89 +90,129 @@ auto create_root_handler() {
 }
 
 auto create_file_handler() {
-  return create_handler([](const drogon::HttpRequestPtr &req,
-                           const std::vector<std::string> &) {
-    auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
-    auto json = req->getJsonObject();
+  return [](const drogon::HttpRequestPtr &req,
+            std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+    try {
+      auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
+      auto json = req->getJsonObject();
 
-    if (!json || !json->isMember("content")) {
-      throw std::runtime_error("Missing content");
+      if (!json || !json->isMember("path") || !json->isMember("content")) {
+        throw std::runtime_error("Missing path or content");
+      }
+
+      std::string path = (*json)["path"].asString();
+      std::string content = (*json)["content"].asString();
+
+      struct fuse_file_info fi {};
+      auto result = vfs.create(path.c_str(), 0644, &fi);
+      if (result != 0) {
+        throw std::runtime_error("Failed to create file");
+      }
+
+      result = vfs.write(path.c_str(), content.c_str(), content.size(), 0, &fi);
+      if (result < 0) {
+        throw std::runtime_error("Failed to write content");
+      }
+
+      struct stat st {};
+      vfs.getattr(path.c_str(), &st, nullptr);
+
+      Json::Value responseJson;
+      responseJson["status"] = "success";
+
+      Json::Value data;
+      data["path"] = path;
+      data["size"] = static_cast<Json::UInt64>(st.st_size);
+      data["created"] = true;
+
+      responseJson["data"] = data;
+
+      auto resp = drogon::HttpResponse::newHttpJsonResponse(responseJson);
+      callback(resp);
+
+    } catch (const std::exception &e) {
+      Json::Value errorJson;
+      errorJson["status"] = "error";
+      errorJson["error"] = e.what();
+      auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
+      resp->setStatusCode(drogon::k500InternalServerError);
+      callback(resp);
     }
-
-    std::string full_path = req->path();
-    std::string base_path = "/files/";
-
-    boost::urls::url_view url_view(boost::urls::parse_uri(full_path).value());
-    std::string decoded_path = url_view.path();
-
-    if (decoded_path.starts_with(base_path)) {
-      decoded_path = decoded_path.substr(base_path.length());
-    }
-
-    struct fuse_file_info fi {};
-    auto result = vfs.create(decoded_path.c_str(), 0644, &fi);
-
-    if (result != 0) {
-      throw std::runtime_error("Failed to create file");
-    }
-
-    const std::string content = (*json)["content"].asString();
-    result = vfs.write(decoded_path.c_str(), content.c_str(), content.size(), 0,
-                       &fi);
-
-    if (result < 0) {
-      throw std::runtime_error("Failed to write content");
-    }
-
-    struct stat st {};
-    vfs.getattr(decoded_path.c_str(), &st, nullptr);
-
-    Json::Value responseJson;
-    responseJson["path"] = decoded_path;
-    responseJson["size"] = static_cast<Json::UInt64>(st.st_size);
-    responseJson["created"] = true;
-
-    return responseJson;
-  });
+  };
 }
 
 auto read_file_handler() {
-  return create_handler([](const drogon::HttpRequestPtr &req,
-                           const std::vector<std::string> &) {
-    auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
+  return [](const drogon::HttpRequestPtr &req,
+            std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+    try {
+      spdlog::info("=== READ FILE HANDLER STARTED ===");
 
-    std::string full_path = req->path();
-    std::string base_path = "/files/";
+      auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
 
-    boost::urls::url_view url_view(boost::urls::parse_uri(full_path).value());
-    std::string decoded_path = url_view.path();
+      auto params = req->getParameters();
+      spdlog::info("Request parameters:");
+      for (const auto &[key, value] : params) {
+        spdlog::info("  {} = {}", key, value);
+      }
 
-    if (decoded_path.starts_with(base_path)) {
-      decoded_path = decoded_path.substr(base_path.length());
+      auto path_param = req->getParameter("path");
+      spdlog::info("Path parameter: '{}'", path_param);
+
+      if (path_param.empty()) {
+        spdlog::error("Path parameter is empty");
+        throw std::runtime_error("Path parameter is required");
+      }
+
+      std::string file_path = path_param;
+      spdlog::info("Processing file path: '{}'", file_path);
+
+      auto &virtual_files =
+          vfs.get_virtual_files();
+
+      auto it = virtual_files.find(file_path);
+      if (it == virtual_files.end()) {
+        spdlog::error("File not found in virtual_files: {}", file_path);
+        throw std::runtime_error("File not found: " + file_path);
+      }
+
+      const auto &file_info = it->second;
+      spdlog::info("File found, size: {}, content length: {}", file_info.size,
+                   file_info.content.size());
+
+      if (S_ISDIR(file_info.mode)) {
+        spdlog::error("Path is a directory, not a file: {}", file_path);
+        throw std::runtime_error("Path is a directory: " + file_path);
+      }
+
+      Json::Value responseJson;
+      responseJson["status"] = "success";
+      Json::Value data;
+      data["path"] = file_path;
+      data["content"] = file_info.content;
+      data["size"] = static_cast<Json::UInt64>(file_info.content.size());
+
+      responseJson["data"] = data;
+
+      spdlog::info("Successfully read file: {}, content size: {}", file_path,
+                   file_info.content.size());
+      spdlog::info("Content preview: '{}'",
+                   file_info.content.substr(
+                       0, std::min(100, (int)file_info.content.size())));
+      spdlog::info("=== READ FILE HANDLER COMPLETED ===");
+
+      auto resp = drogon::HttpResponse::newHttpJsonResponse(responseJson);
+      callback(resp);
+
+    } catch (const std::exception &e) {
+      spdlog::error("Exception in read_file_handler: {}", e.what());
+      Json::Value errorJson;
+      errorJson["status"] = "error";
+      errorJson["error"] = e.what();
+      auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
+      resp->setStatusCode(drogon::k404NotFound);
+      callback(resp);
     }
-
-    struct stat st {};
-    if (vfs.getattr(decoded_path.c_str(), &st, nullptr) != 0) {
-      throw std::runtime_error("File not found");
-    }
-
-    std::vector<char> buffer(st.st_size + 1);
-    auto result =
-        vfs.read(decoded_path.c_str(), buffer.data(), st.st_size, 0, nullptr);
-
-    if (result < 0) {
-      throw std::runtime_error("Failed to read file");
-    }
-
-    buffer[result] = '\0';
-
-    Json::Value responseJson;
-    responseJson["path"] = decoded_path;
-    responseJson["content"] = std::string(buffer.data());
-    responseJson["size"] = static_cast<Json::UInt64>(st.st_size);
-
-    return responseJson;
-  });
+  };
 }
 
 auto semantic_search_handler() {
@@ -218,11 +258,10 @@ auto rebuild_handler() {
 
 std::map<std::string, HttpHandler> handlers = {
     {"/", create_root_handler()},
-    {"/files/create/.*", create_file_handler()},
-    {"/files/.*", read_file_handler()},
+    {"/files/create", create_file_handler()},
+    {"/files/read", read_file_handler()},
     {"/semantic", semantic_search_handler()},
     {"/rebuild", rebuild_handler()}};
-
 } // namespace handler
 } // namespace vfs::network
 

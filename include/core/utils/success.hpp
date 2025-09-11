@@ -49,9 +49,8 @@ private:
 };
 
 template <typename T>
-auto success_notification = [](const Success<T> &success) {
-  spdlog::info("{}", success.serialize());
-};
+auto success_notification =
+    [](const Success<T> &success) { spdlog::info("{}", success.serialize()); };
 
 } // namespace core::utils
 
