@@ -43,6 +43,28 @@ concept Serializable = requires(const T &t) {
   };
 };
 
+template <typename T>
+concept IsArray = std::is_array_v<T>;
+
+template <typename T>
+concept IsPointer = std::is_pointer_v<T>;
+
+template <typename T>
+concept IsIterable = requires(T &t) {
+  { t.begin() } -> std::same_as<decltype(t.begin())>;
+  { t.end() } -> std::same_as<decltype(t.end())>;
+};
+
+template <typename T>
+concept IsSizable = requires(T &t) {
+  { t.size() } -> std::same_as<decltype(t.size())>;
+} || requires(T &t) {
+  { std::size(t) } -> std::same_as<decltype(std::size(t))>;
+};
+
+template <typename T>
+concept IsIterableAndSizable = IsIterable<T> && IsSizable<T>;
+
 template <typename F, typename... Args>
 concept Invocable = std::is_invocable_v<F, Args...>;
 
