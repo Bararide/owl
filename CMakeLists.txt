@@ -19,7 +19,8 @@ add_subdirectory(3dparty/sentencepiece EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
 
-include_directories(include)
+include_directories(domain)
+include_directories(core)
 include_directories(${JSONCPP_INCLUDE_DIRS})
 
 add_executable(owl src/main.cpp)

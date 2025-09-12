@@ -2,8 +2,8 @@
 #define CORE_INFRASTUCTURE_NOTIFICATION_HPP
 
 #include "concepts.hpp"
-#include "core/utils/error.hpp"
-#include "core/utils/success.hpp"
+#include "utils/error.hpp"
+#include "utils/success.hpp"
 #include "event.hpp"
 #include "result.hpp"
 #include <functional>

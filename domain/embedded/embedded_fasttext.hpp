@@ -1,5 +1,5 @@
-#ifndef EMBEDDED_HPP
-#define EMBEDDED_HPP
+#ifndef VECTORFS_EMBEDDED_FASTTEXT_HPP
+#define VECTORFS_EMBEDDED_FASTTEXT_HPP
 
 #include "embedded_base.hpp"
 #include <fasttext.h>
@@ -63,4 +63,4 @@ private:
 };
 } // namespace vfs::embedded
 
-#endif // EMBEDDED_HPP
+#endif // VECTORFS_EMBEDDED_FASTTEXT_HPP

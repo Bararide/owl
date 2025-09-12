@@ -1,7 +1,7 @@
 #ifndef CORE_UTILS_SUCCESS_NOTIFICATION_HPP
 #define CORE_UTILS_SUCCESS_NOTIFICATION_HPP
 
-#include "core/infrastructure/concepts.hpp"
+#include "infrastructure/concepts.hpp"
 #include <drogon/HttpAppFramework.h>
 #include <spdlog/spdlog.h>
 #include <string>
