@@ -179,13 +179,6 @@ auto rebuild_handler() {
       });
 }
 
-std::map<std::string, utils::HttpHandler> handlers = {
-    {"/", create_root_handler()},
-    {"/files/create", create_file_handler<vfs::embedded::FastTextEmbedder>()},
-    {"/files/read", read_file_handler<vfs::embedded::FastTextEmbedder>()},
-    {"/semantic", semantic_search_handler<vfs::embedded::FastTextEmbedder>()},
-    {"/rebuild", rebuild_handler()}};
-
 } // namespace handler
 } // namespace vfs::network
 

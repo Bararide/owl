@@ -13,6 +13,8 @@ public:
   static void init() {
     using namespace std::chrono_literals;
 
+    handlers = init_handlers();
+
     drogon::app().registerPostHandlingAdvice(
         [](const drogon::HttpRequestPtr &,
            const drogon::HttpResponsePtr &resp) {
@@ -66,17 +68,16 @@ public:
 
     drogon::app().setLogLevel(trantor::Logger::kInfo);
 
-    drogon::app().registerHandler("/", handler::handlers.at("/"),
-                                  {drogon::Get});
-    drogon::app().registerHandler(
-        "/semantic", handler::handlers.at("/semantic"), {drogon::Post});
-    drogon::app().registerHandler("/rebuild", handler::handlers.at("/rebuild"),
+    drogon::app().registerHandler("/", handlers.at("/"), {drogon::Get});
+    drogon::app().registerHandler("/semantic", handlers.at("/semantic"),
+                                  {drogon::Post});
+    drogon::app().registerHandler("/rebuild", handlers.at("/rebuild"),
                                   {drogon::Post});
 
-    drogon::app().registerHandler(
-        "/files/create", handler::handlers.at("/files/create"), {drogon::Post});
-    drogon::app().registerHandler(
-        "/files/read", handler::handlers.at("/files/read"), {drogon::Get});
+    drogon::app().registerHandler("/files/create", handlers.at("/files/create"),
+                                  {drogon::Post});
+    drogon::app().registerHandler("/files/read", handlers.at("/files/read"),
+                                  {drogon::Get});
 
     spdlog::info("VectorFS API initialized with CORS support");
   }
@@ -93,7 +94,21 @@ public:
         .setIdleConnectionTimeout(60s)
         .run();
   }
+
+  static std::map<std::string, utils::HttpHandler> init_handlers() {
+    return {{"/", handler::create_root_handler()},
+            {"/files/create", handler::create_file_handler<EmbeddedModel>()},
+            {"/files/read", handler::read_file_handler<EmbeddedModel>()},
+            {"/semantic", handler::semantic_search_handler<EmbeddedModel>()},
+            {"/rebuild", handler::rebuild_handler()}};
+  }
+
+private:
+  static std::map<std::string, utils::HttpHandler> handlers;
 };
+
+template <typename EmbeddedModel>
+std::map<std::string, utils::HttpHandler> VectorFSApi<EmbeddedModel>::handlers;
 
 } // namespace vfs::network
 
