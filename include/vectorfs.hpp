@@ -23,9 +23,13 @@
 #include <spdlog/spdlog.h>
 
 #include "embedded/embedded.hpp"
+#include "embedded/embedded_base.hpp"
 #include "file/fileinfo.hpp"
 
 namespace vfs::vectorfs {
+
+using EmbedderVariant =
+    std::variant<std::unique_ptr<embedded::FastTextEmbedder>>;
 
 using idx_t = faiss::idx_t;
 
@@ -33,7 +37,6 @@ class VectorFS {
 private:
   std::map<std::string, fileinfo::FileInfo> virtual_files;
   std::set<std::string> virtual_dirs;
-  std::unique_ptr<embedded::FastTextEmbedder> embedder;
   std::unique_ptr<faiss::IndexFlatL2> faiss_index;
   std::unique_ptr<faiss::IndexFlatL2> faiss_index_quantized;
   std::unique_ptr<fileinfo::ScalarQuantizer> sq_quantizer;
@@ -42,6 +45,9 @@ private:
   bool use_quantization;
   std::map<idx_t, std::string> index_to_path;
   std::map<std::string, std::string> search_results_cache;
+  EmbedderVariant embedder_;
+  std::string model_type_;
+  std::string model_path_;
 
   std::string normalize_text(const std::string &text) {
     std::string result = text;
@@ -77,19 +83,20 @@ private:
     auto it = virtual_files.find(path);
     if (it == virtual_files.end())
       return;
-
-    if (embedder && !it->second.content.empty()) {
+    if (!it->second.content.empty()) {
       std::string normalized_content = normalize_text(it->second.content);
-      it->second.embedding = embedder->getSentenceEmbedding(normalized_content);
+      it->second.embedding = std::visit(
+          [&normalized_content](auto &embedder_ptr) {
+            return embedder_ptr->getSentenceEmbedding(normalized_content);
+          },
+          embedder_);
       it->second.embedding_updated = true;
-
       if (use_quantization && sq_quantizer && sq_quantizer->is_trained()) {
         it->second.sq_codes = sq_quantizer->quantize(it->second.embedding);
       }
       if (use_quantization && pq_quantizer && pq_quantizer->is_trained()) {
         it->second.pq_codes = pq_quantizer->encode(it->second.embedding);
       }
-
       index_needs_rebuild = true;
       spdlog::debug("Updated embedding for file: {}", path);
     }
@@ -97,13 +104,10 @@ private:
 
   std::string generate_search_result(const std::string &query) {
     spdlog::info("Processing search query: {}", query);
-
     auto results = semantic_search(query, 5);
-
     std::stringstream ss;
     ss << "=== Semantic Search Results ===\n";
     ss << "Query: " << query << "\n\n";
-
     if (results.empty()) {
       ss << "No results found\n";
       ss << "Indexed files: " << index_to_path.size() << "\n";
@@ -124,12 +128,15 @@ private:
         }
       }
     }
-
     ss << "\n=== Search Info ===\n";
     ss << "Total indexed files: " << index_to_path.size() << "\n";
-    ss << "Embedder dimension: " << (embedder ? embedder->getDimension() : 0)
+    ss << "Embedder dimension: "
+       << std::visit(
+              [](const auto &embedder_ptr) {
+                return embedder_ptr->getDimension();
+              },
+              embedder_)
        << "\n";
-
     return ss.str();
   }
 
@@ -165,14 +172,11 @@ public:
   void rebuild_index() {
     if (!index_needs_rebuild)
       return;
-
     spdlog::info("Rebuilding vector index (quantization: {})",
                  use_quantization);
     index_to_path.clear();
-
     std::vector<float> all_embeddings;
     std::vector<std::string> indexed_paths;
-
     idx_t idx = 0;
     for (const auto &[path, file_info] : virtual_files) {
       if (file_info.embedding_updated && !file_info.embedding.empty()) {
@@ -183,20 +187,26 @@ public:
         idx++;
       }
     }
-
     if (!indexed_paths.empty()) {
       if (use_quantization) {
         if (!sq_quantizer->is_trained() || !pq_quantizer->is_trained()) {
-          train_quantizers(all_embeddings, embedder->getDimension());
+          train_quantizers(all_embeddings,
+                           std::visit(
+                               [](const auto &embedder_ptr) {
+                                 return embedder_ptr->getDimension();
+                               },
+                               embedder_));
         }
-
         if (!faiss_index_quantized) {
           faiss_index_quantized =
-              std::make_unique<faiss::IndexFlatL2>(embedder->getDimension());
+              std::make_unique<faiss::IndexFlatL2>(std::visit(
+                  [](const auto &embedder_ptr) {
+                    return embedder_ptr->getDimension();
+                  },
+                  embedder_));
         } else {
           faiss_index_quantized->reset();
         }
-
         std::vector<uint8_t> pq_codes;
         for (const auto &path : indexed_paths) {
           const auto &file_info = virtual_files[path];
@@ -205,21 +215,21 @@ public:
                             file_info.pq_codes.end());
           }
         }
-
         faiss_index_quantized->add(
             indexed_paths.size(),
             reinterpret_cast<const float *>(pq_codes.data()));
-
       } else {
         if (!faiss_index) {
-          faiss_index =
-              std::make_unique<faiss::IndexFlatL2>(embedder->getDimension());
+          faiss_index = std::make_unique<faiss::IndexFlatL2>(std::visit(
+              [](const auto &embedder_ptr) {
+                return embedder_ptr->getDimension();
+              },
+              embedder_));
         } else {
           faiss_index->reset();
         }
         faiss_index->add(indexed_paths.size(), all_embeddings.data());
       }
-
       spdlog::info("Index rebuilt with {} files", indexed_paths.size());
       index_needs_rebuild = false;
     }
@@ -228,34 +238,31 @@ public:
   std::vector<std::pair<std::string, float>>
   semantic_search(const std::string &query, int k) {
     std::vector<std::pair<std::string, float>> results;
-
-    if (!embedder || (!faiss_index && !faiss_index_quantized)) {
+    if (!std::holds_alternative<std::unique_ptr<embedded::FastTextEmbedder>>(
+            embedder_) ||
+        (!faiss_index && !faiss_index_quantized)) {
       spdlog::error("Embedder or index not initialized");
       return results;
     }
-
     rebuild_index();
-
     if (index_to_path.empty()) {
       spdlog::warn("No files indexed for search");
       return results;
     }
-
     std::string normalized_query = normalize_text(query);
-    std::vector<float> query_embedding =
-        embedder->getSentenceEmbedding(normalized_query);
-
+    std::vector<float> query_embedding = std::visit(
+        [&normalized_query](auto &embedder_ptr) {
+          return embedder_ptr->getSentenceEmbedding(normalized_query);
+        },
+        embedder_);
     std::vector<idx_t> I(k);
     std::vector<float> D(k);
-
     if (use_quantization && faiss_index_quantized) {
       if (pq_quantizer->is_trained()) {
         std::vector<uint8_t> query_codes =
             pq_quantizer->encode(query_embedding);
         pq_quantizer->precompute_query_tables(query_embedding);
-
         std::vector<std::pair<float, std::string>> scored_results;
-
         for (const auto &[idx, path] : index_to_path) {
           const auto &file_info = virtual_files[path];
           if (!file_info.pq_codes.empty()) {
@@ -263,7 +270,6 @@ public:
             scored_results.emplace_back(dist, path);
           }
         }
-
         std::sort(scored_results.begin(), scored_results.end());
         for (int i = 0; i < std::min(k, (int)scored_results.size()); ++i) {
           results.push_back(
@@ -272,44 +278,64 @@ public:
       }
     } else if (faiss_index) {
       faiss_index->search(1, query_embedding.data(), k, D.data(), I.data());
-
       for (int i = 0; i < k; ++i) {
         if (I[i] >= 0 && index_to_path.find(I[i]) != index_to_path.end()) {
           results.push_back({index_to_path[I[i]], D[i]});
         }
       }
     }
-
     return results;
   }
 
-  bool initialize(const std::string &fasttext_model_path,
+  template <typename EmbeddedModel>
+  bool initialize(const std::string &model_path,
                   bool use_quantization = false) {
+    model_path_ = model_path;
     try {
+      if constexpr (std::is_same_v<EmbeddedModel, embedded::FastTextEmbedder>) {
+        auto embedder = std::make_unique<embedded::FastTextEmbedder>();
+        embedder->loadModel(model_path);
+        embedder_ = std::move(embedder);
+      }
+      
       this->use_quantization = use_quantization;
-      embedder =
-          std::make_unique<embedded::FastTextEmbedder>(fasttext_model_path);
-      int dimension = embedder->getDimension();
+
+      int dimension = std::visit(
+          [](const auto &embedder_ptr) { return embedder_ptr->getDimension(); },
+          embedder_);
 
       if (use_quantization) {
         sq_quantizer = std::make_unique<fileinfo::ScalarQuantizer>();
         pq_quantizer = std::make_unique<fileinfo::ProductQuantizer>(8, 256);
-
         faiss_index_quantized = std::make_unique<faiss::IndexFlatL2>(dimension);
-        spdlog::info("Quantized FAISS index initialized with PQ");
       } else {
         faiss_index = std::make_unique<faiss::IndexFlatL2>(dimension);
-        spdlog::info("FAISS FlatL2 index initialized with dimension {}",
-                     dimension);
       }
 
-      spdlog::info("FastText embedder initialized with dimension {}",
-                   dimension);
       return true;
+
     } catch (const std::exception &e) {
-      spdlog::error("Failed to initialize embedder or index: {}", e.what());
+      spdlog::error("Failed to initialize embedder: {}", e.what());
       return false;
     }
+  }
+
+  std::vector<float> get_embedding(const std::string &text) {
+    return std::visit(
+        [&text](auto &embedder_ptr) {
+          return embedder_ptr->getSentenceEmbedding(text);
+        },
+        embedder_);
+  }
+
+  std::string get_embedder_info() const {
+    return std::visit(
+        [](const auto &embedder_ptr) {
+          return fmt::format("Model: {}, Dimension: {}",
+                             embedder_ptr->getModelName(),
+                             embedder_ptr->getDimension());
+        },
+        embedder_);
   }
 
   int getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi) {
@@ -763,13 +789,13 @@ public:
   }
 
   void test_semantic_search() {
-    if (!embedder || !faiss_index) {
+    if (!std::holds_alternative<std::unique_ptr<embedded::FastTextEmbedder>>(
+            embedder_) ||
+        !faiss_index) {
       spdlog::error("Embedder or index not initialized for testing");
       return;
     }
-
     spdlog::info("=== Тестирование семантического поиска ===");
-
     virtual_files["/test1.txt"] = fileinfo::FileInfo(
         S_IFREG | 0644, 0, "Программирование на C++ и системное ПО", getuid(),
         getgid(), time(nullptr), time(nullptr), time(nullptr));
@@ -779,26 +805,21 @@ public:
     virtual_files["/test3.txt"] = fileinfo::FileInfo(
         S_IFREG | 0644, 0, "Базы данных и SQL запросы", getuid(), getgid(),
         time(nullptr), time(nullptr), time(nullptr));
-
     update_embedding("/test1.txt");
     update_embedding("/test2.txt");
     update_embedding("/test3.txt");
     rebuild_index();
-
     std::vector<std::string> test_queries = {"программирование",
                                              "машинное обучение", "базы данных",
                                              "системное программирование"};
-
     for (const auto &query : test_queries) {
       spdlog::info("Запрос: '{}'", query);
       auto results = semantic_search(query, 3);
-
       if (results.empty()) {
         spdlog::warn("  No results found");
       } else {
         for (const auto &[path, score] : results) {
           spdlog::info("  {} (score: {:.3f})", path, score);
-
           auto it = virtual_files.find(path);
           if (it != virtual_files.end()) {
             spdlog::info("    Content: {}", it->second.content);

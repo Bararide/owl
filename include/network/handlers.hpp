@@ -20,11 +20,12 @@ auto create_root_handler() {
       });
 }
 
+template <typename EmbeddedModel>
 auto create_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     auto process_request = [&]() -> utils::HttpResult {
-      auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
+      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance().get_vector_fs();
       auto json = req->getJsonObject();
 
       if (!json) {
@@ -80,11 +81,12 @@ auto create_file_handler() {
   };
 }
 
+template <typename EmbeddedModel>
 auto read_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     auto process_request = [&]() -> utils::HttpResult {
-      auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
+      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance().get_vector_fs();
       auto path_param = req->getParameter("path");
 
       if (path_param.empty()) {
@@ -129,11 +131,12 @@ auto read_file_handler() {
   };
 }
 
+template <typename EmbeddedModel>
 auto semantic_search_handler() {
   return utils::create_handler(
       [](const drogon::HttpRequestPtr &req,
          const std::vector<std::string> &) -> utils::HttpResult {
-        auto &vfs = vfs::instance::VFSInstance::getInstance().get_vector_fs();
+        auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance().get_vector_fs();
         auto json = req->getJsonObject();
 
         if (!json) {
@@ -178,9 +181,9 @@ auto rebuild_handler() {
 
 std::map<std::string, utils::HttpHandler> handlers = {
     {"/", create_root_handler()},
-    {"/files/create", create_file_handler()},
-    {"/files/read", read_file_handler()},
-    {"/semantic", semantic_search_handler()},
+    {"/files/create", create_file_handler<vfs::embedded::FastTextEmbedder>()},
+    {"/files/read", read_file_handler<vfs::embedded::FastTextEmbedder>()},
+    {"/semantic", semantic_search_handler<vfs::embedded::FastTextEmbedder>()},
     {"/rebuild", rebuild_handler()}};
 
 } // namespace handler

@@ -3,17 +3,17 @@
 
 #include "vectorfs.hpp"
 #include <memory>
+#include <stdexcept>
 #include <string>
-#include <utility>
 
 namespace vfs::instance {
 
-class VFSInstance {
+template <typename EmbeddedModel> class VFSInstance {
 public:
   VFSInstance(const VFSInstance &) = delete;
   VFSInstance &operator=(const VFSInstance &) = delete;
 
-  static VFSInstance &getInstance() {
+  static VFSInstance<EmbeddedModel> &getInstance() {
     if (!instance_) {
       throw std::runtime_error(
           "VFSInstance not initialized. Call initialize() first.");
@@ -25,7 +25,8 @@ public:
     if (instance_) {
       throw std::runtime_error("VFSInstance already initialized");
     }
-    instance_ = std::unique_ptr<VFSInstance>(new VFSInstance(model_path));
+    instance_ = std::unique_ptr<VFSInstance<EmbeddedModel>>(
+        new VFSInstance<EmbeddedModel>(model_path));
   }
 
   static void shutdown() { instance_.reset(); }
@@ -40,18 +41,27 @@ public:
 
   vectorfs::VectorFS &get_vector_fs() const { return *vector_fs_; }
 
+  std::vector<float> get_embedding(const std::string &text) {
+    return vector_fs_->get_embedding(text);
+  }
+
+  std::string get_embedder_info() const {
+    return vector_fs_->get_embedder_info();
+  }
+
 private:
   VFSInstance(const std::string &model_path)
       : vector_fs_(vectorfs::VectorFS::getInstance()) {
-    vector_fs_->initialize(model_path);
+    vector_fs_->initialize<EmbeddedModel>(model_path);
   }
 
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
-  static std::unique_ptr<VFSInstance> instance_;
+  static std::unique_ptr<VFSInstance<EmbeddedModel>> instance_;
 };
 
-std::unique_ptr<VFSInstance> VFSInstance::instance_ = nullptr;
+template <typename EmbeddedModel>
+std::unique_ptr<VFSInstance<EmbeddedModel>>
+    VFSInstance<EmbeddedModel>::instance_ = nullptr;
 
 } // namespace vfs::instance
-
 #endif // INSTANCE_HPP

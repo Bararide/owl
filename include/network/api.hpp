@@ -8,7 +8,7 @@
 
 namespace vfs::network {
 
-class VectorFSApi {
+template <typename EmbeddedModel> class VectorFSApi {
 public:
   static void init() {
     using namespace std::chrono_literals;

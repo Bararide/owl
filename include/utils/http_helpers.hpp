@@ -13,6 +13,9 @@ namespace vfs::utils {
 using HttpSuccess = core::utils::Success<Json::Value>;
 using HttpError = core::utils::Error;
 using HttpResult = core::Result<Json::Value, std::runtime_error>;
+using HttpHandler = std::function<void(
+    const drogon::HttpRequestPtr &,
+    std::function<void(const drogon::HttpResponsePtr &)> &&)>;
 
 template <typename Handler>
 concept ReturnsResult = requires(Handler h, const drogon::HttpRequestPtr &req,
@@ -43,10 +46,6 @@ inline void notify_success(const Json::Value &data) {
 inline void notify_error(const std::string &message) {
   get_error_notification()(HttpError{message});
 }
-
-using HttpHandler = std::function<void(
-    const drogon::HttpRequestPtr &,
-    std::function<void(const drogon::HttpResponsePtr &)> &&)>;
 
 auto create_handler(ReturnsResult auto handler_logic) {
   return [handler_logic = std::move(handler_logic)](

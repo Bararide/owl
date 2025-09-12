@@ -1,0 +1,9 @@
+#ifndef VECTORFS_ALGORITHMS_TRIM_HPP
+#define VECTORFS_ALGORITHMS_TRIM_HPP
+
+namespace vfs::algorithms
+{
+    
+}
+
+#endif //VECTORFS_ALGORITHMS_TRIM_HPP

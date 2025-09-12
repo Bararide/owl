@@ -1,31 +1,38 @@
 #ifndef EMBEDDED_HPP
 #define EMBEDDED_HPP
 
+#include "embedded_base.hpp"
 #include <fasttext.h>
-#include <fstream>
-#include <iostream>
-#include <memory>
-#include <spdlog/spdlog.h>
-#include <sstream>
-#include <string>
-#include <vector>
 
 namespace vfs::embedded {
-class FastTextEmbedder {
-private:
-  std::unique_ptr<fasttext::FastText> fasttext_;
-  std::string model_path_;
-  int dimension_;
+class FastTextEmbedder;
 
+template <> struct EmbedderTraits<FastTextEmbedder> {
+  using ModelType = fasttext::FastText;
+  static constexpr const char *ModelName = "FastText";
+  static constexpr bool SupportsBatchProcessing = false;
+  static constexpr bool SupportsSubword = true;
+};
+
+class FastTextEmbedder : public EmbeddedBase<FastTextEmbedder> {
 public:
-  FastTextEmbedder(const std::string &model_path) : model_path_(model_path) {
+  FastTextEmbedder() = default;
+  explicit FastTextEmbedder(const std::string &model_path) {
+    loadModel(model_path);
+  }
+
+  void loadModelImpl(const std::string &model_path) {
+    model_path_ = model_path;
     fasttext_ = std::make_unique<fasttext::FastText>();
     fasttext_->loadModel(model_path_);
     dimension_ = fasttext_->getDimension();
     spdlog::info("FastText model loaded with dimension: {}", dimension_);
+    model_loaded_ = true;
   }
 
-  std::vector<float> getSentenceEmbedding(const std::string &text) {
+  std::vector<float> getSentenceEmbeddingImpl(const std::string &text) {
+    validateModelLoaded();
+
     std::istringstream iss(text);
     fasttext::Vector vec(dimension_);
     fasttext_->getSentenceVector(iss, vec);
@@ -37,8 +44,23 @@ public:
     return embedding;
   }
 
-  int getDimension() const { return dimension_; }
+  int getDimensionImpl() const {
+    validateModelLoaded();
+    return dimension_;
+  }
+
+  std::string getModelNameImpl() const {
+    return EmbedderTraits<FastTextEmbedder>::ModelName;
+  }
+
+  bool isModelLoadedImpl() const { return model_loaded_; }
+
+private:
+  std::unique_ptr<fasttext::FastText> fasttext_;
+  std::string model_path_;
+  int dimension_ = 0;
+  bool model_loaded_ = false;
 };
-} // namespace embedded
+} // namespace vfs::embedded
 
 #endif // EMBEDDED_HPP
