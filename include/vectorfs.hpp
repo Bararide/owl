@@ -22,7 +22,7 @@
 #include <fasttext.h>
 #include <spdlog/spdlog.h>
 
-#include "embedded/embedded.hpp"
+#include "embedded/embedded_fasttext.hpp"
 #include "embedded/embedded_base.hpp"
 #include "file/fileinfo.hpp"
 
