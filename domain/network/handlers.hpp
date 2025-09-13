@@ -20,41 +20,82 @@ auto create_root_handler() {
       });
 }
 
-template <typename EmbeddedModel>
-auto create_file_handler() {
+template <typename EmbeddedModel> auto create_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     auto process_request = [&]() -> utils::HttpResult {
-      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance().get_vector_fs();
+      spdlog::info("=== File Creation Request ===");
+      spdlog::info("Client IP: {}", req->getPeerAddr().toIp());
+      spdlog::info("HTTP Method: {}", req->getMethodString());
+      spdlog::info("URL: {}", req->getPath());
+
+      spdlog::info("Headers:");
+      for (const auto &[key, value] : req->getHeaders()) {
+        spdlog::info("  {}: {}", key, value);
+      }
+
+      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance()
+                      .get_vector_fs();
       auto json = req->getJsonObject();
 
       if (!json) {
+        spdlog::warn("Invalid JSON received - no JSON object found");
+        spdlog::info("Raw body: {}", req->getBody());
         return utils::error_result("Invalid JSON");
       }
 
+      spdlog::info("Received JSON: {}", json->toStyledString());
+
       auto validate_path = utils::validate_json_member(*json, "path");
       if (!validate_path.is_ok()) {
+        spdlog::warn("Missing or invalid 'path' field in JSON");
         return validate_path.error();
       }
 
       auto validate_content = utils::validate_json_member(*json, "content");
       if (!validate_content.is_ok()) {
+        spdlog::warn("Missing or invalid 'content' field in JSON");
         return validate_content.error();
       }
 
       std::string path = (*json)["path"].asString();
       std::string content = (*json)["content"].asString();
 
+      if (!path.empty() && path[0] != '/') {
+        path = "/" + path;
+        spdlog::info("Normalized path to: {}", path);
+      }
+
+      spdlog::info("File path: {}", path);
+      spdlog::info("Content length: {} bytes", content.size());
+
+      if (content.size() > 200) {
+        spdlog::info("Content preview: {}...", content.substr(0, 200));
+      } else {
+        spdlog::info("Content: {}", content);
+      }
+
       struct fuse_file_info fi {};
       auto result = vfs.create(path.c_str(), 0644, &fi);
       if (result != 0) {
+        spdlog::error("Failed to create file '{}', error code: {}", path,
+                      result);
         return utils::error_result("Failed to create file");
       }
 
+      spdlog::info("File '{}' created successfully", path);
+
       result = vfs.write(path.c_str(), content.c_str(), content.size(), 0, &fi);
       if (result < 0) {
+        spdlog::error("Failed to write content to file '{}', error code: {}",
+                      path, result);
+        vfs.unlink(path.c_str());
+        spdlog::info("Cleaned up partially created file '{}'", path);
         return utils::error_result("Failed to write content");
       }
+
+      spdlog::info("Successfully wrote {} bytes to file '{}'", content.size(),
+                   path);
 
       struct stat st {};
       vfs.getattr(path.c_str(), &st, nullptr);
@@ -63,16 +104,23 @@ auto create_file_handler() {
           {"path", "size", "created"}, path,
           static_cast<Json::UInt64>(st.st_size), true);
 
+      spdlog::info("File creation completed successfully:");
+      spdlog::info("  Path: {}", path);
+      spdlog::info("  Size: {} bytes", st.st_size);
+      spdlog::info("=============================");
+
       return utils::success_result(data);
     };
 
     auto result = process_request();
     result.match(
         [&callback](const Json::Value &data) {
+          spdlog::debug("Sending success response to client");
           auto resp = drogon::HttpResponse::newHttpJsonResponse(data);
           callback(resp);
         },
         [&callback](const std::runtime_error &error) {
+          spdlog::warn("Sending error response: {}", error.what());
           auto error_response = utils::create_error_response(error.what());
           auto resp = drogon::HttpResponse::newHttpJsonResponse(error_response);
           resp->setStatusCode(drogon::k500InternalServerError);
@@ -81,12 +129,12 @@ auto create_file_handler() {
   };
 }
 
-template <typename EmbeddedModel>
-auto read_file_handler() {
+template <typename EmbeddedModel> auto read_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     auto process_request = [&]() -> utils::HttpResult {
-      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance().get_vector_fs();
+      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance()
+                      .get_vector_fs();
       auto path_param = req->getParameter("path");
 
       if (path_param.empty()) {
@@ -131,12 +179,12 @@ auto read_file_handler() {
   };
 }
 
-template <typename EmbeddedModel>
-auto semantic_search_handler() {
+template <typename EmbeddedModel> auto semantic_search_handler() {
   return utils::create_handler(
       [](const drogon::HttpRequestPtr &req,
          const std::vector<std::string> &) -> utils::HttpResult {
-        auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance().get_vector_fs();
+        auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance()
+                        .get_vector_fs();
         auto json = req->getJsonObject();
 
         if (!json) {

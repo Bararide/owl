@@ -48,6 +48,8 @@ public:
     addCorsOptions("/semantic");
     addCorsOptions("/rebuild");
     addCorsOptions("/files/.*");
+    addCorsOptions("/files/create");
+    addCorsOptions("/files/read");
 
     drogon::app().setCustomErrorHandler(
         [](drogon::HttpStatusCode code, const drogon::HttpRequestPtr &req) {
