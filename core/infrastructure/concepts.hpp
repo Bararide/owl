@@ -1,6 +1,7 @@
 #ifndef CORE_INFRASTRUCTURE_CONCEPTS_HPP
 #define CORE_INFRASTRUCTURE_CONCEPTS_HPP
 
+#include <chrono>
 #include <concepts>
 #include <functional>
 #include <iostream>
@@ -68,6 +69,23 @@ concept IsIterableAndSizable = IsIterable<T> && IsSizable<T>;
 template <typename F, typename... Args>
 concept Invocable = std::is_invocable_v<F, Args...>;
 
+template <typename T>
+concept IsMilliseconds =
+    std::is_same_v<std::decay_t<T>(), std::chrono::milliseconds>;
+
+template <typename T>
+concept IsNanoseconds =
+    std::is_same_v<std::decay_t<T>(), std::chrono::nanoseconds>;
+
+template <typename T>
+concept IsChronable = requires {
+  typename T::rep;
+  typename T::period;
+  requires std::is_same_v<
+      T, std::chrono::duration<typename T::rep, typename T::period>>;
+} && requires(T duration) {
+  { duration.count() } -> std::convertible_to<typename T::rep>;
+};
 } // namespace core
 
 #endif // CONCEPTS_HPP

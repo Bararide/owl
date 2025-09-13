@@ -25,6 +25,7 @@
 #include "embedded/embedded_fasttext.hpp"
 #include "embedded/embedded_base.hpp"
 #include "file/fileinfo.hpp"
+#include "infrastructure/measure.hpp"
 
 namespace vfs::vectorfs {
 

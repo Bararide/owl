@@ -25,49 +25,58 @@ int main(int argc, char *argv[]) {
         "/home/bararide/code/models/crawl-300d-2M-subword/"
         "crawl-300d-2M-subword.bin";
 
-    auto start = std::chrono::high_resolution_clock::now();
+    core::measure::Measure::start();
     vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::initialize(
         fasttext_model_path);
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
-    spdlog::info("VectorFS initialized in {} ms", duration);
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "VectorFS initialized in {} ms");
 
-    start = std::chrono::high_resolution_clock::now();
+    core::measure::Measure::start();
     auto &vectorfs = vfs::instance::VFSInstance<
         vfs::embedded::FastTextEmbedder>::getInstance();
-    end = std::chrono::high_resolution_clock::now();
-    duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
-    spdlog::info("VectorFS loaded in {} ms", duration);
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "VectorFS loaded in {} ms");
 
     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
 
-    start = std::chrono::high_resolution_clock::now();
+    core::measure::Measure::start();
     vectorfs.test_semantic_search();
-    end = std::chrono::high_resolution_clock::now();
-    duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
-    spdlog::info("Semantic search test completed in {} ms", duration);
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "Semantic search test completed in {} ms");
 
     try {
+      core::measure::Measure::start();
       auto embedding = vectorfs.get_embedding("test sentence");
-      spdlog::info("Embedding generated successfully, dimension: {}",
-                   embedding.size());
+      core::measure::Measure::end();
+      auto embed_duration =
+          core::measure::Measure::duration<std::chrono::microseconds>();
+      spdlog::info(
+          "Embedding generated successfully, dimension: {}, time: {} μs",
+          embedding.size(), embed_duration.count());
     } catch (const std::exception &e) {
       spdlog::warn("Embedding test failed: {}", e.what());
+      core::measure::Measure::cancel();
     }
+
+    core::measure::Measure::start();
 
     pid_t http_pid = fork();
     if (http_pid == 0) {
+      core::measure::Measure::reset();
+
       spdlog::info("Starting HTTP server in child process (PID: {})...",
                    getpid());
       try {
+        auto http_start = std::chrono::high_resolution_clock::now();
         vfs::network::VectorFSApi<vfs::embedded::FastTextEmbedder>::init();
         vfs::network::VectorFSApi<vfs::embedded::FastTextEmbedder>::run();
+        auto http_end = std::chrono::high_resolution_clock::now();
+        auto http_duration = std::chrono::duration_cast<std::chrono::seconds>(
+            http_end - http_start);
+        spdlog::info("HTTP server ran for {} seconds", http_duration.count());
       } catch (const std::exception &e) {
         spdlog::error("HTTP server error: {}", e.what());
         exit(EXIT_FAILURE);
@@ -76,9 +85,23 @@ int main(int argc, char *argv[]) {
     } else if (http_pid > 0) {
       spdlog::info("Starting FUSE in parent process (PID: {})...", getpid());
       std::this_thread::sleep_for(std::chrono::seconds(2));
+
+      auto fuse_start = std::chrono::high_resolution_clock::now();
       int result = vectorfs.initialize_fuse(argc, argv);
-      spdlog::info("FUSE exited with code: {}, stopping HTTP server...",
-                   result);
+      auto fuse_end = std::chrono::high_resolution_clock::now();
+      auto fuse_duration = std::chrono::duration_cast<std::chrono::seconds>(
+          fuse_end - fuse_start);
+
+      core::measure::Measure::end();
+      auto total_duration =
+          core::measure::Measure::duration<std::chrono::seconds>();
+
+      spdlog::info("FUSE exited with code: {}, ran for {} seconds", result,
+                   fuse_duration.count());
+      spdlog::info("Total application runtime: {} seconds",
+                   total_duration.count());
+
+      spdlog::info("Stopping HTTP server...");
       if (kill(http_pid, SIGTERM) == 0) {
         int status;
         waitpid(http_pid, &status, 0);
@@ -86,6 +109,7 @@ int main(int argc, char *argv[]) {
       } else {
         spdlog::warn("Failed to terminate HTTP server gracefully");
       }
+
       vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
       spdlog::info("VectorFS shutdown complete");
       return result;
@@ -95,6 +119,7 @@ int main(int argc, char *argv[]) {
     }
   } catch (const std::exception &e) {
     spdlog::error("Fatal error: {}", e.what());
+    core::measure::Measure::cancel();
     try {
       vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
     } catch (...) {
