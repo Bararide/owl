@@ -2,6 +2,7 @@
 #define VECTORFS_PARSER_PDF_HPP
 
 #include "parser_base.hpp"
+#include "parser_utils.hpp"
 
 namespace vfs::parser {
 class PdfParser;

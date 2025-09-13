@@ -32,6 +32,7 @@ public:
   static void shutdown() { instance_.reset(); }
 
   void test_semantic_search() noexcept { vector_fs_->test_semantic_search(); }
+  void test_markov_model() noexcept { vector_fs_->generate_markov_test_result(); }
 
   int initialize_fuse(int argc, char *argv[]) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);

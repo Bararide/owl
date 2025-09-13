@@ -14,9 +14,8 @@ auto create_root_handler() {
   return utils::create_handler(
       [](const drogon::HttpRequestPtr &,
          const std::vector<std::string> &) -> utils::HttpResult {
-        auto response =
-            utils::create_success_response({"message"}, "Hello, World!");
-        return utils::success_result(response);
+        return utils::success_result(
+            utils::create_success_response({"message"}, "Hello, World!"));
       });
 }
 
