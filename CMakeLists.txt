@@ -23,7 +23,7 @@ include_directories(domain)
 include_directories(core)
 include_directories(${JSONCPP_INCLUDE_DIRS})
 
-add_executable(owl src/main.cpp)
+add_executable(owl src/main.cpp domain/vectorfs_fuse_cmd.cpp domain/vectorfs_test.cpp)
 target_include_directories(owl PRIVATE ${FUSE3_INCLUDE_DIRS}     
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
     ${CMAKE_SOURCE_DIR}/3dparty/fastText/src

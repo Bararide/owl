@@ -359,14 +359,12 @@ public:
     }
 
     std::vector<double> state_probs = get_state_probabilities(recent_files);
-
-    // Предсказываем следующие наблюдения
     std::vector<std::pair<std::string, double>> predictions;
 
     for (size_t s = 0; s < states.size(); ++s) {
       for (size_t o = 0; o < observations.size(); ++o) {
         double prob = state_probs[s] * emission_matrix[s][o];
-        if (prob > 0.01) { // Порог значимости
+        if (prob > 0.01) {
           predictions.emplace_back(observations[o], prob);
         }
       }
