@@ -1,5 +1,6 @@
 #include "instance/instance.hpp"
 #include "network/api.hpp"
+#include "parsers/parser_pdf.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
