@@ -6,8 +6,7 @@
 #include <map>
 #include <string>
 #include <vector>
-
-#include "../core/infrastructure/notification.hpp"
+#include <infrastructure/notification.hpp>
 
 namespace vfs::utils {
 using HttpSuccess = core::utils::Success<Json::Value>;

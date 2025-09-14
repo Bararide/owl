@@ -21,11 +21,11 @@
 #include <faiss/IndexFlat.h>
 #include <fasttext.h>
 #include <spdlog/spdlog.h>
+#include <infrastructure/measure.hpp>
 
 #include "embedded/embedded_base.hpp"
 #include "embedded/embedded_fasttext.hpp"
 #include "file/fileinfo.hpp"
-#include "infrastructure/measure.hpp"
 #include "markov.hpp"
 
 namespace vfs::vectorfs {
