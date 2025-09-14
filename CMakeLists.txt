@@ -19,16 +19,19 @@ add_subdirectory(3dparty/sentencepiece EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
 
-include_directories(domain)
+add_subdirectory(domain)
+
 include_directories(core)
 include_directories(${JSONCPP_INCLUDE_DIRS})
 
-add_executable(owl src/main.cpp domain/vectorfs_fuse_cmd.cpp domain/vectorfs_test.cpp)
+add_executable(owl src/main.cpp)
+
 target_include_directories(owl PRIVATE ${FUSE3_INCLUDE_DIRS}     
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
     ${CMAKE_SOURCE_DIR}/3dparty/fastText/src
     ${JSONCPP_INCLUDE_DIRS})
 
+target_link_libraries(owl domain)
 target_link_libraries(owl ${FUSE3_LIBRARIES})
 target_link_libraries(owl faiss)
 target_link_libraries(owl sentencepiece)

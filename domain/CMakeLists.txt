@@ -1,0 +1,14 @@
+file(GLOB DOMAIN_SOURCES "*.cpp")
+
+add_library(domain ${DOMAIN_SOURCES})
+
+target_include_directories(domain PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/core
+    ${CMAKE_SOURCE_DIR}/3dparty/faiss
+    ${CMAKE_SOURCE_DIR}/3dparty/fastText/src
+)
+
+target_link_libraries(domain PUBLIC faiss)
+target_link_libraries(domain PUBLIC fasttext-shared)
+target_link_libraries(domain PUBLIC spdlog)
