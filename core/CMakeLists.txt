@@ -5,6 +5,7 @@ target_include_directories(core INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/infrastructure
     ${CMAKE_CURRENT_SOURCE_DIR}/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/memory
 )
 
 target_link_libraries(core INTERFACE spdlog)

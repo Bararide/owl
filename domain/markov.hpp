@@ -2,12 +2,16 @@
 #define MARKOV_RECOMMENDER_HPP
 
 #include <algorithm>
+#include <chrono>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <queue>
 #include <random>
 #include <spdlog/spdlog.h>
+#include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace vfs::markov {
@@ -18,14 +22,33 @@ struct Edge {
   double semantic_similarity;
   int usage_count;
 
-  Edge(const std::string &t, double w, double sim = 0.0)
-      : target(t), weight(w), semantic_similarity(sim), usage_count(1) {}
+  Edge(std::string t, double w, double sim = 0.0)
+      : target(std::move(t)), weight(w), semantic_similarity(sim),
+        usage_count(1) {}
 };
 
 struct AccessPattern {
   std::string file_path;
   std::chrono::time_point<std::chrono::steady_clock> timestamp;
   std::string context;
+
+  AccessPattern(std::string path,
+                std::chrono::time_point<std::chrono::steady_clock> time,
+                std::string ctx)
+      : file_path(std::move(path)), timestamp(time), context(std::move(ctx)) {}
+
+  AccessPattern(AccessPattern &&other) noexcept
+      : file_path(std::move(other.file_path)), timestamp(other.timestamp),
+        context(std::move(other.context)) {}
+
+  AccessPattern &operator=(AccessPattern &&other) noexcept {
+    if (this != &other) {
+      file_path = std::move(other.file_path);
+      timestamp = other.timestamp;
+      context = std::move(other.context);
+    }
+    return *this;
+  }
 };
 
 class SemanticGraph {
@@ -44,11 +67,11 @@ private:
 public:
   SemanticGraph() : gen(rd()) {}
 
-  void add_edge(const std::string &from, const std::string &to,
-                double semantic_similarity, int usage_weight = 1) {
+  void add_edge(std::string from, std::string to, double semantic_similarity,
+                int usage_weight = 1) {
     double edge_weight = semantic_similarity * (1.0 + std::log(usage_weight));
 
-    auto &edges = adjacency_list[from];
+    auto &edges = adjacency_list[std::move(from)];
     auto it = std::find_if(edges.begin(), edges.end(),
                            [&to](const Edge &e) { return e.target == to; });
 
@@ -58,16 +81,16 @@ public:
           std::max(it->semantic_similarity, semantic_similarity);
       it->usage_count += usage_weight;
     } else {
-      edges.emplace_back(to, edge_weight, semantic_similarity);
+      edges.emplace_back(std::move(to), edge_weight, semantic_similarity);
     }
 
-    normalize_outgoing_weights(from);
+    normalize_outgoing_weights(edges.back().target);
   }
 
-  void record_access(const std::string &file_path,
-                     const std::string &context = "") {
-    access_history.push_back(
-        {file_path, std::chrono::steady_clock::now(), context});
+  void record_access(std::string file_path, std::string context = "") {
+    access_history.emplace_back(std::move(file_path),
+                                std::chrono::steady_clock::now(),
+                                std::move(context));
 
     if (access_history.size() > 1000) {
       access_history.erase(access_history.begin(),
@@ -82,14 +105,17 @@ public:
     std::unordered_map<std::string, int> visit_counts;
 
     std::vector<std::string> nodes;
+    nodes.reserve(adjacency_list.size());
     for (const auto &[node, _] : adjacency_list) {
       nodes.push_back(node);
     }
 
-    if (nodes.empty())
+    if (nodes.empty()) {
       return {};
+    }
 
-    std::uniform_int_distribution<> node_dist(0, nodes.size() - 1);
+    std::uniform_int_distribution<> node_dist(
+        0, static_cast<int>(nodes.size()) - 1);
 
     for (int walk = 0; walk < num_walks; ++walk) {
       std::string current = nodes[node_dist(gen)];
@@ -97,7 +123,7 @@ public:
       for (int step = 0; step < WALK_LENGTH; ++step) {
         visit_counts[current]++;
 
-        auto it = adjacency_list.find(current);
+        const auto it = adjacency_list.find(current);
         if (it == adjacency_list.end() || it->second.empty()) {
           current = nodes[node_dist(gen)];
           continue;
@@ -108,11 +134,12 @@ public:
     }
 
     std::vector<std::pair<std::string, double>> ranking;
-    double total_visits = num_walks * WALK_LENGTH;
+    ranking.reserve(visit_counts.size());
+    const double total_visits = static_cast<double>(num_walks) * WALK_LENGTH;
 
-    for (const auto &[node, count] : visit_counts) {
+    for (auto &&[node, count] : visit_counts) {
       double importance = static_cast<double>(count) / total_visits;
-      ranking.emplace_back(node, importance);
+      ranking.emplace_back(std::move(node), importance);
     }
 
     std::sort(ranking.begin(), ranking.end(),
@@ -128,18 +155,20 @@ public:
   std::vector<std::string> get_recommendations(const std::string &current_file,
                                                int num_recommendations = 5) {
     std::vector<std::string> recommendations;
+    recommendations.reserve(num_recommendations);
 
-    auto it = adjacency_list.find(current_file);
+    const auto it = adjacency_list.find(current_file);
     if (it == adjacency_list.end()) {
       return recommendations;
     }
 
     std::vector<std::pair<std::string, double>> candidates;
+    candidates.reserve(it->second.size());
 
     for (const auto &edge : it->second) {
       double score = edge.weight;
 
-      auto importance_it = node_importance.find(edge.target);
+      const auto importance_it = node_importance.find(edge.target);
       if (importance_it != node_importance.end()) {
         score *= (1.0 + importance_it->second);
       }
@@ -152,7 +181,8 @@ public:
     std::sort(candidates.begin(), candidates.end(),
               [](const auto &a, const auto &b) { return a.second > b.second; });
 
-    for (int i = 0; i < std::min(num_recommendations, (int)candidates.size());
+    for (int i = 0;
+         i < std::min(num_recommendations, static_cast<int>(candidates.size()));
          ++i) {
       recommendations.push_back(candidates[i].first);
     }
@@ -162,9 +192,10 @@ public:
 
   double get_transition_probability(const std::string &from,
                                     const std::string &to) const {
-    auto it = adjacency_list.find(from);
-    if (it == adjacency_list.end())
+    const auto it = adjacency_list.find(from);
+    if (it == adjacency_list.end()) {
       return 0.0;
+    }
 
     for (const auto &edge : it->second) {
       if (edge.target == to) {
@@ -176,6 +207,7 @@ public:
 
   std::vector<std::string> get_semantic_hubs(int top_k = 10) {
     std::vector<std::pair<std::string, double>> hub_scores;
+    hub_scores.reserve(adjacency_list.size());
 
     for (const auto &[node, _] : adjacency_list) {
       double hub_score = calculate_hub_score(node);
@@ -186,8 +218,10 @@ public:
               [](const auto &a, const auto &b) { return a.second > b.second; });
 
     std::vector<std::string> hubs;
-    for (int i = 0; i < std::min(top_k, (int)hub_scores.size()); ++i) {
-      hubs.push_back(hub_scores[i].first);
+    hubs.reserve(top_k);
+    for (int i = 0; i < std::min(top_k, static_cast<int>(hub_scores.size()));
+         ++i) {
+      hubs.push_back(std::move(hub_scores[i].first));
     }
 
     return hubs;
@@ -205,9 +239,10 @@ public:
 
 private:
   void normalize_outgoing_weights(const std::string &node) {
-    auto it = adjacency_list.find(node);
-    if (it == adjacency_list.end())
+    const auto it = adjacency_list.find(node);
+    if (it == adjacency_list.end()) {
       return;
+    }
 
     double total_weight = 0.0;
     for (const auto &edge : it->second) {
@@ -237,22 +272,23 @@ private:
   }
 
   void update_transition_probabilities() {
-    if (access_history.size() < 2)
+    if (access_history.size() < 2) {
       return;
+    }
 
-    int window_size = std::min(10, (int)access_history.size());
-    auto recent_start = access_history.end() - window_size;
+    const int window_size =
+        std::min(10, static_cast<int>(access_history.size()));
+    const auto recent_start = access_history.end() - window_size;
 
     for (auto it = recent_start; it != access_history.end() - 1; ++it) {
-      auto next_it = it + 1;
+      const auto next_it = it + 1;
 
-      auto time_diff = std::chrono::duration_cast<std::chrono::seconds>(
-                           next_it->timestamp - it->timestamp)
-                           .count();
+      const auto time_diff = std::chrono::duration_cast<std::chrono::seconds>(
+                                 next_it->timestamp - it->timestamp)
+                                 .count();
 
       if (time_diff < 300) {
-        double temporal_weight = 1.0 / (1.0 + time_diff / 60.0);
-
+        const double temporal_weight = 1.0 / (1.0 + time_diff / 60.0);
         add_edge(it->file_path, next_it->file_path, 0.5,
                  static_cast<int>(temporal_weight * 10));
       }
@@ -260,11 +296,12 @@ private:
   }
 
   double calculate_hub_score(const std::string &node) {
-    auto it = adjacency_list.find(node);
-    if (it == adjacency_list.end())
+    const auto it = adjacency_list.find(node);
+    if (it == adjacency_list.end()) {
       return 0.0;
+    }
 
-    double out_degree = it->second.size();
+    const double out_degree = static_cast<double>(it->second.size());
 
     double in_degree = 0;
     for (const auto &[other_node, edges] : adjacency_list) {
@@ -280,11 +317,11 @@ private:
       for (const auto &edge : it->second) {
         avg_similarity += edge.semantic_similarity;
       }
-      avg_similarity /= it->second.size();
+      avg_similarity /= static_cast<double>(it->second.size());
     }
 
     double pagerank_score = 0.0;
-    auto pr_it = node_importance.find(node);
+    const auto pr_it = node_importance.find(node);
     if (pr_it != node_importance.end()) {
       pagerank_score = pr_it->second;
     }
@@ -310,24 +347,24 @@ public:
   size_t get_state_count() const { return states.size(); }
   size_t get_sequence_count() const { return observation_sequences.size(); }
 
-  void add_state(const std::string &state) {
+  void add_state(std::string state) {
     if (state_to_index.find(state) == state_to_index.end()) {
-      state_to_index[state] = states.size();
-      states.push_back(state);
+      state_to_index[state] = static_cast<int>(states.size());
+      states.push_back(std::move(state));
     }
   }
 
-  void add_observation(const std::string &obs) {
+  void add_observation(std::string obs) {
     if (obs_to_index.find(obs) == obs_to_index.end()) {
-      obs_to_index[obs] = observations.size();
-      observations.push_back(obs);
+      obs_to_index[obs] = static_cast<int>(observations.size());
+      observations.push_back(std::move(obs));
     }
   }
 
-  void add_sequence(const std::vector<std::string> &sequence) {
-    observation_sequences.push_back(sequence);
+  void add_sequence(std::vector<std::string> sequence) {
+    observation_sequences.push_back(std::move(sequence));
 
-    for (const auto &obs : sequence) {
+    for (const auto &obs : observation_sequences.back()) {
       add_observation(obs);
     }
   }
@@ -338,12 +375,12 @@ public:
       return;
     }
 
-    size_t num_states = states.size();
-    size_t num_obs = observations.size();
+    const size_t num_states = states.size();
+    const size_t num_obs = observations.size();
 
     transition_matrix.assign(num_states, std::vector<double>(num_states, 0.0));
     emission_matrix.assign(num_states, std::vector<double>(num_obs, 0.0));
-    initial_probs.assign(num_states, 1.0 / num_states);
+    initial_probs.assign(num_states, 1.0 / static_cast<double>(num_states));
 
     train_from_sequences();
 
@@ -360,6 +397,7 @@ public:
 
     std::vector<double> state_probs = get_state_probabilities(recent_files);
     std::vector<std::pair<std::string, double>> predictions;
+    predictions.reserve(states.size() * observations.size());
 
     for (size_t s = 0; s < states.size(); ++s) {
       for (size_t o = 0; o < observations.size(); ++o) {
@@ -374,7 +412,9 @@ public:
               [](const auto &a, const auto &b) { return a.second > b.second; });
 
     std::vector<std::string> result;
-    for (int i = 0; i < std::min(num_predictions, (int)predictions.size());
+    result.reserve(num_predictions);
+    for (int i = 0;
+         i < std::min(num_predictions, static_cast<int>(predictions.size()));
          ++i) {
       result.push_back(predictions[i].first);
     }
@@ -385,17 +425,18 @@ public:
   std::string
   classify_file_category(const std::string &file_path,
                          const std::vector<std::string> &context_files) {
-    if (!is_trained())
+    if (!is_trained()) {
       return "unknown";
+    }
 
     std::vector<double> state_probs = get_state_probabilities(context_files);
 
-    auto obs_it = obs_to_index.find(file_path);
+    const auto obs_it = obs_to_index.find(file_path);
     if (obs_it != obs_to_index.end()) {
-      int obs_idx = obs_it->second;
+      const int obs_idx = obs_it->second;
 
       double max_prob = 0.0;
-      int best_state = 0;
+      size_t best_state = 0;
 
       for (size_t s = 0; s < states.size(); ++s) {
         double prob = state_probs[s] * emission_matrix[s][obs_idx];
@@ -408,7 +449,8 @@ public:
       return states[best_state];
     }
 
-    auto max_it = std::max_element(state_probs.begin(), state_probs.end());
+    const auto max_it =
+        std::max_element(state_probs.begin(), state_probs.end());
     return states[std::distance(state_probs.begin(), max_it)];
   }
 
@@ -427,22 +469,22 @@ private:
     for (const auto &sequence : observation_sequences) {
       for (size_t i = 0; i < sequence.size(); ++i) {
         std::string current_state = infer_state(sequence[i]);
-        int state_idx = state_to_index[current_state];
-        int obs_idx = obs_to_index[sequence[i]];
+        const int state_idx = state_to_index[current_state];
+        const int obs_idx = obs_to_index.at(sequence[i]);
 
         emit_counts[state_idx][obs_idx]++;
         state_counts[state_idx]++;
 
         if (i > 0) {
           std::string prev_state = infer_state(sequence[i - 1]);
-          int prev_state_idx = state_to_index[prev_state];
+          const int prev_state_idx = state_to_index[prev_state];
           trans_counts[prev_state_idx][state_idx]++;
         }
       }
     }
 
     for (size_t i = 0; i < states.size(); ++i) {
-      int total_trans =
+      const int total_trans =
           std::accumulate(trans_counts[i].begin(), trans_counts[i].end(), 0);
       if (total_trans > 0) {
         for (size_t j = 0; j < states.size(); ++j) {
@@ -461,7 +503,7 @@ private:
   }
 
   std::string infer_state(const std::string &file_path) {
-    size_t dot_pos = file_path.find_last_of('.');
+    const size_t dot_pos = file_path.find_last_of('.');
     if (dot_pos != std::string::npos) {
       std::string ext = file_path.substr(dot_pos + 1);
       std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
@@ -491,18 +533,20 @@ private:
 
   std::vector<double>
   get_state_probabilities(const std::vector<std::string> &observations_seq) {
-    std::vector<double> probs(states.size(), 1.0 / states.size());
+    std::vector<double> probs(states.size(),
+                              1.0 / static_cast<double>(states.size()));
 
     if (observations_seq.empty() || !is_trained()) {
       return probs;
     }
 
     for (const auto &obs : observations_seq) {
-      auto obs_it = obs_to_index.find(obs);
-      if (obs_it == obs_to_index.end())
+      const auto obs_it = obs_to_index.find(obs);
+      if (obs_it == obs_to_index.end()) {
         continue;
+      }
 
-      int obs_idx = obs_it->second;
+      const int obs_idx = obs_it->second;
       std::vector<double> new_probs(states.size(), 0.0);
 
       for (size_t j = 0; j < states.size(); ++j) {
@@ -512,14 +556,15 @@ private:
         }
       }
 
-      double sum = std::accumulate(new_probs.begin(), new_probs.end(), 0.0);
+      const double sum =
+          std::accumulate(new_probs.begin(), new_probs.end(), 0.0);
       if (sum > 0) {
         for (auto &p : new_probs) {
           p /= sum;
         }
       }
 
-      probs = new_probs;
+      probs = std::move(new_probs);
     }
 
     return probs;
