@@ -13,6 +13,15 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     return 0;
   }
 
+  if (strcmp(path, "/.debug") == 0) {
+    stbuf->st_mode = S_IFREG | 0444;
+    stbuf->st_nlink = 1;
+    stbuf->st_size = 1024;
+    stbuf->st_uid = getuid();
+    stbuf->st_gid = getgid();
+    return 0;
+  }
+
   if (strcmp(path, "/.markov") == 0) {
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
@@ -86,14 +95,24 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".embeddings", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".markov", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
     for (const auto &dir : virtual_dirs) {
       if (dir != "/") {
-        filler(buf, dir.c_str() + 1, nullptr, 0, FUSE_FILL_DIR_PLUS);
+        const char *dir_name = dir.c_str();
+        if (dir_name[0] == '/') {
+          dir_name++;
+        }
+        filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
       }
     }
+
     for (const auto &file : virtual_files) {
-      filler(buf, file.first.c_str() + 1, nullptr, 0, FUSE_FILL_DIR_PLUS);
+      const char *file_name = file.first.c_str();
+      if (file_name[0] == '/') {
+        file_name++;
+      }
+      filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
   } else if (strcmp(path, "/.search") == 0) {
     filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -157,7 +176,7 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
   }
 
   if (strcmp(path, "/.reindex") == 0 || strcmp(path, "/.embeddings") == 0 ||
-      strcmp(path, "/.all") == 0) {
+      strcmp(path, "/.all") == 0 || strcmp(path, "/.debug") == 0) {
     return 0;
   }
 
@@ -171,6 +190,28 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
 int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi) {
   record_file_access(path, "read");
+
+  if (strcmp(path, "/.debug") == 0) {
+    std::stringstream ss;
+    ss << "=== DEBUG INFO ===\n";
+    ss << "Total virtual_files: " << virtual_files.size() << "\n";
+    ss << "Files:\n";
+    for (const auto &file : virtual_files) {
+      ss << "  - " << file.first << " (" << file.second.size << " bytes)\n";
+    }
+    ss << "Total virtual_dirs: " << virtual_dirs.size() << "\n";
+    ss << "Dirs:\n";
+    for (const auto &dir : virtual_dirs) {
+      ss << "  - " << dir << "\n";
+    }
+
+    std::string content = ss.str();
+    if (offset >= content.size())
+      return 0;
+    size_t len = std::min(content.size() - offset, size);
+    memcpy(buf, content.c_str() + offset, len);
+    return len;
+  }
 
   if (strncmp(path, "/.search/", 9) == 0) {
     auto start = std::chrono::high_resolution_clock::now();
@@ -298,18 +339,31 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
   size_t last_slash = parent_dir.find_last_of('/');
   if (last_slash != std::string::npos) {
     parent_dir = parent_dir.substr(0, last_slash);
-    if (parent_dir.empty()) {
+    if (parent_dir.empty())
       parent_dir = "/";
-    }
-    if (virtual_dirs.count(parent_dir) == 0) {
-      std::cout << "Parent directory does not exist: " << parent_dir << "\n";
+    if (virtual_dirs.count(parent_dir) == 0)
       return -ENOENT;
+  }
+
+  std::string current_path = parent_dir;
+  while (!current_path.empty() && current_path != "/") {
+    if (virtual_dirs.count(current_path) == 0) {
+      virtual_dirs.insert(current_path);
+    }
+
+    size_t pos = current_path.find_last_of('/');
+    if (pos == std::string::npos) {
+      break;
+    }
+    current_path = current_path.substr(0, pos);
+    if (current_path.empty()) {
+      current_path = "/";
     }
   }
 
   time_t now = time(nullptr);
-  virtual_files[path] = std::move(fileinfo::FileInfo(
-      S_IFREG | (mode & 07777), 0, "", getuid(), getgid(), now, now, now));
+  virtual_files[path] = fileinfo::FileInfo(S_IFREG | (mode & 07777), 0, "",
+                                           getuid(), getgid(), now, now, now);
 
   return 0;
 }
@@ -330,25 +384,22 @@ int VectorFS::utimens(const char *path, const struct timespec tv[2],
 int VectorFS::write(const char *path, const char *buf, size_t size,
                     off_t offset, struct fuse_file_info *fi) {
   auto it = virtual_files.find(path);
-  if (it == virtual_files.end()) {
+  if (it == virtual_files.end())
     return -ENOENT;
-  }
-
-  if ((it->second.mode & S_IWUSR) == 0) {
+  if ((it->second.mode & S_IWUSR) == 0)
     return -EACCES;
-  }
 
   if (offset + size > it->second.content.size()) {
     it->second.content.resize(offset + size);
   }
 
   memcpy(&it->second.content[offset], buf, size);
-
   it->second.size = it->second.content.size();
   it->second.modification_time = time(nullptr);
   it->second.access_time = it->second.modification_time;
 
   update_embedding(path);
+  index_needs_rebuild = true;
 
   return size;
 }

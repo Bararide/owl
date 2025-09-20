@@ -69,6 +69,8 @@ template <typename EmbeddedModel> auto create_file_handler() {
       spdlog::info("Content length: {} bytes", content.size());
 
       struct fuse_file_info fi {};
+      fi.flags = O_WRONLY;
+
       auto result = vfs.create(path.c_str(), 0644, &fi);
       if (result != 0) {
         spdlog::error("Failed to create file '{}', error code: {}", path,
@@ -76,16 +78,15 @@ template <typename EmbeddedModel> auto create_file_handler() {
         return utils::error_result("Failed to create file");
       }
 
-      spdlog::info("File '{}' created successfully", path);
-
-      result = vfs.write(path.c_str(), content.c_str(), content.size(), 0, &fi);
-      if (result < 0) {
-        spdlog::error("Failed to write content to file '{}', error code: {}",
+      result = vfs.open(path.c_str(), &fi);
+      if (result != 0) {
+        spdlog::error("Failed to open file '{}' for writing, error code: {}",
                       path, result);
         vfs.unlink(path.c_str());
-        spdlog::info("Cleaned up partially created file '{}'", path);
-        return utils::error_result("Failed to write content");
+        return utils::error_result("Failed to open file for writing");
       }
+
+      result = vfs.write(path.c_str(), content.c_str(), content.size(), 0, &fi);
 
       spdlog::info("Successfully wrote {} bytes to file '{}'", content.size(),
                    path);
