@@ -31,6 +31,15 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     return 0;
   }
 
+  if (strcmp(path, "/.all") == 0) {
+    stbuf->st_mode = S_IFREG | 0444;
+    stbuf->st_nlink = 1;
+    stbuf->st_size = 2048;
+    stbuf->st_uid = getuid();
+    stbuf->st_gid = getgid();
+    return 0;
+  }
+
   if (strcmp(path, "/.reindex") == 0 || strcmp(path, "/.embeddings") == 0) {
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
@@ -76,6 +85,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".reindex", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".embeddings", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".markov", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
     for (const auto &dir : virtual_dirs) {
       if (dir != "/") {
@@ -146,7 +156,8 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
     return 0;
   }
 
-  if (strcmp(path, "/.reindex") == 0 || strcmp(path, "/.embeddings") == 0) {
+  if (strcmp(path, "/.reindex") == 0 || strcmp(path, "/.embeddings") == 0 ||
+      strcmp(path, "/.all") == 0) {
     return 0;
   }
 
@@ -205,6 +216,20 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     test_markov_chains();
     std::string content = generate_markov_test_result();
 
+    if (offset >= content.size()) {
+      return 0;
+    }
+    size_t len = std::min(content.size() - offset, size);
+    memcpy(buf, content.c_str() + offset, len);
+    return len;
+  }
+  if (strcmp(path, "/.all") == 0) {
+    std::stringstream ss;
+    for (const auto &[file_path, _] : virtual_files) {
+      ss << "--- " << file_path << " ---\n";
+    }
+
+    std::string content = ss.str();
     if (offset >= content.size()) {
       return 0;
     }
