@@ -39,6 +39,7 @@ target_include_directories(owl PRIVATE
     ${FUSE3_INCLUDE_DIRS}     
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
     ${CMAKE_SOURCE_DIR}/3dparty/fastText/src
+    ${CMAKE_SOURCE_DIR}/3dparty/iceoryx2
     ${JSONCPP_INCLUDE_DIRS})
 
 target_link_libraries(owl domain)

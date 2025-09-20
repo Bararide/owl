@@ -1,7 +1,7 @@
 #ifndef INSTANCE_HPP
 #define INSTANCE_HPP
 
-#include "vectorfs.hpp"
+#include "vectorfs_ipc.hpp"
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -12,6 +12,19 @@ template <typename EmbeddedModel> class VFSInstance {
 public:
   VFSInstance(const VFSInstance &) = delete;
   VFSInstance &operator=(const VFSInstance &) = delete;
+
+  void initialize_ipc() {
+    ipc_service_ = std::make_unique<vfs::ipc::VectorFSIpcService>(vector_fs_);
+    ipc_service_->start();
+  }
+
+  void shutdown_ipc() {
+    if (ipc_service_) {
+      ipc_service_->stop();
+    }
+  }
+
+  vfs::ipc::VectorFSIpcService &get_ipc_service() { return *ipc_service_; }
 
   static VFSInstance<EmbeddedModel> &getInstance() {
     if (!instance_) {
@@ -32,7 +45,9 @@ public:
   static void shutdown() { instance_.reset(); }
 
   void test_semantic_search() noexcept { vector_fs_->test_semantic_search(); }
-  void test_markov_model() noexcept { vector_fs_->generate_markov_test_result(); }
+  void test_markov_model() noexcept {
+    vector_fs_->generate_markov_test_result();
+  }
 
   int initialize_fuse(int argc, char *argv[]) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -58,6 +73,7 @@ private:
 
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
   static std::unique_ptr<VFSInstance<EmbeddedModel>> instance_;
+  std::unique_ptr<vfs::ipc::VectorFSIpcService> ipc_service_;
 };
 
 template <typename EmbeddedModel>

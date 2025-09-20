@@ -68,6 +68,8 @@ int main(int argc, char *argv[]) {
       core::measure::Measure::cancel();
     }
 
+    vectorfs.initialize_ipc();
+
     core::measure::Measure::start();
 
     pid_t http_pid = fork();
@@ -119,6 +121,7 @@ int main(int argc, char *argv[]) {
 
       vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
       spdlog::info("VectorFS shutdown complete");
+      vectorfs.shutdown_ipc();
       return result;
     } else {
       spdlog::error("Failed to fork process for HTTP server");
@@ -129,6 +132,7 @@ int main(int argc, char *argv[]) {
     core::measure::Measure::cancel();
     try {
       vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
+      vectorfs.shutdown_ipc();
     } catch (...) {
     }
     return EXIT_FAILURE;
