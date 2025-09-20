@@ -68,12 +68,6 @@ template <typename EmbeddedModel> auto create_file_handler() {
       spdlog::info("File path: {}", path);
       spdlog::info("Content length: {} bytes", content.size());
 
-      if (content.size() > 200) {
-        spdlog::info("Content preview: {}...", content.substr(0, 200));
-      } else {
-        spdlog::info("Content: {}", content);
-      }
-
       struct fuse_file_info fi {};
       auto result = vfs.create(path.c_str(), 0644, &fi);
       if (result != 0) {

@@ -142,7 +142,7 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
     return 0;
   }
 
-  if (strncmp(path, "/.markov/", 9) == 0) {
+  if (strncmp(path, "/.markov", 9) == 0) {
     return 0;
   }
 
@@ -277,6 +277,7 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
       parent_dir = "/";
     }
     if (virtual_dirs.count(parent_dir) == 0) {
+      std::cout << "Parent directory does not exist: " << parent_dir << "\n";
       return -ENOENT;
     }
   }
