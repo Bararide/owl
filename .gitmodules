@@ -19,3 +19,6 @@
 [submodule "3dparty/drogon"]
 	path = 3dparty/drogon
 	url = https://github.com/drogonframework/drogon.git
+[submodule "3dparty/iceoryx2"]
+	path = 3dparty/iceoryx2
+	url = https://github.com/eclipse-iceoryx/iceoryx2.git

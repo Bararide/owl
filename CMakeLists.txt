@@ -9,6 +9,9 @@ pkg_check_modules(JSONCPP REQUIRED jsoncpp)
 set(FAISS_ENABLE_GPU OFF CACHE BOOL "Disable GPU support" FORCE)
 set(FAISS_ENABLE_PYTHON OFF CACHE BOOL "Disable Python bindings" FORCE)
 
+set(BUILD_TESTING OFF CACHE BOOL "Disable testing" FORCE)
+set(USE_SYSTEM_GTEST OFF CACHE BOOL "Disable system gtest" FORCE)
+
 pkg_check_modules(FUSE3 REQUIRED fuse3)
 
 find_package(Drogon REQUIRED)
@@ -19,6 +22,7 @@ add_subdirectory(3dparty/boost EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/faiss EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/sentencepiece EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
+add_subdirectory(3dparty/iceoryx2 EXCLUDE_FROM_ALL)
 
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
@@ -48,3 +52,4 @@ target_link_libraries(owl ${JSONCPP_LIBRARIES})
 target_link_libraries(owl Drogon::Drogon)
 target_link_libraries(owl Boost::url)
 target_link_libraries(owl fmt::fmt)
+target_link_libraries(owl iceoryx2)

@@ -336,6 +336,7 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
   }
 
   std::string parent_dir = path;
+  fprintf(stderr, "Creating file: %s\n", path);
   size_t last_slash = parent_dir.find_last_of('/');
   if (last_slash != std::string::npos) {
     parent_dir = parent_dir.substr(0, last_slash);
@@ -344,6 +345,8 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     if (virtual_dirs.count(parent_dir) == 0)
       return -ENOENT;
   }
+
+  fprintf(stderr, "Parent dir: %s\n", parent_dir.c_str());
 
   std::string current_path = parent_dir;
   while (!current_path.empty() && current_path != "/") {
@@ -361,9 +364,14 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     }
   }
 
+  fprintf(stderr, "Created parent dirs %s\n", current_path.c_str());
+
   time_t now = time(nullptr);
-  virtual_files[path] = fileinfo::FileInfo(S_IFREG | (mode & 07777), 0, "",
-                                           getuid(), getgid(), now, now, now);
+  virtual_files[path] =
+      fileinfo::FileInfo(S_IFREG | 0644, 0,
+                         "", getuid(), getgid(), now, now, now);
+
+  fprintf(stderr, "Created file %s\n", path);
 
   return 0;
 }
