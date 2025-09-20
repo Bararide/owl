@@ -142,6 +142,10 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
     return 0;
   }
 
+  if (strncmp(path, "/.markov/", 9) == 0) {
+    return 0;
+  }
+
   if (strcmp(path, "/.reindex") == 0 || strcmp(path, "/.embeddings") == 0) {
     return 0;
   }

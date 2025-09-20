@@ -20,8 +20,8 @@
 
 #include <faiss/IndexFlat.h>
 #include <fasttext.h>
-#include <spdlog/spdlog.h>
 #include <infrastructure/measure.hpp>
+#include <spdlog/spdlog.h>
 
 #include "embedded/embedded_base.hpp"
 #include "embedded/embedded_fasttext.hpp"
@@ -123,12 +123,11 @@ public:
                           const std::string &operation);
 
   template <typename EmbeddedModel>
-  bool initialize(const std::string &model_path,
-                  bool use_quantization = false) {
+  bool initialize(const std::string model_path, bool use_quantization = false) {
     try {
       if constexpr (std::is_same_v<EmbeddedModel, embedded::FastTextEmbedder>) {
         auto embedder = std::make_unique<embedded::FastTextEmbedder>();
-        embedder->loadModel(model_path);
+        embedder->loadModel(std::move(model_path));
         embedder_ = std::move(embedder);
       }
 

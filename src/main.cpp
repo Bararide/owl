@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
 
     core::measure::Measure::start();
     vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::initialize(
-        fasttext_model_path);
+        std::move(fasttext_model_path));
     core::measure::Measure::end();
     core::measure::Measure::result<std::chrono::milliseconds>(
         "VectorFS initialized in {} ms");
