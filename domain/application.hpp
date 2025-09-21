@@ -109,6 +109,8 @@ private:
       spdlog::error("Failed to fork process for HTTP server");
       return EXIT_FAILURE;
     }
+
+    return 1;
   }
 
   pid_t fork_http_server() { return fork(); }
