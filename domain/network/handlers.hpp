@@ -2,6 +2,7 @@
 #define VECTORFS_NETWORK_HANDLERS_HPP
 
 #include "utils/http_helpers.hpp"
+#include "shared_memory/shared_memory.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/url/parse.hpp>
@@ -33,8 +34,6 @@ template <typename EmbeddedModel> auto create_file_handler() {
         spdlog::info("  {}: {}", key, value);
       }
 
-      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance()
-                      .get_vector_fs();
       auto json = req->getJsonObject();
 
       if (!json) {
@@ -68,70 +67,26 @@ template <typename EmbeddedModel> auto create_file_handler() {
       spdlog::info("File path: {}", path);
       spdlog::info("Content length: {} bytes", content.size());
 
-      struct fuse_file_info fi {};
-      fi.flags = O_WRONLY;
+      auto &shm_manager = vfs::shared::SharedMemoryManager::getInstance();
+      if (!shm_manager.initialize()) {
+        spdlog::error("Failed to initialize shared memory");
+        return utils::error_result("Internal server error");
+      }
 
-      spdlog::info("=== FUSE File Info Structure ===");
-      spdlog::info("fi.flags: 0x{:x}", fi.flags);
-      spdlog::info("fi.writepage: {}", static_cast<int>(fi.writepage));
-      spdlog::info("fi.direct_io: {}", static_cast<int>(fi.direct_io));
-      spdlog::info("fi.keep_cache: {}", static_cast<int>(fi.keep_cache));
-      spdlog::info("fi.flush: {}", static_cast<int>(fi.flush));
-      spdlog::info("fi.nonseekable: {}", static_cast<int>(fi.nonseekable));
-      spdlog::info("fi.cache_readdir: {}", static_cast<int>(fi.cache_readdir));
-      spdlog::info("fi.noflush: {}", static_cast<int>(fi.noflush));
-      spdlog::info("fi.fh: {}", fi.fh);
-      spdlog::info("fi.lock_owner: {}", fi.lock_owner);
-      spdlog::info("fi.poll_events: {}", fi.poll_events);
-      spdlog::info("=================================");
-
-      auto result = vfs.create(path.c_str(), 0644, &fi);
-      if (result != 0) {
-        spdlog::error("Failed to create file '{}', error code: {}", path,
-                      result);
+      if (!shm_manager.addFile(path, content)) {
+        spdlog::error("Failed to add file to shared memory: {}", path);
         return utils::error_result("Failed to create file");
       }
 
-      // Вывод структуры fi после вызова create
-      spdlog::info("=== FUSE File Info After create() ===");
-      spdlog::info("fi.flags: 0x{:x}", fi.flags);
-      spdlog::info("fi.fh: {}", fi.fh);
-      spdlog::info("======================================");
-
-      result = vfs.open(path.c_str(), &fi);
-      if (result != 0) {
-        spdlog::error("Failed to open file '{}' for writing, error code: {}",
-                      path, result);
-        vfs.unlink(path.c_str());
-        return utils::error_result("Failed to open file for writing");
-      }
-
-      // Вывод структуры fi после вызова open
-      spdlog::info("=== FUSE File Info After open() ===");
-      spdlog::info("fi.flags: 0x{:x}", fi.flags);
-      spdlog::info("fi.fh: {}", fi.fh);
-      spdlog::info("================================");
-
-      result = vfs.write(path.c_str(), content.c_str(), content.size(), 0, &fi);
-
-      spdlog::info("=== FUSE File Info After write() ===");
-      spdlog::info("fi.flags: 0x{:x}", fi.flags);
-      spdlog::info("fi.fh: {}", fi.fh);
-      spdlog::info("================================");
-
-      spdlog::info("Successfully wrote {} bytes to file '{}'", content.size(),
-                   path);
-
-      struct stat st {};
-      vfs.getattr(path.c_str(), &st, nullptr);
+      spdlog::info("Successfully added file to shared memory: {}", path);
 
       auto data = utils::create_success_response(
           {"path", "size", "created"}, path,
-          static_cast<Json::UInt64>(st.st_size), true);
+          static_cast<Json::UInt64>(content.size()), true);
 
       spdlog::info("File creation completed successfully:");
       spdlog::info("  Path: {}", path);
-      spdlog::info("  Size: {} bytes", st.st_size);
+      spdlog::info("  Size: {} bytes", content.size());
       spdlog::info("=============================");
 
       return utils::success_result(data);

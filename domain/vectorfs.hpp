@@ -26,8 +26,9 @@
 #include "embedded/embedded_base.hpp"
 #include "embedded/embedded_fasttext.hpp"
 #include "file/fileinfo.hpp"
-#include "utils/quantization.hpp"
 #include "markov.hpp"
+#include "shared_memory/shared_memory.hpp"
+#include "utils/quantization.hpp"
 
 namespace vfs::vectorfs {
 
@@ -44,6 +45,7 @@ private:
   std::unique_ptr<faiss::IndexFlatL2> faiss_index_quantized;
   std::unique_ptr<utils::ScalarQuantizer> sq_quantizer;
   std::unique_ptr<utils::ProductQuantizer> pq_quantizer;
+  std::unique_ptr<vfs::shared::SharedMemoryManager> shm_manager;
   bool index_needs_rebuild;
   bool use_quantization;
   std::map<idx_t, std::string> index_to_path;
@@ -116,6 +118,7 @@ public:
     return virtual_files;
   }
 
+  void updateFromSharedMemory();
   void rebuild_index();
   std::vector<std::pair<std::string, float>>
   semantic_search(const std::string &query, int k);
@@ -126,6 +129,11 @@ public:
   template <typename EmbeddedModel>
   bool initialize(const std::string model_path, bool use_quantization = false) {
     try {
+      shm_manager = std::make_unique<vfs::shared::SharedMemoryManager>();
+      if (!shm_manager->initialize()) {
+        spdlog::warn("Failed to initialize shared memory");
+      }
+
       if constexpr (std::is_same_v<EmbeddedModel, embedded::FastTextEmbedder>) {
         auto embedder = std::make_unique<embedded::FastTextEmbedder>();
         embedder->loadModel(std::move(model_path));

@@ -68,6 +68,11 @@ int main(int argc, char *argv[]) {
       core::measure::Measure::cancel();
     }
 
+    auto &shm_manager = vfs::shared::SharedMemoryManager::getInstance();
+    if (!shm_manager.initialize()) {
+      spdlog::warn("Failed to initialize shared memory in main process");
+    }
+
     core::measure::Measure::start();
 
     pid_t http_pid = fork();
