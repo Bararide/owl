@@ -26,6 +26,7 @@
 #include "embedded/embedded_base.hpp"
 #include "embedded/embedded_fasttext.hpp"
 #include "file/fileinfo.hpp"
+#include "utils/quantization.hpp"
 #include "markov.hpp"
 
 namespace vfs::vectorfs {
@@ -41,8 +42,8 @@ private:
   std::set<std::string> virtual_dirs;
   std::unique_ptr<faiss::IndexFlatL2> faiss_index;
   std::unique_ptr<faiss::IndexFlatL2> faiss_index_quantized;
-  std::unique_ptr<fileinfo::ScalarQuantizer> sq_quantizer;
-  std::unique_ptr<fileinfo::ProductQuantizer> pq_quantizer;
+  std::unique_ptr<utils::ScalarQuantizer> sq_quantizer;
+  std::unique_ptr<utils::ProductQuantizer> pq_quantizer;
   bool index_needs_rebuild;
   bool use_quantization;
   std::map<idx_t, std::string> index_to_path;
@@ -138,8 +139,8 @@ public:
           embedder_);
 
       if (use_quantization) {
-        sq_quantizer = std::make_unique<fileinfo::ScalarQuantizer>();
-        pq_quantizer = std::make_unique<fileinfo::ProductQuantizer>(8, 256);
+        sq_quantizer = std::make_unique<utils::ScalarQuantizer>();
+        pq_quantizer = std::make_unique<utils::ProductQuantizer>(8, 256);
         faiss_index_quantized = std::make_unique<faiss::IndexFlatL2>(dimension);
       } else {
         faiss_index = std::make_unique<faiss::IndexFlatL2>(dimension);
