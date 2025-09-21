@@ -68,7 +68,10 @@ int main(int argc, char *argv[]) {
       core::measure::Measure::cancel();
     }
 
-    vectorfs.initialize_ipc();
+    auto &shm_manager = vfs::shared::SharedMemoryManager::getInstance();
+    if (!shm_manager.initialize()) {
+      spdlog::warn("Failed to initialize shared memory in main process");
+    }
 
     core::measure::Measure::start();
 
@@ -121,7 +124,6 @@ int main(int argc, char *argv[]) {
 
       vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
       spdlog::info("VectorFS shutdown complete");
-      vectorfs.shutdown_ipc();
       return result;
     } else {
       spdlog::error("Failed to fork process for HTTP server");
@@ -132,7 +134,6 @@ int main(int argc, char *argv[]) {
     core::measure::Measure::cancel();
     try {
       vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
-      vectorfs.shutdown_ipc();
     } catch (...) {
     }
     return EXIT_FAILURE;

@@ -2,6 +2,7 @@
 #define VECTORFS_NETWORK_HANDLERS_HPP
 
 #include "utils/http_helpers.hpp"
+#include "shared_memory/shared_memory.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/url/parse.hpp>
@@ -33,8 +34,6 @@ template <typename EmbeddedModel> auto create_file_handler() {
         spdlog::info("  {}: {}", key, value);
       }
 
-      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance()
-                      .get_vector_fs();
       auto json = req->getJsonObject();
 
       if (!json) {
@@ -68,39 +67,26 @@ template <typename EmbeddedModel> auto create_file_handler() {
       spdlog::info("File path: {}", path);
       spdlog::info("Content length: {} bytes", content.size());
 
-      struct fuse_file_info fi {};
-      fi.flags = O_WRONLY;
+      auto &shm_manager = vfs::shared::SharedMemoryManager::getInstance();
+      if (!shm_manager.initialize()) {
+        spdlog::error("Failed to initialize shared memory");
+        return utils::error_result("Internal server error");
+      }
 
-      auto result = vfs.create(path.c_str(), 0644, &fi);
-      if (result != 0) {
-        spdlog::error("Failed to create file '{}', error code: {}", path,
-                      result);
+      if (!shm_manager.addFile(path, content)) {
+        spdlog::error("Failed to add file to shared memory: {}", path);
         return utils::error_result("Failed to create file");
       }
 
-      result = vfs.open(path.c_str(), &fi);
-      if (result != 0) {
-        spdlog::error("Failed to open file '{}' for writing, error code: {}",
-                      path, result);
-        vfs.unlink(path.c_str());
-        return utils::error_result("Failed to open file for writing");
-      }
-
-      result = vfs.write(path.c_str(), content.c_str(), content.size(), 0, &fi);
-
-      spdlog::info("Successfully wrote {} bytes to file '{}'", content.size(),
-                   path);
-
-      struct stat st {};
-      vfs.getattr(path.c_str(), &st, nullptr);
+      spdlog::info("Successfully added file to shared memory: {}", path);
 
       auto data = utils::create_success_response(
           {"path", "size", "created"}, path,
-          static_cast<Json::UInt64>(st.st_size), true);
+          static_cast<Json::UInt64>(content.size()), true);
 
       spdlog::info("File creation completed successfully:");
       spdlog::info("  Path: {}", path);
-      spdlog::info("  Size: {} bytes", st.st_size);
+      spdlog::info("  Size: {} bytes", content.size());
       spdlog::info("=============================");
 
       return utils::success_result(data);
