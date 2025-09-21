@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace vfs::vectorfs {
+namespace owl::vectorfs {
 std::string
 VectorFS::generate_enhanced_search_result(const std::string &query) {
   record_file_access("/.search/" + query, "search");
@@ -8,7 +8,7 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
   auto results = enhanced_semantic_search(query, 5);
   auto recommendations = get_recommendations_for_query(query);
   auto predicted_next = predict_next_files();
-  auto hubs = semantic_graph->get_semantic_hubs(3);
+  auto hubs = semantic_graph_->get_semantic_hubs(3);
 
   std::stringstream ss;
   ss << "=== Enhanced Semantic Search Results ===\n";
@@ -19,9 +19,9 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
   } else {
     ss << "📊 Search Results (with PageRank):\n";
     for (const auto &[file_path, score] : results) {
-      auto it = virtual_files.find(file_path);
+      auto it = virtual_files_.find(file_path);
       ss << "📄 " << file_path << " (score: " << score << ")\n";
-      if (it != virtual_files.end()) {
+      if (it != virtual_files_.end()) {
         ss << "   Content: "
            << (it->second.content.size() > 50
                    ? it->second.content.substr(0, 50) + "..."
@@ -29,7 +29,7 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
            << "\n";
 
         std::string category =
-            hmm_model->classify_file_category(file_path, recent_queries);
+            hmm_model_->classify_file_category(file_path, recent_queries_);
         ss << "   Category: " << category << "\n";
       }
       ss << "\n";
@@ -61,8 +61,8 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
   }
 
   ss << "=== Analytics ===\n";
-  ss << "Total indexed files: " << index_to_path.size() << "\n";
-  ss << "Recent access patterns: " << recent_queries.size() << "\n";
+  ss << "Total indexed files: " << index_to_path_.size() << "\n";
+  ss << "Recent access patterns: " << recent_queries_.size() << "\n";
 
   return ss.str();
 }
@@ -71,7 +71,7 @@ std::vector<std::pair<std::string, float>>
 VectorFS::enhanced_semantic_search(const std::string &query, int k) {
   auto base_results = semantic_search(query, k * 2);
 
-  auto ranking = semantic_graph->random_walk_ranking();
+  auto ranking = semantic_graph_->random_walk_ranking();
 
   std::map<std::string, double> combined_scores;
 
@@ -108,16 +108,16 @@ std::string VectorFS::generate_search_result(const std::string &query) {
   ss << "Query: " << query << "\n\n";
   if (results.empty()) {
     ss << "No results found\n";
-    ss << "Indexed files: " << index_to_path.size() << "\n";
-    if (index_to_path.empty()) {
+    ss << "Indexed files: " << index_to_path_.size() << "\n";
+    if (index_to_path_.empty()) {
       ss << "Hint: Create some files with content first!\n";
     }
   } else {
     ss << "Found " << results.size() << " results:\n\n";
     for (const auto &[file_path, score] : results) {
-      auto it = virtual_files.find(file_path);
+      auto it = virtual_files_.find(file_path);
       ss << "📄 " << file_path << " (score: " << score << ")\n";
-      if (it != virtual_files.end()) {
+      if (it != virtual_files_.end()) {
         ss << "   Content: "
            << (it->second.content.size() > 50
                    ? it->second.content.substr(0, 50) + "..."
@@ -127,7 +127,7 @@ std::string VectorFS::generate_search_result(const std::string &query) {
     }
   }
   ss << "\n=== Search Info ===\n";
-  ss << "Total indexed files: " << index_to_path.size() << "\n";
+  ss << "Total indexed files: " << index_to_path_.size() << "\n";
   ss << "Embedder dimension: "
      << std::visit(
             [](const auto &embedder_ptr) {
@@ -137,4 +137,4 @@ std::string VectorFS::generate_search_result(const std::string &query) {
      << "\n";
   return ss.str();
 }
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs

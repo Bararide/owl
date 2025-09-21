@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace vfs::embedded::utils {
+namespace owl::embedded::utils {
 template <typename EmbedderType> class EmbedderFactory {
 public:
   static std::unique_ptr<EmbedderType>
@@ -59,8 +59,8 @@ template <typename T> void normalize(std::vector<T> &vector) {
     }
   }
 }
-} // namespace vfs::embedded::utils
+} // namespace owl::embedded::utils
 
-// namespace vfs::embedded
+// namespace owl::embedded
 
 #endif // VECTORFS_EMBEDDED_UTILS_HPP

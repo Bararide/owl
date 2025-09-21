@@ -1,7 +1,7 @@
 #ifndef VECTORFS_ALGORITHMS_TRIM_HPP
 #define VECTORFS_ALGORITHMS_TRIM_HPP
 
-namespace vfs::algorithms
+namespace owl::algorithms
 {
     
 }

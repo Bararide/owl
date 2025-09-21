@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace vfs::embedded {
+namespace owl::embedded {
 
 template <typename Derived> class EmbeddedBase;
 
@@ -52,6 +52,6 @@ protected:
   }
 };
 
-} // namespace vfs::embedded
+} // namespace owl::embedded
 
 #endif // EMBEDDED_BASE_HPP

@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace vfs::vectorfs {
+namespace owl::vectorfs {
 int VectorFS::getattr(const char *path, struct stat *stbuf,
                       struct fuse_file_info *fi) {
   memset(stbuf, 0, sizeof(struct stat));
@@ -58,7 +58,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     return 0;
   }
 
-  if (virtual_dirs.count(path)) {
+  if (virtual_dirs_.count(path)) {
     stbuf->st_mode = S_IFDIR | 0755;
     stbuf->st_nlink = 2;
     stbuf->st_uid = getuid();
@@ -68,8 +68,8 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     return 0;
   }
 
-  auto it = virtual_files.find(path);
-  if (it != virtual_files.end()) {
+  auto it = virtual_files_.find(path);
+  if (it != virtual_files_.end()) {
     const auto &fi = it->second;
     stbuf->st_mode = fi.mode;
     stbuf->st_nlink = 1;
@@ -85,45 +85,45 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
 }
 
 void VectorFS::updateFromSharedMemory() {
-  if (!shm_manager || !shm_manager->initialize()) {
+  if (!shm_manager_ || !shm_manager_->initialize()) {
     spdlog::warn("Failed to initialize shared memory in FUSE");
     return;
   }
 
-  if (!shm_manager->needsUpdate()) {
+  if (!shm_manager_->needsUpdate()) {
     return;
   }
 
   spdlog::info("Updating from shared memory...");
 
-  int file_count = shm_manager->getFileCount();
+  int file_count = shm_manager_->getFileCount();
   for (int i = 0; i < file_count; i++) {
-    const auto *shared_info = shm_manager->getFile(i);
+    const auto *shared_info = shm_manager_->getFile(i);
     if (shared_info) {
-      std::string path(shared_info->path);
+      std::string path(shared_info->path.data());
 
-      if (virtual_files.count(path) == 0) {
+      if (virtual_files_.count(path) == 0) {
         fileinfo::FileInfo fi;
         fi.mode = shared_info->mode;
         fi.size = shared_info->size;
-        fi.content = std::string(shared_info->content, shared_info->size);
+        fi.content = std::string(shared_info->content.data(), shared_info->size);
         fi.uid = shared_info->uid;
         fi.gid = shared_info->gid;
         fi.access_time = shared_info->access_time;
         fi.modification_time = shared_info->modification_time;
         fi.create_time = shared_info->create_time;
 
-        virtual_files[path] = fi;
+        virtual_files_[path] = fi;
         spdlog::info("Added file from shared memory: {} ({} bytes)", path,
                      shared_info->size);
 
         update_embedding(path.c_str());
-        index_needs_rebuild = true;
+        index_needs_rebuild_ = true;
       }
     }
   }
 
-  shm_manager->clearUpdateFlag();
+  shm_manager_->clearUpdateFlag();
   spdlog::info("Shared memory update completed");
 }
 
@@ -140,17 +140,17 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-    if (shm_manager->initialize()) {
-      if (shm_manager->needsUpdate()) {
+    if (shm_manager_->initialize()) {
+      if (shm_manager_->needsUpdate()) {
         updateFromSharedMemory();
-        shm_manager->clearUpdateFlag();
+        shm_manager_->clearUpdateFlag();
       }
 
-      int file_count = shm_manager->getFileCount();
+      int file_count = shm_manager_->getFileCount();
       for (int i = 0; i < file_count; i++) {
-        const auto *shared_info = shm_manager->getFile(i);
+        const auto *shared_info = shm_manager_->getFile(i);
         if (shared_info) {
-          std::string file_path(shared_info->path);
+          std::string file_path(shared_info->path.data());
           const char *file_name = file_path.c_str();
           if (file_name[0] == '/') {
             file_name++;
@@ -159,7 +159,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         }
       }
 
-      for (const auto &dir : virtual_dirs) {
+      for (const auto &dir : virtual_dirs_) {
         if (dir != "/") {
           const char *dir_name = dir.c_str();
           if (dir_name[0] == '/') {
@@ -169,7 +169,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         }
       }
 
-      for (const auto &file : virtual_files) {
+      for (const auto &file : virtual_files_) {
         const char *file_name = file.first.c_str();
         if (file_name[0] == '/') {
           file_name++;
@@ -188,7 +188,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 int VectorFS::rmdir(const char *path) {
-  if (virtual_dirs.count(path) == 0) {
+  if (virtual_dirs_.count(path) == 0) {
     return -ENOENT;
   }
 
@@ -196,21 +196,21 @@ int VectorFS::rmdir(const char *path) {
   if (dir == "/")
     dir = "";
 
-  for (auto it = virtual_files.begin(); it != virtual_files.end();) {
+  for (auto it = virtual_files_.begin(); it != virtual_files_.end();) {
     if (it->first.find(dir) == 0) {
-      it = virtual_files.erase(it);
-      index_needs_rebuild = true;
+      it = virtual_files_.erase(it);
+      index_needs_rebuild_ = true;
     } else {
       ++it;
     }
   }
 
-  virtual_dirs.erase(path);
+  virtual_dirs_.erase(path);
   return 0;
 }
 
 int VectorFS::mkdir(const char *path, mode_t mode) {
-  if (virtual_dirs.count(path) > 0 || virtual_files.count(path) > 0) {
+  if (virtual_dirs_.count(path) > 0 || virtual_files_.count(path) > 0) {
     return -EEXIST;
   }
 
@@ -221,12 +221,12 @@ int VectorFS::mkdir(const char *path, mode_t mode) {
     if (parent_dir.empty()) {
       parent_dir = "/";
     }
-    if (virtual_dirs.count(parent_dir) == 0) {
+    if (virtual_dirs_.count(parent_dir) == 0) {
       return -ENOENT;
     }
   }
 
-  virtual_dirs.insert(path);
+  virtual_dirs_.insert(path);
   return 0;
 }
 
@@ -247,8 +247,8 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
     return 0;
   }
 
-  auto it = virtual_files.find(path);
-  if (it == virtual_files.end()) {
+  auto it = virtual_files_.find(path);
+  if (it == virtual_files_.end()) {
     return -ENOENT;
   }
 
@@ -260,30 +260,30 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi) {
   record_file_access(path, "read");
 
-  if (shm_manager->initialize() && shm_manager->needsUpdate()) {
+  if (shm_manager_->initialize() && shm_manager_->needsUpdate()) {
     updateFromSharedMemory();
-    shm_manager->clearUpdateFlag();
+    shm_manager_->clearUpdateFlag();
   }
 
   if (strcmp(path, "/.debug") == 0) {
     std::stringstream ss;
     ss << "=== DEBUG INFO ===\n";
-    ss << "Total virtual_files: " << virtual_files.size() << "\n";
+    ss << "Total virtual_files_: " << virtual_files_.size() << "\n";
     ss << "Files:\n";
 
     ss << "Process PID: " << getpid() << "\n";
     ss << "Parent PID: " << getppid() << "\n";
 
-    for (const auto &file : virtual_files) {
+    for (const auto &file : virtual_files_) {
       ss << file.first << " (" << file.second.size << " bytes)\n";
       ss << "  Create: " << std::ctime(&file.second.create_time);
       ss << "  Access: " << std::ctime(&file.second.access_time);
       ss << "  Modify: " << std::ctime(&file.second.modification_time);
     }
 
-    ss << "Total virtual_dirs: " << virtual_dirs.size() << "\n";
+    ss << "Total virtual_dirs_: " << virtual_dirs_.size() << "\n";
     ss << "Dirs:\n";
-    for (const auto &dir : virtual_dirs) {
+    for (const auto &dir : virtual_dirs_) {
       ss << "  - " << dir << "\n";
     }
 
@@ -321,10 +321,10 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   if (strcmp(path, "/.reindex") == 0) {
     std::stringstream ss;
     ss << "Forcing reindex...\n";
-    index_needs_rebuild = true;
+    index_needs_rebuild_ = true;
     rebuild_index();
     ss << "Reindex completed!\n";
-    ss << "Indexed files: " << index_to_path.size() << "\n";
+    ss << "Indexed files: " << index_to_path_.size() << "\n";
 
     std::string content = ss.str();
     if (offset >= content.size()) {
@@ -348,7 +348,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   }
   if (strcmp(path, "/.all") == 0) {
     std::stringstream ss;
-    for (const auto &[file_path, _] : virtual_files) {
+    for (const auto &[file_path, _] : virtual_files_) {
       ss << "--- " << file_path << " ---\n";
     }
 
@@ -364,11 +364,11 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   if (strcmp(path, "/.embeddings") == 0) {
     std::stringstream ss;
     ss << "Embeddings report:\n";
-    ss << "Total files: " << virtual_files.size() << "\n";
+    ss << "Total files: " << virtual_files_.size() << "\n";
     ss << "Files with embeddings: ";
 
     int count = 0;
-    for (const auto &[file_path, file_info] : virtual_files) {
+    for (const auto &[file_path, file_info] : virtual_files_) {
       if (file_info.embedding_updated && !file_info.embedding.empty()) {
         count++;
         ss << "\n--- " << file_path << " ---\n";
@@ -396,8 +396,8 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     return len;
   }
 
-  auto it = virtual_files.find(path);
-  if (it == virtual_files.end()) {
+  auto it = virtual_files_.find(path);
+  if (it == virtual_files_.end()) {
     return -ENOENT;
   }
 
@@ -412,13 +412,13 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
 }
 
 int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-  if (virtual_files.count(path) > 0 || virtual_dirs.count(path) > 0) {
+  if (virtual_files_.count(path) > 0 || virtual_dirs_.count(path) > 0) {
     spdlog::error("File already exists: {}", path);
     return -EEXIST;
   }
 
   time_t now = time(nullptr);
-  auto &file_info = virtual_files[path];
+  auto &file_info = virtual_files_[path];
   file_info = fileinfo::FileInfo(S_IFREG | 0644, 0, "", getuid(), getgid(), now,
                                  now, now);
 
@@ -429,8 +429,8 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 
 int VectorFS::utimens(const char *path, const struct timespec tv[2],
                       struct fuse_file_info *fi) {
-  auto it = virtual_files.find(path);
-  if (it == virtual_files.end()) {
+  auto it = virtual_files_.find(path);
+  if (it == virtual_files_.end()) {
     return -ENOENT;
   }
 
@@ -443,8 +443,8 @@ int VectorFS::utimens(const char *path, const struct timespec tv[2],
 int VectorFS::write(const char *path, const char *buf, size_t size,
                     off_t offset, struct fuse_file_info *fi) {
   if (fi->fh == 0) {
-    auto it = virtual_files.find(path);
-    if (it == virtual_files.end()) {
+    auto it = virtual_files_.find(path);
+    if (it == virtual_files_.end()) {
       return -ENOENT;
     }
     if ((it->second.mode & S_IWUSR) == 0) {
@@ -461,7 +461,7 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
     it->second.access_time = it->second.modification_time;
 
     update_embedding(path);
-    index_needs_rebuild = true;
+    index_needs_rebuild_ = true;
 
     return size;
   }
@@ -482,16 +482,16 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
   file_info->access_time = file_info->modification_time;
 
   update_embedding(path);
-  index_needs_rebuild = true;
+  index_needs_rebuild_ = true;
 
   return size;
 }
 
 int VectorFS::unlink(const char *path) {
-  if (virtual_files.erase(path) == 0) {
+  if (virtual_files_.erase(path) == 0) {
     return -ENOENT;
   }
-  index_needs_rebuild = true;
+  index_needs_rebuild_ = true;
   return 0;
 }
 
@@ -502,8 +502,8 @@ int VectorFS::setxattr(const char *path, const char *name, const char *value,
 
 int VectorFS::getxattr(const char *path, const char *name, char *value,
                        size_t size) {
-  auto it = virtual_files.find(path);
-  if (it == virtual_files.end())
+  auto it = virtual_files_.find(path);
+  if (it == virtual_files_.end())
     return -ENOENT;
 
   const auto &file_info = it->second;
@@ -550,4 +550,4 @@ int VectorFS::listxattr(const char *path, char *list, size_t size) {
 
   return total_size;
 }
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs

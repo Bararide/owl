@@ -1,6 +1,7 @@
 #ifndef SHARED_MEMORY_HPP
 #define SHARED_MEMORY_HPP
 
+#include <array>
 #include <cstring>
 #include <fcntl.h>
 #include <map>
@@ -12,11 +13,15 @@
 #include <unistd.h>
 #include <vector>
 
-namespace vfs::shared {
+namespace owl::shared {
+
+constexpr size_t MAX_PATH_LENGTH = 1024;
+constexpr size_t MAX_CONTENT_SIZE = 32768;
+constexpr size_t MAX_FILES = 100;
 
 struct SharedFileInfo {
-  char path[1024];
-  char content[32768];
+  std::array<char, MAX_PATH_LENGTH> path;
+  std::array<char, MAX_CONTENT_SIZE> content;
   size_t size;
   mode_t mode;
   uid_t uid;
@@ -25,7 +30,7 @@ struct SharedFileInfo {
   time_t modification_time;
   time_t create_time;
 
-  SharedFileInfo()
+  SharedFileInfo() noexcept
       : size(0), mode(0), uid(0), gid(0), access_time(0), modification_time(0),
         create_time(0) {
     path[0] = '\0';
@@ -36,15 +41,15 @@ struct SharedFileInfo {
 struct SharedMemoryData {
   std::mutex mutex;
   int file_count;
-  SharedFileInfo files[100];
+  std::array<SharedFileInfo, MAX_FILES> files;
   bool needs_update;
 
-  SharedMemoryData() : file_count(0), needs_update(false) {}
+  SharedMemoryData() noexcept : file_count(0), needs_update(false) {}
 };
 
 class SharedMemoryManager {
 public:
-  SharedMemoryManager() : shm_fd(-1), data(nullptr) {}
+  SharedMemoryManager() noexcept : shm_fd(-1), data(nullptr) {}
 
   SharedMemoryManager(const SharedMemoryManager &) = delete;
   SharedMemoryManager &operator=(const SharedMemoryManager &) = delete;
@@ -63,42 +68,51 @@ public:
 
     if (ftruncate(shm_fd, sizeof(SharedMemoryData)) == -1) {
       spdlog::error("ftruncate failed: {}", strerror(errno));
+      close(shm_fd);
       return false;
     }
 
-    data = static_cast<SharedMemoryData *>(mmap(NULL, sizeof(SharedMemoryData),
-                                                PROT_READ | PROT_WRITE,
-                                                MAP_SHARED, shm_fd, 0));
+    data = static_cast<SharedMemoryData *>(
+        mmap(nullptr, sizeof(SharedMemoryData), PROT_READ | PROT_WRITE,
+             MAP_SHARED, shm_fd, 0));
 
     if (data == MAP_FAILED) {
       spdlog::error("mmap failed: {}", strerror(errno));
+      close(shm_fd);
       return false;
     }
+
+    new (data) SharedMemoryData();
 
     spdlog::info("Shared memory initialized successfully");
     return true;
   }
-  
+
   bool addFile(const std::string &path, const std::string &content) {
     std::lock_guard<std::mutex> lock(data->mutex);
 
-    if (data->file_count >= 100) {
+    if (data->file_count >= MAX_FILES) {
       spdlog::error("Shared memory full, cannot add more files");
       return false;
     }
 
     SharedFileInfo file_info;
-    strncpy(file_info.path, path.c_str(), sizeof(file_info.path) - 1);
-    file_info.path[sizeof(file_info.path) - 1] = '\0';
 
-    size_t copy_size = std::min(content.size(), sizeof(file_info.content) - 1);
-    strncpy(file_info.content, content.c_str(), copy_size);
+    if (path.size() >= MAX_PATH_LENGTH) {
+      spdlog::warn("Path too long, truncating: {}", path);
+    }
+    strncpy(file_info.path.data(), path.c_str(), MAX_PATH_LENGTH - 1);
+    file_info.path[MAX_PATH_LENGTH - 1] = '\0';
+
+    size_t copy_size = std::min(content.size(), MAX_CONTENT_SIZE - 1);
+    strncpy(file_info.content.data(), content.c_str(), copy_size);
     file_info.content[copy_size] = '\0';
 
     file_info.size = copy_size;
     file_info.mode = S_IFREG | 0644;
     file_info.uid = getuid();
     file_info.gid = getgid();
+
     time_t now = time(nullptr);
     file_info.access_time = now;
     file_info.modification_time = now;
@@ -112,35 +126,47 @@ public:
     return true;
   }
 
-  bool needsUpdate() const { return data->needs_update; }
-
-  void clearUpdateFlag() {
-    std::lock_guard<std::mutex> lock(data->mutex);
-    data->needs_update = false;
+  bool needsUpdate() const noexcept {
+    return data ? data->needs_update : false;
   }
 
-  int getFileCount() const { return data->file_count; }
+  void clearUpdateFlag() noexcept {
+    if (data) {
+      std::lock_guard<std::mutex> lock(data->mutex);
+      data->needs_update = false;
+    }
+  }
 
-  const SharedFileInfo *getFile(int index) const {
-    if (index < 0 || index >= data->file_count) {
+  int getFileCount() const noexcept { return data ? data->file_count : 0; }
+
+  const SharedFileInfo *getFile(int index) const noexcept {
+    if (!data || index < 0 || index >= data->file_count) {
       return nullptr;
     }
     return &data->files[index];
   }
 
-  void clearFiles() {
-    std::lock_guard<std::mutex> lock(data->mutex);
-    data->file_count = 0;
-    data->needs_update = true;
+  void clearFiles() noexcept {
+    if (data) {
+      std::lock_guard<std::mutex> lock(data->mutex);
+      data->file_count = 0;
+      data->needs_update = true;
+    }
   }
 
-  ~SharedMemoryManager() {
+  ~SharedMemoryManager() { cleanup(); }
+
+private:
+  void cleanup() noexcept {
     if (data != MAP_FAILED && data != nullptr) {
       munmap(data, sizeof(SharedMemoryData));
+      data = nullptr;
     }
+
     if (shm_fd != -1) {
       close(shm_fd);
       shm_unlink("/vectorfs_shm");
+      shm_fd = -1;
     }
   }
 
@@ -149,6 +175,6 @@ private:
   SharedMemoryData *data;
 };
 
-} // namespace vfs::shared
+} // namespace owl::shared
 
 #endif // SHARED_MEMORY_HPP

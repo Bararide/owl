@@ -1,15 +1,15 @@
 #include "vectorfs.hpp"
 
-namespace vfs::vectorfs {
+namespace owl::vectorfs {
 std::string VectorFS::generate_markov_test_result() {
   std::stringstream ss;
   ss << "=== Markov Chain Test Results ===\n\n";
 
   ss << "Semantic Graph Analysis:\n";
-  ss << "Nodes: " << semantic_graph->get_node_count() << "\n";
-  ss << "Edges: " << semantic_graph->get_edge_count() << "\n";
+  ss << "Nodes: " << semantic_graph_->get_node_count() << "\n";
+  ss << "Edges: " << semantic_graph_->get_edge_count() << "\n";
 
-  auto hubs = semantic_graph->get_semantic_hubs(5);
+  auto hubs = semantic_graph_->get_semantic_hubs(5);
   if (!hubs.empty()) {
     ss << "Top semantic hubs:\n";
     for (const auto &hub : hubs) {
@@ -19,8 +19,8 @@ std::string VectorFS::generate_markov_test_result() {
   ss << "\n";
 
   ss << "Hidden Markov Model Analysis:\n";
-  ss << "Trained states: " << hmm_model->get_state_count() << "\n";
-  ss << "Observation sequences: " << hmm_model->get_sequence_count() << "\n";
+  ss << "Trained states: " << hmm_model_->get_state_count() << "\n";
+  ss << "Observation sequences: " << hmm_model_->get_sequence_count() << "\n";
 
   auto predictions = predict_next_files();
   if (!predictions.empty()) {
@@ -33,11 +33,11 @@ std::string VectorFS::generate_markov_test_result() {
 
   ss << "Recommendation Test:\n";
   int test_count = 0;
-  for (const auto &[path, _] : virtual_files) {
+  for (const auto &[path, _] : virtual_files_) {
     if (test_count >= 3)
       break;
 
-    auto recs = semantic_graph->get_recommendations(path, 3);
+    auto recs = semantic_graph_->get_recommendations(path, 3);
     if (!recs.empty()) {
       ss << "For " << path << ":\n";
       for (const auto &rec : recs) {
@@ -49,12 +49,12 @@ std::string VectorFS::generate_markov_test_result() {
   }
 
   ss << "Access Patterns:\n";
-  ss << "Recent queries: " << recent_queries.size() << "\n";
-  if (!recent_queries.empty()) {
+  ss << "Recent queries: " << recent_queries_.size() << "\n";
+  if (!recent_queries_.empty()) {
     ss << "Last 5 queries:\n";
-    for (int i = std::max(0, (int)recent_queries.size() - 5);
-         i < recent_queries.size(); i++) {
-      ss << "  " << recent_queries[i] << "\n";
+    for (int i = std::max(0, (int)recent_queries_.size() - 5);
+         i < recent_queries_.size(); i++) {
+      ss << "  " << recent_queries_[i] << "\n";
     }
   }
 
@@ -64,7 +64,7 @@ std::string VectorFS::generate_markov_test_result() {
 void VectorFS::test_semantic_search() {
   if (!std::holds_alternative<std::unique_ptr<embedded::FastTextEmbedder>>(
           embedder_) ||
-      !faiss_index) {
+      !faiss_index_) {
     spdlog::error("Embedder or index not initialized for testing");
     return;
   }
@@ -266,7 +266,7 @@ void VectorFS::test_semantic_search() {
        "25);\npstmt->execute();\ndelete pstmt;\ndelete con;"}};
 
   for (const auto &[path, content] : test_files) {
-    virtual_files[path] =
+    virtual_files_[path] =
         fileinfo::FileInfo(S_IFREG | 0644, 0, content, getuid(), getgid(),
                            time(nullptr), time(nullptr), time(nullptr));
     update_embedding(path);
@@ -297,7 +297,7 @@ void VectorFS::test_semantic_search() {
     for (const auto &file : pattern) {
       record_file_access(file, "test_pattern");
     }
-    hmm_model->add_sequence(pattern);
+    hmm_model_->add_sequence(pattern);
   }
 
   rebuild_index();
@@ -311,9 +311,9 @@ void VectorFS::test_semantic_search() {
       {"Linux система", "Системное администрирование"},
       {"обработка данных", "Межкатегорийные запросы"}};
 
-  spdlog::info("Total indexed files: {}", index_to_path.size());
-  spdlog::info("HMM states: {}", hmm_model->get_state_count());
-  spdlog::info("Semantic graph edges: {}", semantic_graph->get_edge_count());
+  spdlog::info("Total indexed files: {}", index_to_path_.size());
+  spdlog::info("HMM states: {}", hmm_model_->get_state_count());
+  spdlog::info("Semantic graph edges: {}", semantic_graph_->get_edge_count());
   spdlog::info("");
 
   for (const auto &[query, description] : test_queries) {
@@ -325,12 +325,12 @@ void VectorFS::test_semantic_search() {
       spdlog::warn("  No results found");
     } else {
       for (const auto &[path, score] : basic_results) {
-        auto category = hmm_model->classify_file_category(path, {});
+        auto category = hmm_model_->classify_file_category(path, {});
         spdlog::info("  📄 {} (score: {:.3f}, category: {})", path, score,
                      category);
 
-        auto it = virtual_files.find(path);
-        if (it != virtual_files.end()) {
+        auto it = virtual_files_.find(path);
+        if (it != virtual_files_.end()) {
           spdlog::info("    Content: {}...", it->second.content.substr(0, 40));
         }
       }
@@ -342,7 +342,7 @@ void VectorFS::test_semantic_search() {
       spdlog::warn("  No enhanced results found");
     } else {
       for (const auto &[path, score] : enhanced_results) {
-        auto category = hmm_model->classify_file_category(path, {});
+        auto category = hmm_model_->classify_file_category(path, {});
         spdlog::info("  🚀 {} (score: {:.3f}, category: {})", path, score,
                      category);
       }
@@ -353,7 +353,7 @@ void VectorFS::test_semantic_search() {
       if (!recommendations.empty()) {
         spdlog::info("Related recommendations:");
         for (const auto &rec : recommendations) {
-          auto category = hmm_model->classify_file_category(rec, {});
+          auto category = hmm_model_->classify_file_category(rec, {});
           spdlog::info("  → {} (category: {})", rec, category);
         }
       }
@@ -364,11 +364,11 @@ void VectorFS::test_semantic_search() {
 
   spdlog::info("=== Additional Statistics ===");
 
-  auto hubs = semantic_graph->get_semantic_hubs(5);
+  auto hubs = semantic_graph_->get_semantic_hubs(5);
   if (!hubs.empty()) {
     spdlog::info("Top semantic hubs:");
     for (const auto &hub : hubs) {
-      auto category = hmm_model->classify_file_category(hub, {});
+      auto category = hmm_model_->classify_file_category(hub, {});
       spdlog::info("  ⭐ {} (category: {})", hub, category);
     }
   }
@@ -377,15 +377,15 @@ void VectorFS::test_semantic_search() {
   if (!predictions.empty()) {
     spdlog::info("Predicted next files:");
     for (const auto &pred : predictions) {
-      auto category = hmm_model->classify_file_category(pred, {});
+      auto category = hmm_model_->classify_file_category(pred, {});
       spdlog::info("  🔮 {} (category: {})", pred, category);
     }
   }
 
   spdlog::info("File categorization summary:");
   std::map<std::string, int> category_counts;
-  for (const auto &[path, _] : virtual_files) {
-    std::string category = hmm_model->classify_file_category(path, {});
+  for (const auto &[path, _] : virtual_files_) {
+    std::string category = hmm_model_->classify_file_category(path, {});
     category_counts[category]++;
   }
 
@@ -409,7 +409,7 @@ void VectorFS::test_markov_chains() {
       "def test_function():\n    assert True"};
 
   for (size_t i = 0; i < test_files.size(); i++) {
-    virtual_files[test_files[i]] = fileinfo::FileInfo(
+    virtual_files_[test_files[i]] = fileinfo::FileInfo(
         S_IFREG | 0644, 0, test_contents[i], getuid(), getgid(), time(nullptr),
         time(nullptr), time(nullptr));
     update_embedding(test_files[i]);
@@ -421,7 +421,7 @@ void VectorFS::test_markov_chains() {
       {"/config/settings.json", "/code/utils.h", "/docs/readme.txt"}};
 
   for (const auto &seq : test_sequences) {
-    hmm_model->add_sequence(seq);
+    hmm_model_->add_sequence(seq);
     for (const auto &file : seq) {
       record_file_access(file, "test");
     }
@@ -431,4 +431,4 @@ void VectorFS::test_markov_chains() {
 
   spdlog::info("Markov chains test completed");
 }
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs
