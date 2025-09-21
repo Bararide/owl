@@ -168,22 +168,27 @@ int VectorFS::mkdir(const char *path, mode_t mode) {
 
 int VectorFS::open(const char *path, struct fuse_file_info *fi) {
   if (strncmp(path, "/.search/", 9) == 0) {
+    fi->fh = 0;
     return 0;
   }
 
-  if (strncmp(path, "/.markov", 9) == 0) {
+  if (strncmp(path, "/.markov", 8) == 0) {
+    fi->fh = 0;
     return 0;
   }
 
   if (strcmp(path, "/.reindex") == 0 || strcmp(path, "/.embeddings") == 0 ||
       strcmp(path, "/.all") == 0 || strcmp(path, "/.debug") == 0) {
+    fi->fh = 0;
     return 0;
   }
 
-  if (virtual_files.count(path) == 0) {
+  auto it = virtual_files.find(path);
+  if (it == virtual_files.end()) {
     return -ENOENT;
   }
 
+  fi->fh = reinterpret_cast<uint64_t>(&it->second);
   return 0;
 }
 
@@ -196,9 +201,17 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     ss << "=== DEBUG INFO ===\n";
     ss << "Total virtual_files: " << virtual_files.size() << "\n";
     ss << "Files:\n";
+
     for (const auto &file : virtual_files) {
-      ss << "  - " << file.first << " (" << file.second.size << " bytes)\n";
+      ss << file.first << " (" << file.second.size << " bytes)\n";
+      ss << "  Create: " << std::ctime(&file.second.create_time);
+      ss << "  Access: " << std::ctime(&file.second.access_time);
+      ss << "  Modify: " << std::ctime(&file.second.modification_time);
     }
+
+    ss << "Process PID: " << getpid() << "\n";
+    ss << "Parent PID: " << getppid() << "\n";
+
     ss << "Total virtual_dirs: " << virtual_dirs.size() << "\n";
     ss << "Dirs:\n";
     for (const auto &dir : virtual_dirs) {
@@ -335,43 +348,12 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     return -EEXIST;
   }
 
-  std::string parent_dir = path;
-  fprintf(stderr, "Creating file: %s\n", path);
-  size_t last_slash = parent_dir.find_last_of('/');
-  if (last_slash != std::string::npos) {
-    parent_dir = parent_dir.substr(0, last_slash);
-    if (parent_dir.empty())
-      parent_dir = "/";
-    if (virtual_dirs.count(parent_dir) == 0)
-      return -ENOENT;
-  }
-
-  fprintf(stderr, "Parent dir: %s\n", parent_dir.c_str());
-
-  std::string current_path = parent_dir;
-  while (!current_path.empty() && current_path != "/") {
-    if (virtual_dirs.count(current_path) == 0) {
-      virtual_dirs.insert(current_path);
-    }
-
-    size_t pos = current_path.find_last_of('/');
-    if (pos == std::string::npos) {
-      break;
-    }
-    current_path = current_path.substr(0, pos);
-    if (current_path.empty()) {
-      current_path = "/";
-    }
-  }
-
-  fprintf(stderr, "Created parent dirs %s\n", current_path.c_str());
-
   time_t now = time(nullptr);
-  virtual_files[path] =
-      fileinfo::FileInfo(S_IFREG | 0644, 0,
-                         "", getuid(), getgid(), now, now, now);
+  auto &file_info = virtual_files[path];
+  file_info = fileinfo::FileInfo(S_IFREG | 0644, 0, "", getuid(), getgid(), now,
+                                 now, now);
 
-  fprintf(stderr, "Created file %s\n", path);
+  fi->fh = reinterpret_cast<uint64_t>(&file_info);
 
   return 0;
 }
@@ -391,20 +373,44 @@ int VectorFS::utimens(const char *path, const struct timespec tv[2],
 
 int VectorFS::write(const char *path, const char *buf, size_t size,
                     off_t offset, struct fuse_file_info *fi) {
-  auto it = virtual_files.find(path);
-  if (it == virtual_files.end())
-    return -ENOENT;
-  if ((it->second.mode & S_IWUSR) == 0)
-    return -EACCES;
+  if (fi->fh == 0) {
+    auto it = virtual_files.find(path);
+    if (it == virtual_files.end()) {
+      return -ENOENT;
+    }
+    if ((it->second.mode & S_IWUSR) == 0) {
+      return -EACCES;
+    }
 
-  if (offset + size > it->second.content.size()) {
-    it->second.content.resize(offset + size);
+    if (offset + size > it->second.content.size()) {
+      it->second.content.resize(offset + size);
+    }
+
+    memcpy(&it->second.content[offset], buf, size);
+    it->second.size = it->second.content.size();
+    it->second.modification_time = time(nullptr);
+    it->second.access_time = it->second.modification_time;
+
+    update_embedding(path);
+    index_needs_rebuild = true;
+
+    return size;
   }
 
-  memcpy(&it->second.content[offset], buf, size);
-  it->second.size = it->second.content.size();
-  it->second.modification_time = time(nullptr);
-  it->second.access_time = it->second.modification_time;
+  auto *file_info = reinterpret_cast<fileinfo::FileInfo *>(fi->fh);
+
+  if ((file_info->mode & S_IWUSR) == 0) {
+    return -EACCES;
+  }
+
+  if (offset + size > file_info->content.size()) {
+    file_info->content.resize(offset + size);
+  }
+
+  memcpy(&file_info->content[offset], buf, size);
+  file_info->size = file_info->content.size();
+  file_info->modification_time = time(nullptr);
+  file_info->access_time = file_info->modification_time;
 
   update_embedding(path);
   index_needs_rebuild = true;

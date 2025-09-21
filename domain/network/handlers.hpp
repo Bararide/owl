@@ -71,12 +71,32 @@ template <typename EmbeddedModel> auto create_file_handler() {
       struct fuse_file_info fi {};
       fi.flags = O_WRONLY;
 
+      spdlog::info("=== FUSE File Info Structure ===");
+      spdlog::info("fi.flags: 0x{:x}", fi.flags);
+      spdlog::info("fi.writepage: {}", static_cast<int>(fi.writepage));
+      spdlog::info("fi.direct_io: {}", static_cast<int>(fi.direct_io));
+      spdlog::info("fi.keep_cache: {}", static_cast<int>(fi.keep_cache));
+      spdlog::info("fi.flush: {}", static_cast<int>(fi.flush));
+      spdlog::info("fi.nonseekable: {}", static_cast<int>(fi.nonseekable));
+      spdlog::info("fi.cache_readdir: {}", static_cast<int>(fi.cache_readdir));
+      spdlog::info("fi.noflush: {}", static_cast<int>(fi.noflush));
+      spdlog::info("fi.fh: {}", fi.fh);
+      spdlog::info("fi.lock_owner: {}", fi.lock_owner);
+      spdlog::info("fi.poll_events: {}", fi.poll_events);
+      spdlog::info("=================================");
+
       auto result = vfs.create(path.c_str(), 0644, &fi);
       if (result != 0) {
         spdlog::error("Failed to create file '{}', error code: {}", path,
                       result);
         return utils::error_result("Failed to create file");
       }
+
+      // Вывод структуры fi после вызова create
+      spdlog::info("=== FUSE File Info After create() ===");
+      spdlog::info("fi.flags: 0x{:x}", fi.flags);
+      spdlog::info("fi.fh: {}", fi.fh);
+      spdlog::info("======================================");
 
       result = vfs.open(path.c_str(), &fi);
       if (result != 0) {
@@ -86,7 +106,18 @@ template <typename EmbeddedModel> auto create_file_handler() {
         return utils::error_result("Failed to open file for writing");
       }
 
+      // Вывод структуры fi после вызова open
+      spdlog::info("=== FUSE File Info After open() ===");
+      spdlog::info("fi.flags: 0x{:x}", fi.flags);
+      spdlog::info("fi.fh: {}", fi.fh);
+      spdlog::info("================================");
+
       result = vfs.write(path.c_str(), content.c_str(), content.size(), 0, &fi);
+
+      spdlog::info("=== FUSE File Info After write() ===");
+      spdlog::info("fi.flags: 0x{:x}", fi.flags);
+      spdlog::info("fi.fh: {}", fi.fh);
+      spdlog::info("================================");
 
       spdlog::info("Successfully wrote {} bytes to file '{}'", content.size(),
                    path);
