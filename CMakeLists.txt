@@ -15,20 +15,17 @@ set(USE_SYSTEM_GTEST OFF CACHE BOOL "Disable system gtest" FORCE)
 pkg_check_modules(FUSE3 REQUIRED fuse3)
 
 find_package(Drogon REQUIRED)
-
 find_package(fmt REQUIRED)
 
 add_subdirectory(3dparty/boost EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/faiss EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/sentencepiece EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
-add_subdirectory(3dparty/iceoryx2 EXCLUDE_FROM_ALL)
 
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
 
 add_subdirectory(core)
-
 add_subdirectory(domain)
 
 include_directories(${JSONCPP_INCLUDE_DIRS})
@@ -39,7 +36,6 @@ target_include_directories(owl PRIVATE
     ${FUSE3_INCLUDE_DIRS}     
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
     ${CMAKE_SOURCE_DIR}/3dparty/fastText/src
-    ${CMAKE_SOURCE_DIR}/3dparty/iceoryx2
     ${JSONCPP_INCLUDE_DIRS})
 
 target_link_libraries(owl domain)
@@ -53,4 +49,3 @@ target_link_libraries(owl ${JSONCPP_LIBRARIES})
 target_link_libraries(owl Drogon::Drogon)
 target_link_libraries(owl Boost::url)
 target_link_libraries(owl fmt::fmt)
-target_link_libraries(owl iceoryx2)

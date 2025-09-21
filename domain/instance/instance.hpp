@@ -1,10 +1,11 @@
 #ifndef INSTANCE_HPP
 #define INSTANCE_HPP
 
-#include "vectorfs_ipc.hpp"
 #include <memory>
 #include <stdexcept>
 #include <string>
+
+#include "vectorfs.hpp"
 
 namespace vfs::instance {
 
@@ -12,19 +13,6 @@ template <typename EmbeddedModel> class VFSInstance {
 public:
   VFSInstance(const VFSInstance &) = delete;
   VFSInstance &operator=(const VFSInstance &) = delete;
-
-  void initialize_ipc() {
-    ipc_service_ = std::make_unique<vfs::ipc::VectorFSIpcService>(vector_fs_);
-    ipc_service_->start();
-  }
-
-  void shutdown_ipc() {
-    if (ipc_service_) {
-      ipc_service_->stop();
-    }
-  }
-
-  vfs::ipc::VectorFSIpcService &get_ipc_service() { return *ipc_service_; }
 
   static VFSInstance<EmbeddedModel> &getInstance() {
     if (!instance_) {
@@ -73,7 +61,6 @@ private:
 
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
   static std::unique_ptr<VFSInstance<EmbeddedModel>> instance_;
-  std::unique_ptr<vfs::ipc::VectorFSIpcService> ipc_service_;
 };
 
 template <typename EmbeddedModel>
