@@ -1,7 +1,7 @@
 #ifndef VECTORFS_COMPRESSION_BASE_HPP
 #define VECTORFS_COMPRESSION_BASE_HPP
 
-#include <core/infrastructure/result.hpp>
+#include <infrastructure/result.hpp>
 
 namespace owl::compression {
 

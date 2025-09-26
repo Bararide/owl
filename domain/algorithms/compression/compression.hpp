@@ -13,11 +13,11 @@ static constexpr int kCompressionLevel = 9;
 
 class Compressor : public CompressionBase<Compressor> {
 public:
-  auto Compressor::compress_impl(const std::vector<uint8_t> data)
+  auto compress_impl(const std::vector<uint8_t> data)
       -> core::Result<std::vector<uint8_t>> {
     try {
       if (data.empty()) {
-        return core::Result<std::vector<uint8_t>>::ok({});
+        return core::Result<std::vector<uint8_t>>::Ok({});
       }
 
       std::vector<uint8_t> compressed_data;
@@ -85,23 +85,23 @@ public:
                     data.size(), compressed_data.size(),
                     (compressed_data.size() * 100.0) / data.size());
 
-      return core::Result<std::vector<uint8_t>>::ok(compressed_data);
+      return core::Result<std::vector<uint8_t>>::Ok(compressed_data);
 
     } catch (const std::exception &e) {
       spdlog::error("Compression failed: {}", e.what());
-      return core::Result<std::vector<uint8_t>>::error("Compression failed");
+      return core::Result<std::vector<uint8_t>>::Error("Compression failed");
     }
   }
 
-  auto Compressor::decompress_impl(const std::vector<uint8_t> &data)
+  auto decompress_impl(const std::vector<uint8_t> &data)
       -> core::Result<std::vector<uint8_t>> {
     try {
       if (data.empty()) {
-        return core::Result<std::vector<uint8_t>>::ok({});
+        return core::Result<std::vector<uint8_t>>::Ok({});
       }
 
       if (data.size() < sizeof(uint32_t) * 3) {
-        return core::Result<std::vector<uint8_t>>::error(
+        return core::Result<std::vector<uint8_t>>::Error(
             "Invalid compressed data format");
       }
 
@@ -111,7 +111,7 @@ public:
       offset += sizeof(magic);
 
       if (magic != 0x4C5A3432) {
-        return core::Result<std::vector<uint8_t>>::error(
+        return core::Result<std::vector<uint8_t>>::Error(
             "Invalid magic number");
       }
 
@@ -122,7 +122,7 @@ public:
       offset += sizeof(block_count);
 
       if (block_count == 0) {
-        return core::Result<std::vector<uint8_t>>::ok({});
+        return core::Result<std::vector<uint8_t>>::Ok({});
       }
 
       std::vector<uint32_t> kBlockSizes(block_count);
@@ -147,7 +147,7 @@ public:
 
       for (uint32_t i = 0; i < block_count; ++i) {
         if (offset + compressed_kBlockSizes[i] > data.size()) {
-          return core::Result<std::vector<uint8_t>>::error(
+          return core::Result<std::vector<uint8_t>>::Error(
               "Compressed data corrupted");
         }
 
@@ -166,17 +166,17 @@ public:
       spdlog::debug("Decompressed {} bytes to {} bytes", data.size(),
                     decompressed_data.size());
 
-      return core::Result<std::vector<uint8_t>>::ok(decompressed_data);
+      return core::Result<std::vector<uint8_t>>::Ok(decompressed_data);
 
     } catch (const std::exception &e) {
       spdlog::error("Decompression failed: {}", e.what());
-      return core::Result<std::vector<uint8_t>>::error("Decompression failed");
+      return core::Result<std::vector<uint8_t>>::Error("Decompression failed");
     }
   }
 
 private:
   std::vector<uint8_t>
-  Compressor::decompress_block(const std::vector<uint8_t> &compressed_block,
+  decompress_block(const std::vector<uint8_t> &compressed_block,
                                size_t original_size) {
     std::vector<uint8_t> decompressed(original_size);
 
@@ -195,7 +195,7 @@ private:
   }
 
   std::vector<uint8_t>
-  Compressor::compress_block(const std::vector<uint8_t> &block) {
+  compress_block(const std::vector<uint8_t> &block) {
     int max_compressed_size = LZ4_compressBound(static_cast<int>(block.size()));
     if (max_compressed_size <= 0) {
       throw std::runtime_error("LZ4 compression bound calculation failed");
