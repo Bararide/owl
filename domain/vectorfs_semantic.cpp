@@ -156,12 +156,17 @@ void VectorFS::update_semantic_relationships() {
 
 void VectorFS::record_file_access(const std::string &file_path,
                                   const std::string &operation = "read") {
+  spdlog::info("3.1");
   semantic_graph_->record_access(file_path, operation);
+  spdlog::info("3.1.1");
 
   recent_queries_.push_back(file_path);
+  spdlog::info("3.2");
   if (recent_queries_.size() > 50) {
     recent_queries_.erase(recent_queries_.begin(), recent_queries_.begin() + 10);
   }
+
+  spdlog::info("3.3");
 
   if (recent_queries_.size() >= 10) {
     std::vector<std::string> sequence(recent_queries_.end() - 10,
@@ -169,15 +174,20 @@ void VectorFS::record_file_access(const std::string &file_path,
     hmm_model_->add_sequence(sequence);
   }
 
+  spdlog::info("3.4");
+
   auto now = std::chrono::steady_clock::now();
   auto time_since_update = std::chrono::duration_cast<std::chrono::minutes>(
                                now - last_ranking_update_)
                                .count();
 
+  spdlog::info("3.5");
+
   if (time_since_update > 5) {
     update_models();
     last_ranking_update_ = now;
   }
+  spdlog::info("3.6");
 }
 
 void VectorFS::update_embedding(const std::string &path) {

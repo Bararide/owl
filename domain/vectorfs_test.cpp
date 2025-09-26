@@ -265,12 +265,16 @@ void VectorFS::test_semantic_search() {
        "?)\");\npstmt->setString(1, \"Alice\");\npstmt->setInt(2, "
        "25);\npstmt->execute();\ndelete pstmt;\ndelete con;"}};
 
+  spdlog::info("1");
+
   for (const auto &[path, content] : test_files) {
     virtual_files_[path] =
         fileinfo::FileInfo(S_IFREG | 0644, 0, content, getuid(), getgid(),
                            time(nullptr), time(nullptr), time(nullptr));
     update_embedding(path);
   }
+
+  spdlog::info("2");
 
   std::vector<std::vector<std::string>> access_patterns = {
       {"/python/functions_basic.py", "/python/oop_basics.py",
@@ -293,12 +297,16 @@ void VectorFS::test_semantic_search() {
        "/cpp/functions_advanced.cpp", "/algorithms/sort_cpp.cpp",
        "/data_structures/linked_list_cpp.cpp"}};
 
+  spdlog::info("3");
+
   for (const auto &pattern : access_patterns) {
     for (const auto &file : pattern) {
       record_file_access(file, "test_pattern");
     }
     hmm_model_->add_sequence(pattern);
   }
+
+  spdlog::info("4");
 
   rebuild_index();
   update_models();
@@ -310,6 +318,8 @@ void VectorFS::test_semantic_search() {
       {"веб приложение", "Веб-разработка"},
       {"Linux система", "Системное администрирование"},
       {"обработка данных", "Межкатегорийные запросы"}};
+
+  spdlog::info("5");
 
   spdlog::info("Total indexed files: {}", index_to_path_.size());
   spdlog::info("HMM states: {}", hmm_model_->get_state_count());

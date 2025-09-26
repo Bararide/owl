@@ -72,12 +72,18 @@ public:
       initialize_shared_memory();
       initialize_embedder<EmbeddedModel>(model_path, use_quantization);
       initialize_compressor<Compressor>();
+      initialize_markov_chain();
 
       return true;
     } catch (const std::exception &e) {
       spdlog::error("Failed to initialize embedder: {}", e.what());
       return false;
     }
+  }
+
+  void initialize_markov_chain() {
+    semantic_graph_ = std::make_unique<markov::SemanticGraph>();
+    hmm_model_ = std::make_unique<markov::HiddenMarkovModel>();
   }
 
   void updateFromSharedMemory();
