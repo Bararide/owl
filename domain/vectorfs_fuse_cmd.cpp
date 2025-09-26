@@ -354,6 +354,8 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
       ss << "  Create: " << std::ctime(&file.second.create_time);
       ss << "  Access: " << std::ctime(&file.second.access_time);
       ss << "  Modify: " << std::ctime(&file.second.modification_time);
+      ss << "  Original Size: " << file.second.original_size << "\n";
+      ss << "  Size: " << file.second.size << "\n";
     }
 
     ss << "Total virtual_dirs_: " << virtual_dirs_.size() << "\n";
@@ -377,14 +379,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     query = url_decode(query);
     std::replace(query.begin(), query.end(), '_', ' ');
 
-    auto it = virtual_files_.find(query);
-
-    std::string content;
-    if (it->second.is_compressed) {
-      content = get_file_content_decompressed(path);
-    } else {
-      content = it->second.content;
-    }
+    std::string content = generate_enhanced_search_result(query);
 
     if (offset >= content.size()) {
       return 0;
