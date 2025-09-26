@@ -17,6 +17,7 @@ namespace owl::fileinfo {
 struct FileInfo {
   mode_t mode;
   size_t size;
+  size_t original_size;
   std::string content;
   uid_t uid;
   gid_t gid;
@@ -26,6 +27,7 @@ struct FileInfo {
   std::vector<float> embedding;
   std::vector<uint8_t> pq_codes;
   std::vector<uint8_t> sq_codes;
+  bool is_compressed = false;
   bool is_quantized = false;
   bool embedding_updated;
 
@@ -34,16 +36,18 @@ struct FileInfo {
         modification_time(time(nullptr)), create_time(time(nullptr)),
         embedding_updated(false) {}
 
-  FileInfo(mode_t mode, size_t size, const std::string &content, uid_t uid,
-           gid_t gid, time_t access_time, time_t modification_time,
-           time_t create_time)
-      : mode(mode), size(size), content(content), uid(uid), gid(gid),
-        access_time(access_time), modification_time(modification_time),
-        create_time(create_time), embedding_updated(false) {}
-
-  FileInfo(mode_t mode, size_t size, uid_t uid, gid_t gid, time_t access_time,
+  FileInfo(mode_t mode, size_t size, size_t original_size,
+           const std::string &content, uid_t uid, gid_t gid, time_t access_time,
            time_t modification_time, time_t create_time)
-      : mode(mode), size(size), uid(uid), gid(gid), access_time(access_time),
+      : mode(mode), size(size), original_size(original_size), content(content),
+        uid(uid), gid(gid), access_time(access_time),
+        modification_time(modification_time), create_time(create_time),
+        embedding_updated(false) {}
+
+  FileInfo(mode_t mode, size_t size, size_t original_size, uid_t uid, gid_t gid,
+           time_t access_time, time_t modification_time, time_t create_time)
+      : mode(mode), size(size), original_size(original_size), uid(uid),
+        gid(gid), access_time(access_time),
         modification_time(modification_time), create_time(create_time),
         embedding_updated(false) {}
 };

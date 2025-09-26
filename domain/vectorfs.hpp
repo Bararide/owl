@@ -130,6 +130,70 @@ public:
 private:
   VectorFS() = default;
 
+  std::vector<uint8_t> compress_data(const std::string &data) {
+    if (!compressor_ || data.empty()) {
+      return std::vector<uint8_t>(data.begin(), data.end());
+    }
+
+    std::vector<uint8_t> input_data(data.begin(), data.end());
+    auto result = compressor_->compress(input_data);
+    if (result.is_ok()) {
+      return result.unwrap();
+    } else {
+      return std::vector<uint8_t>(data.begin(), data.end());
+    }
+  }
+
+  std::string decompress_data(const std::vector<uint8_t> &compressed_data,
+                              size_t original_size = 0) {
+    if (!compressor_ || compressed_data.empty()) {
+      return std::string(compressed_data.begin(), compressed_data.end());
+    }
+
+    auto result = compressor_->decompress(compressed_data);
+    if (result.is_ok()) {
+      auto decompressed = result.unwrap();
+      return std::string(decompressed.begin(), decompressed.end());
+    } else {
+      return std::string(compressed_data.begin(), compressed_data.end());
+    }
+  }
+
+  void update_file_content_compressed(const std::string &path,
+                                      const std::string &content) {
+    auto it = virtual_files_.find(path);
+    if (it != virtual_files_.end()) {
+      auto compressed_content = compress_data(content);
+
+      it->second.content =
+          std::string(compressed_content.begin(), compressed_content.end());
+      it->second.size = compressed_content.size();
+      it->second.original_size = content.size();
+      it->second.modification_time = time(nullptr);
+      it->second.access_time = it->second.modification_time;
+      it->second.is_compressed = true;
+
+      update_embedding(path);
+      index_needs_rebuild_ = true;
+    }
+  }
+
+  std::string get_file_content_decompressed(const std::string &path) {
+    auto it = virtual_files_.find(path);
+    if (it != virtual_files_.end()) {
+      const auto &file_info = it->second;
+
+      if (file_info.is_compressed) {
+        std::vector<uint8_t> compressed_data(file_info.content.begin(),
+                                             file_info.content.end());
+        return decompress_data(compressed_data, file_info.original_size);
+      } else {
+        return file_info.content;
+      }
+    }
+    return "";
+  }
+
   void initialize_shared_memory() {
     shm_manager_ = std::make_unique<shared::SharedMemoryManager>();
     if (!shm_manager_->initialize()) {

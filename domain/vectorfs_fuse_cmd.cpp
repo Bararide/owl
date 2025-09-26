@@ -5,16 +5,6 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
                       struct fuse_file_info *fi) {
   memset(stbuf, 0, sizeof(struct stat));
 
-  if (strcmp(path, "/") == 0) {
-    stbuf->st_mode = S_IFDIR | 0755;
-    stbuf->st_nlink = 2;
-    stbuf->st_uid = getuid();
-    stbuf->st_gid = getgid();
-    time_t now = time(nullptr);
-    stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = now;
-    return 0;
-  }
-
   if (strcmp(path, "/.search") == 0) {
     stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 2;
@@ -78,6 +68,16 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     return 0;
   }
 
+  if (strcmp(path, "/") == 0) {
+    stbuf->st_mode = S_IFDIR | 0755;
+    stbuf->st_nlink = 2;
+    stbuf->st_uid = getuid();
+    stbuf->st_gid = getgid();
+    time_t now = time(nullptr);
+    stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = now;
+    return 0;
+  }
+
   auto it = virtual_files_.find(path);
   if (it != virtual_files_.end()) {
     const auto &fi = it->second;
@@ -93,6 +93,49 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
   }
   return -ENOENT;
 }
+
+// void VectorFS::updateFromSharedMemory() {
+//   if (!shm_manager_ || !shm_manager_->initialize()) {
+//     spdlog::warn("Failed to initialize shared memory in FUSE");
+//     return;
+//   }
+
+//   if (!shm_manager_->needsUpdate()) {
+//     return;
+//   }
+
+//   spdlog::info("Updating from shared memory...");
+
+//   int file_count = shm_manager_->getFileCount();
+//   for (int i = 0; i < file_count; i++) {
+//     const auto *shared_info = shm_manager_->getFile(i);
+//     if (shared_info) {
+//       std::string path(shared_info->path.data());
+
+//       if (virtual_files_.count(path) == 0) {
+//         fileinfo::FileInfo fi;
+//         fi.mode = shared_info->mode;
+//         fi.size = shared_info->size;
+//         fi.content = std::string(shared_info->content.data(), shared_info->size);
+//         fi.uid = shared_info->uid;
+//         fi.gid = shared_info->gid;
+//         fi.access_time = shared_info->access_time;
+//         fi.modification_time = shared_info->modification_time;
+//         fi.create_time = shared_info->create_time;
+
+//         virtual_files_[path] = fi;
+//         spdlog::info("Added file from shared memory: {} ({} bytes)", path,
+//                      shared_info->size);
+
+//         update_embedding(path.c_str());
+//         index_needs_rebuild_ = true;
+//       }
+//     }
+//   }
+
+//   shm_manager_->clearUpdateFlag();
+//   spdlog::info("Shared memory update completed");
+// }
 
 void VectorFS::updateFromSharedMemory() {
   if (!shm_manager_ || !shm_manager_->initialize()) {
@@ -112,12 +155,17 @@ void VectorFS::updateFromSharedMemory() {
     if (shared_info) {
       std::string path(shared_info->path.data());
 
+      std::vector<uint8_t> shared_content(shared_info->content.begin(),
+                                          shared_info->content.end());
+
+      auto decompressed = decompress_data(shared_content, shared_info->size);
+
       if (virtual_files_.count(path) == 0) {
         fileinfo::FileInfo fi;
         fi.mode = shared_info->mode;
-        fi.size = shared_info->size;
-        fi.content =
-            std::string(shared_info->content.data(), shared_info->size);
+        fi.original_size = shared_info->size;
+        fi.size = decompressed.size();
+        fi.content = decompressed;
         fi.uid = shared_info->uid;
         fi.gid = shared_info->gid;
         fi.access_time = shared_info->access_time;
@@ -141,79 +189,82 @@ void VectorFS::updateFromSharedMemory() {
 int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                       off_t offset, struct fuse_file_info *fi,
                       enum fuse_readdir_flags flags) {
-
-  filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
-  filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
-
-  if (strcmp(path, "/") == 0) {
-    filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, ".reindex", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, ".embeddings", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, ".markov", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
-
-    if (shm_manager_ && shm_manager_->initialize()) {
-      if (shm_manager_->needsUpdate()) {
-        updateFromSharedMemory();
-        shm_manager_->clearUpdateFlag();
-      }
-
-      int file_count = shm_manager_->getFileCount();
-      for (int i = 0; i < file_count; i++) {
-        const auto *shared_info = shm_manager_->getFile(i);
-        if (shared_info) {
-          std::string file_path(shared_info->path.data());
-          const char *file_name = file_path.c_str();
-          if (file_name[0] == '/') {
-            file_name++;
-          }
-          filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-        }
-      }
-    }
-
-    for (const auto &dir : virtual_dirs_) {
-      if (dir != "/") {
-        const char *dir_name = dir.c_str();
-        if (dir_name[0] == '/') {
-          dir_name++;
-        }
-        filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-      }
-    }
-
-    for (const auto &file : virtual_files_) {
-      const char *file_name = file.first.c_str();
-      if (file_name[0] == '/') {
-        file_name++;
-      }
-      filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-    }
-
-  } else if (strcmp(path, "/.search") == 0) {
+    
+    // Всегда добавляем . и .. в начало
     filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
-  } else if (virtual_dirs_.count(path) > 0) {
-    std::string dir_path = path;
-    if (dir_path.back() != '/') {
-      dir_path += "/";
-    }
 
-    for (const auto &file : virtual_files_) {
-      if (file.first.find(dir_path) == 0) {
-        std::string relative_path = file.first.substr(dir_path.length());
-        if (relative_path.find('/') == std::string::npos) {
-          filler(buf, relative_path.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+    if (strcmp(path, "/") == 0) {
+        // Корневая директория
+        filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".reindex", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".embeddings", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".markov", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
+
+        if (shm_manager_ && shm_manager_->initialize()) {
+            if (shm_manager_->needsUpdate()) {
+                updateFromSharedMemory();
+                shm_manager_->clearUpdateFlag();
+            }
+
+            int file_count = shm_manager_->getFileCount();
+            for (int i = 0; i < file_count; i++) {
+                const auto *shared_info = shm_manager_->getFile(i);
+                if (shared_info) {
+                    std::string file_path(shared_info->path.data());
+                    const char *file_name = file_path.c_str();
+                    if (file_name[0] == '/') {
+                        file_name++;
+                    }
+                    filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+                }
+            }
         }
-      }
+
+        for (const auto &dir : virtual_dirs_) {
+            if (dir != "/") {
+                const char *dir_name = dir.c_str();
+                if (dir_name[0] == '/') {
+                    dir_name++;
+                }
+                filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+            }
+        }
+
+        for (const auto &file : virtual_files_) {
+            const char *file_name = file.first.c_str();
+            if (file_name[0] == '/') {
+                file_name++;
+            }
+            filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+        }
+        
+    } else if (strcmp(path, "/.search") == 0) {
+        filler(buf, "example_query", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, "help.txt", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        
+    } else if (virtual_dirs_.count(path) > 0) {
+        std::string dir_path = path;
+        if (dir_path.back() != '/') {
+            dir_path += "/";
+        }
+        
+        for (const auto &file : virtual_files_) {
+            if (file.first.find(dir_path) == 0) {
+                std::string relative_path = file.first.substr(dir_path.length());
+                if (relative_path.find('/') == std::string::npos) {
+                    filler(buf, relative_path.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+                }
+            }
+        }
+        
+    } else {
+        return -ENOENT;
     }
 
-  } else {
-    return -ENOENT;
-  }
-
-  return 0;
+    return 0;
 }
 
 int VectorFS::rmdir(const char *path) {
@@ -331,19 +382,21 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     query = url_decode(query);
     std::replace(query.begin(), query.end(), '_', ' ');
 
-    std::string content = generate_enhanced_search_result(query);
+    auto it = virtual_files_.find(query);
+
+    std::string content;
+    if (it->second.is_compressed) {
+      content = get_file_content_decompressed(path);
+    } else {
+      content = it->second.content;
+    }
 
     if (offset >= content.size()) {
       return 0;
     }
+
     size_t len = std::min(content.size() - offset, size);
     memcpy(buf, content.c_str() + offset, len);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
-    spdlog::info("Enhanced search for '{}' took {} ms", query, duration);
     return len;
   }
 
@@ -448,8 +501,9 @@ int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 
   time_t now = time(nullptr);
   auto &file_info = virtual_files_[path];
-  file_info = fileinfo::FileInfo(S_IFREG | 0644, 0, "", getuid(), getgid(), now,
-                                 now, now);
+  file_info = fileinfo::FileInfo(S_IFREG | 0644, 0, 0, "", getuid(), getgid(),
+                                 now, now, now);
+  file_info.is_compressed = true;
 
   fi->fh = reinterpret_cast<uint64_t>(&file_info);
 
@@ -480,17 +534,20 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
       return -EACCES;
     }
 
-    if (offset + size > it->second.content.size()) {
-      it->second.content.resize(offset + size);
+    std::string current_content;
+    if (it->second.is_compressed) {
+      current_content = get_file_content_decompressed(path);
+    } else {
+      current_content = it->second.content;
     }
 
-    memcpy(&it->second.content[offset], buf, size);
-    it->second.size = it->second.content.size();
-    it->second.modification_time = time(nullptr);
-    it->second.access_time = it->second.modification_time;
+    if (offset + size > current_content.size()) {
+      current_content.resize(offset + size);
+    }
 
-    update_embedding(path);
-    index_needs_rebuild_ = true;
+    memcpy(&current_content[offset], buf, size);
+
+    update_file_content_compressed(path, current_content);
 
     return size;
   }
@@ -501,12 +558,28 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
     return -EACCES;
   }
 
-  if (offset + size > file_info->content.size()) {
-    file_info->content.resize(offset + size);
+  std::string current_content;
+  if (file_info->is_compressed) {
+    std::vector<uint8_t> compressed_data(file_info->content.begin(),
+                                         file_info->content.end());
+    current_content =
+        decompress_data(compressed_data, file_info->original_size);
+  } else {
+    current_content = file_info->content;
   }
 
-  memcpy(&file_info->content[offset], buf, size);
-  file_info->size = file_info->content.size();
+  if (offset + size > current_content.size()) {
+    current_content.resize(offset + size);
+  }
+
+  memcpy(&current_content[offset], buf, size);
+
+  auto compressed_content = compress_data(current_content);
+  file_info->content =
+      std::string(compressed_content.begin(), compressed_content.end());
+  file_info->size = compressed_content.size();
+  file_info->original_size = current_content.size();
+  file_info->is_compressed = true;
   file_info->modification_time = time(nullptr);
   file_info->access_time = file_info->modification_time;
 

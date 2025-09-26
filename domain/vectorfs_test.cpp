@@ -269,7 +269,7 @@ void VectorFS::test_semantic_search() {
 
   for (const auto &[path, content] : test_files) {
     virtual_files_[path] =
-        fileinfo::FileInfo(S_IFREG | 0644, 0, content, getuid(), getgid(),
+        fileinfo::FileInfo(S_IFREG | 0644, 0, 0, content, getuid(), getgid(),
                            time(nullptr), time(nullptr), time(nullptr));
     update_embedding(path);
   }
@@ -420,7 +420,7 @@ void VectorFS::test_markov_chains() {
 
   for (size_t i = 0; i < test_files.size(); i++) {
     virtual_files_[test_files[i]] = fileinfo::FileInfo(
-        S_IFREG | 0644, 0, test_contents[i], getuid(), getgid(), time(nullptr),
+        S_IFREG | 0644, 0, 0, test_contents[i], getuid(), getgid(), time(nullptr),
         time(nullptr), time(nullptr));
     update_embedding(test_files[i]);
   }
