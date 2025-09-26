@@ -228,8 +228,8 @@ private:
 private:
   int argc_;
   char **argv_;
-  owl::instance::VFSInstance<owl::embedded::FastTextEmbedder> *vectorfs_{
-      nullptr};
+  instance::VFSInstance<embedded::FastTextEmbedder, compression::Compressor>
+      *vectorfs_{nullptr};
 };
 
 } // namespace owl::app

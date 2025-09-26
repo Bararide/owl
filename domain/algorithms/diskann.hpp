@@ -1,9 +1,0 @@
-#ifndef VECTORFS_ALGORITHMS_DISKANN_HPP
-#define VECTORFS_ALGORITHMS_DISKANN_HPP
-
-namespace owl::algorithms
-{
-    
-}
-
-#endif //VECTORFS_ALGORITHMS_DISKANN_HPP

@@ -26,6 +26,8 @@
 
 #include "embedded/embedded_base.hpp"
 #include "embedded/embedded_fasttext.hpp"
+#include "algorithms/compression/compression_base.hpp"
+#include "algorithms/compression/compression.hpp"
 #include "file/fileinfo.hpp"
 #include "markov.hpp"
 #include "shared_memory/shared_memory.hpp"
@@ -63,12 +65,13 @@ public:
     return ops;
   }
 
-  template <typename EmbeddedModel>
+  template <typename EmbeddedModel, typename CompressionAlgorithm>
   bool initialize(const std::string &model_path,
                   bool use_quantization = false) {
     try {
       initialize_shared_memory();
       initialize_embedder<EmbeddedModel>(model_path);
+      initialize_compressor<CompressionAlgorithm>();
       initialize_index(use_quantization);
 
       return true;
@@ -126,6 +129,9 @@ private:
   template <typename EmbeddedModel>
   void initialize_embedder(const std::string &model_path);
 
+  template <typename CompressionAlgorithm>
+  void initialize_compressor();
+
   void initialize_index(bool use_quantization);
 
   std::string normalize_text(const std::string &text);
@@ -144,7 +150,6 @@ private:
   void train_quantizers(const std::vector<float> &embeddings, size_t dim);
   std::vector<std::string> predict_next_files();
 
-  // Static callback wrappers
   static inline int getattr_callback(const char *path, struct stat *stbuf,
                                      struct fuse_file_info *fi) {
     return getInstance()->getattr(path, stbuf, fi);
@@ -218,9 +223,8 @@ private:
   std::unique_ptr<faiss::IndexFlatL2> faiss_index_quantized_;
   std::unique_ptr<utils::ScalarQuantizer> sq_quantizer_;
   std::unique_ptr<utils::ProductQuantizer> pq_quantizer_;
-  std::unique_ptr<owl::shared::SharedMemoryManager> shm_manager_;
-  bool index_needs_rebuild_;
-  bool use_quantization_;
+  std::unique_ptr<shared::SharedMemoryManager> shm_manager_;
+  std::unique_ptr<compression::Compressor> compressor_;
   std::map<idx_t, std::string> index_to_path_;
   std::map<std::string, std::string> search_results_cache_;
 
@@ -233,6 +237,9 @@ private:
 
   EmbedderVariant embedder_;
   std::string model_type_;
+
+  bool index_needs_rebuild_;
+  bool use_quantization_;
 };
 
 } // namespace owl::vectorfs

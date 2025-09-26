@@ -8,7 +8,7 @@
 
 namespace owl::instance {
 
-template <typename EmbeddedModel> class VFSInstance {
+template <typename EmbeddedModel, typename CompressionAlgorithm> class VFSInstance {
 public:
   VFSInstance(const VFSInstance &) = delete;
   VFSInstance &operator=(const VFSInstance &) = delete;
@@ -57,7 +57,7 @@ public:
 private:
   explicit VFSInstance(const std::string &model_path)
       : vector_fs_(vectorfs::VectorFS::getInstance()) {
-    vector_fs_->initialize<EmbeddedModel>(model_path);
+    vector_fs_->initialize<EmbeddedModel, CompressionAlgorithm>(model_path);
   }
 
   ~VFSInstance() = default;
@@ -66,9 +66,9 @@ private:
   static std::unique_ptr<VFSInstance> instance_;
 };
 
-template <typename EmbeddedModel>
-std::unique_ptr<VFSInstance<EmbeddedModel>>
-    VFSInstance<EmbeddedModel>::instance_ = nullptr;
+template <typename EmbeddedModel, typename CompressionAlgorithm>
+std::unique_ptr<VFSInstance<EmbeddedModel, CompressionAlgorithm>>
+    VFSInstance<EmbeddedModel, CompressionAlgorithm>::instance_ = nullptr;
 
 } // namespace owl::instance
 
