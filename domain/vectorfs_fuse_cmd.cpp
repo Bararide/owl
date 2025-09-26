@@ -5,6 +5,16 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
                       struct fuse_file_info *fi) {
   memset(stbuf, 0, sizeof(struct stat));
 
+  if (strcmp(path, "/") == 0) {
+    stbuf->st_mode = S_IFDIR | 0755;
+    stbuf->st_nlink = 2;
+    stbuf->st_uid = getuid();
+    stbuf->st_gid = getgid();
+    time_t now = time(nullptr);
+    stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = now;
+    return 0;
+  }
+
   if (strcmp(path, "/.search") == 0) {
     stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 2;
@@ -106,7 +116,8 @@ void VectorFS::updateFromSharedMemory() {
         fileinfo::FileInfo fi;
         fi.mode = shared_info->mode;
         fi.size = shared_info->size;
-        fi.content = std::string(shared_info->content.data(), shared_info->size);
+        fi.content =
+            std::string(shared_info->content.data(), shared_info->size);
         fi.uid = shared_info->uid;
         fi.gid = shared_info->gid;
         fi.access_time = shared_info->access_time;
@@ -130,9 +141,11 @@ void VectorFS::updateFromSharedMemory() {
 int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                       off_t offset, struct fuse_file_info *fi,
                       enum fuse_readdir_flags flags) {
+
+  filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
+  filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+
   if (strcmp(path, "/") == 0) {
-    filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".reindex", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".embeddings", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -140,7 +153,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-    if (shm_manager_->initialize()) {
+    if (shm_manager_ && shm_manager_->initialize()) {
       if (shm_manager_->needsUpdate()) {
         updateFromSharedMemory();
         shm_manager_->clearUpdateFlag();
@@ -158,30 +171,46 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
         }
       }
-
-      for (const auto &dir : virtual_dirs_) {
-        if (dir != "/") {
-          const char *dir_name = dir.c_str();
-          if (dir_name[0] == '/') {
-            dir_name++;
-          }
-          filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-        }
-      }
-
-      for (const auto &file : virtual_files_) {
-        const char *file_name = file.first.c_str();
-        if (file_name[0] == '/') {
-          file_name++;
-        }
-        filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-      }
-    } else if (strcmp(path, "/.search") == 0) {
-      filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
-      filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    } else {
-      return -ENOENT;
     }
+
+    for (const auto &dir : virtual_dirs_) {
+      if (dir != "/") {
+        const char *dir_name = dir.c_str();
+        if (dir_name[0] == '/') {
+          dir_name++;
+        }
+        filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+      }
+    }
+
+    for (const auto &file : virtual_files_) {
+      const char *file_name = file.first.c_str();
+      if (file_name[0] == '/') {
+        file_name++;
+      }
+      filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+    }
+
+  } else if (strcmp(path, "/.search") == 0) {
+    filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+  } else if (virtual_dirs_.count(path) > 0) {
+    std::string dir_path = path;
+    if (dir_path.back() != '/') {
+      dir_path += "/";
+    }
+
+    for (const auto &file : virtual_files_) {
+      if (file.first.find(dir_path) == 0) {
+        std::string relative_path = file.first.substr(dir_path.length());
+        if (relative_path.find('/') == std::string::npos) {
+          filler(buf, relative_path.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+        }
+      }
+    }
+
+  } else {
+    return -ENOENT;
   }
 
   return 0;
