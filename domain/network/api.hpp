@@ -8,7 +8,7 @@
 
 namespace owl::network {
 
-template <typename EmbeddedModel> class VectorFSApi {
+template <typename EmbeddedModel, typename Compressor> class VectorFSApi {
 public:
   static void init() {
     using namespace std::chrono_literals;
@@ -100,8 +100,10 @@ public:
   static std::map<std::string, utils::HttpHandler> init_handlers() {
     return {{"/", handler::create_root_handler()},
             {"/files/create", handler::create_file_handler<EmbeddedModel>()},
-            {"/files/read", handler::read_file_handler<EmbeddedModel>()},
-            {"/semantic", handler::semantic_search_handler<EmbeddedModel>()},
+            {"/files/read",
+             handler::read_file_handler<EmbeddedModel, Compressor>()},
+            {"/semantic",
+             handler::semantic_search_handler<EmbeddedModel, Compressor>()},
             {"/rebuild", handler::rebuild_handler()}};
   }
 
@@ -109,8 +111,9 @@ private:
   static std::map<std::string, utils::HttpHandler> handlers;
 };
 
-template <typename EmbeddedModel>
-std::map<std::string, utils::HttpHandler> VectorFSApi<EmbeddedModel>::handlers;
+template <typename EmbeddedModel, typename Compressor>
+std::map<std::string, utils::HttpHandler>
+    VectorFSApi<EmbeddedModel, Compressor>::handlers;
 
 } // namespace owl::network
 

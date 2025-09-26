@@ -53,13 +53,15 @@ private:
         "crawl-300d-2M-subword.bin";
 
     measure_duration("VectorFS initialized", [&] {
-      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::initialize(
-          fasttext_model_path);
+      instance::VFSInstance<
+          embedded::FastTextEmbedder,
+          compression::Compressor>::initialize(fasttext_model_path);
     });
 
     measure_duration("VectorFS loaded", [&] {
-      vectorfs_ = &owl::instance::VFSInstance<
-          owl::embedded::FastTextEmbedder>::getInstance();
+      vectorfs_ =
+          &instance::VFSInstance<embedded::FastTextEmbedder,
+                                 compression::Compressor>::getInstance();
     });
 
     spdlog::info("Embedder: {}", vectorfs_->get_embedder_info());
@@ -93,7 +95,7 @@ private:
   }
 
   void initialize_shared_memory() {
-    auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
+    auto &shm_manager = shared::SharedMemoryManager::getInstance();
     if (!shm_manager.initialize()) {
       spdlog::warn("Failed to initialize shared memory in main process");
     }
@@ -123,8 +125,10 @@ private:
     try {
       auto start_time = std::chrono::high_resolution_clock::now();
 
-      owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::init();
-      owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::run();
+      network::VectorFSApi<embedded::FastTextEmbedder,
+                           compression::Compressor>::init();
+      network::VectorFSApi<embedded::FastTextEmbedder,
+                           compression::Compressor>::run();
 
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(
           std::chrono::high_resolution_clock::now() - start_time);
@@ -187,7 +191,8 @@ private:
   }
 
   void shutdown_application() {
-    owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
+    instance::VFSInstance<embedded::FastTextEmbedder,
+                          compression::Compressor>::shutdown();
     spdlog::info("VectorFS shutdown complete");
   }
 
@@ -196,7 +201,8 @@ private:
     core::measure::Measure::cancel();
 
     try {
-      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
+      instance::VFSInstance<embedded::FastTextEmbedder,
+                            compression::Compressor>::shutdown();
     } catch (...) {
       spdlog::warn("Error during shutdown");
     }

@@ -54,13 +54,14 @@ public:
     return vector_fs_->get_embedder_info();
   }
 
-private:
   explicit VFSInstance(const std::string &model_path)
       : vector_fs_(vectorfs::VectorFS::getInstance()) {
     vector_fs_->initialize<EmbeddedModel, CompressionAlgorithm>(model_path);
   }
 
   ~VFSInstance() = default;
+
+private:
 
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
   static std::unique_ptr<VFSInstance> instance_;

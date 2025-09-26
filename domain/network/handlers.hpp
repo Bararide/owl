@@ -1,8 +1,8 @@
 #ifndef VECTORFS_NETWORK_HANDLERS_HPP
 #define VECTORFS_NETWORK_HANDLERS_HPP
 
-#include "utils/http_helpers.hpp"
 #include "shared_memory/shared_memory.hpp"
+#include "utils/http_helpers.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/url/parse.hpp>
@@ -109,12 +109,14 @@ template <typename EmbeddedModel> auto create_file_handler() {
   };
 }
 
-template <typename EmbeddedModel> auto read_file_handler() {
+template <typename EmbeddedModel, typename Compressor>
+auto read_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     auto process_request = [&]() -> utils::HttpResult {
-      auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
-                      .get_vector_fs();
+      auto &vfs =
+          owl::instance::VFSInstance<EmbeddedModel, Compressor>::getInstance()
+              .get_vector_fs();
       auto path_param = req->getParameter("path");
 
       if (path_param.empty()) {
@@ -159,12 +161,14 @@ template <typename EmbeddedModel> auto read_file_handler() {
   };
 }
 
-template <typename EmbeddedModel> auto semantic_search_handler() {
+template <typename EmbeddedModel, typename Compressor>
+auto semantic_search_handler() {
   return utils::create_handler(
       [](const drogon::HttpRequestPtr &req,
          const std::vector<std::string> &) -> utils::HttpResult {
-        auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
-                        .get_vector_fs();
+        auto &vfs =
+            owl::instance::VFSInstance<EmbeddedModel, Compressor>::getInstance()
+                .get_vector_fs();
         auto json = req->getJsonObject();
 
         if (!json) {
