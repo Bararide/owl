@@ -24,10 +24,10 @@
 #include <infrastructure/measure.hpp>
 #include <spdlog/spdlog.h>
 
+#include "algorithms/compression/compression.hpp"
+#include "algorithms/compression/compression_base.hpp"
 #include "embedded/embedded_base.hpp"
 #include "embedded/embedded_fasttext.hpp"
-#include "algorithms/compression/compression_base.hpp"
-#include "algorithms/compression/compression.hpp"
 #include "file/fileinfo.hpp"
 #include "markov.hpp"
 #include "shared_memory/shared_memory.hpp"
@@ -65,14 +65,13 @@ public:
     return ops;
   }
 
-  template <typename EmbeddedModel, typename CompressionAlgorithm>
+  template <typename EmbeddedModel, typename Compressor>
   bool initialize(const std::string &model_path,
                   bool use_quantization = false) {
     try {
       initialize_shared_memory();
-      initialize_embedder<EmbeddedModel>(model_path);
-      initialize_compressor<CompressionAlgorithm>();
-      initialize_index(use_quantization);
+      initialize_embedder<EmbeddedModel>(model_path, use_quantization);
+      initialize_compressor<Compressor>();
 
       return true;
     } catch (const std::exception &e) {
@@ -81,6 +80,8 @@ public:
     }
   }
 
+  void updateFromSharedMemory();
+
   std::vector<float> get_embedding(const std::string &text);
   std::string get_embedder_info() const;
 
@@ -88,7 +89,6 @@ public:
     return virtual_files_;
   }
 
-  void updateFromSharedMemory();
   void rebuild_index();
   std::vector<std::pair<std::string, float>>
   semantic_search(const std::string &query, int k);
@@ -122,17 +122,42 @@ public:
   ~VectorFS() = default;
 
 private:
-  VectorFS();
+  VectorFS() = default;
 
-  void initialize_shared_memory();
+  void initialize_shared_memory() {
+    shm_manager_ = std::make_unique<shared::SharedMemoryManager>();
+    if (!shm_manager_->initialize()) {
+      spdlog::warn("Failed to initialize shared memory");
+    }
+  }
 
   template <typename EmbeddedModel>
-  void initialize_embedder(const std::string &model_path);
+  void initialize_embedder(const std::string &model_path,
+                           bool use_quantization = false) {
+    if constexpr (std::is_same_v<EmbeddedModel, embedded::FastTextEmbedder>) {
+      auto embedder = std::make_unique<embedded::FastTextEmbedder>();
+      embedder->loadModel(std::move(model_path));
+      embedder_ = std::move(embedder);
+    }
 
-  template <typename CompressionAlgorithm>
-  void initialize_compressor();
+    this->use_quantization_ = use_quantization;
 
-  void initialize_index(bool use_quantization);
+    int dimension = std::visit(
+        [](const auto &embedder_ptr) { return embedder_ptr->getDimension(); },
+        embedder_);
+
+    if (use_quantization) {
+      sq_quantizer_ = std::make_unique<utils::ScalarQuantizer>();
+      pq_quantizer_ = std::make_unique<utils::ProductQuantizer>(8, 256);
+      faiss_index_quantized_ = std::make_unique<faiss::IndexFlatL2>(dimension);
+    } else {
+      faiss_index_ = std::make_unique<faiss::IndexFlatL2>(dimension);
+    }
+  }
+
+  template <typename Compressor> void initialize_compressor() {
+    compressor_ = std::make_unique<compression::Compressor>();
+  }
 
   std::string normalize_text(const std::string &text);
   double calculate_cosine_similarity(const std::vector<float> &a,
