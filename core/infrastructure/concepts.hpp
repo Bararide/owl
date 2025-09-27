@@ -66,6 +66,51 @@ concept IsSizable = requires(T &t) {
 template <typename T>
 concept IsIterableAndSizable = IsIterable<T> && IsSizable<T>;
 
+template <typename F>
+concept Functor = requires(F f) {
+  requires requires {
+    { f() } -> std::same_as<std::invoke_result_t<F>>;
+  };
+};
+
+template <typename F, typename... Args>
+concept FunctorWith = requires(F f, Args... args) {
+  { f(args...) } -> std::same_as<std::invoke_result_t<F, Args...>>;
+};
+
+template <typename F, typename... Args>
+concept Callable = requires(F f, Args... args) { f(args...); };
+
+template <typename F, typename Ret, typename... Args>
+concept CallableReturning =
+    Callable<F, Args...> && requires(F f, Args... args) {
+      { f(args...) } -> std::convertible_to<Ret>;
+    };
+
+template <typename F>
+concept SimpleCallable = Callable<F>;
+
+template <typename F, typename Ret>
+concept SimpleCallableReturning = CallableReturning<F, Ret>;
+
+template <typename T>
+concept SimpleAwaitable = requires(T t) {
+  { t.await() };
+};
+
+template <typename T, typename Ret>
+concept AwaitableReturning = requires(T t) {
+  { t.await() } -> std::convertible_to<Ret>;
+};
+
+template <typename T, typename Ret, typename... Args>
+concept AwaitableWith = requires(T t, Args... args) {
+  { t.await(args...) } -> std::convertible_to<Ret>;
+};
+
+template <typename T>
+concept Awaitable = SimpleAwaitable<T>;
+
 template <typename F, typename... Args>
 concept Invocable = std::is_invocable_v<F, Args...>;
 
