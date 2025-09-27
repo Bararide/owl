@@ -8,7 +8,7 @@
 #include <vector>
 #include <infrastructure/notification.hpp>
 
-namespace vfs::utils {
+namespace owl::utils {
 using HttpSuccess = core::utils::Success<Json::Value>;
 using HttpError = core::utils::Error;
 using HttpResult = core::Result<Json::Value, std::runtime_error>;
@@ -141,6 +141,6 @@ auto validate_json_member(const Json::Value &json,
   }
   return success_result(Json::Value{});
 }
-} // namespace vfs::utils
+} // namespace owl::utils
 
 #endif // VECTORFS_UTILS_HTTP_HALPERS_HPP

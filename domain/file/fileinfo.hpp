@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <vector>
 
-namespace vfs::fileinfo {
+namespace owl::fileinfo {
 
 struct FileInfo {
   mode_t mode;
@@ -47,6 +47,6 @@ struct FileInfo {
         modification_time(modification_time), create_time(create_time),
         embedding_updated(false) {}
 };
-} // namespace vfs::fileinfo
+} // namespace owl::fileinfo
 
 #endif // FILEINFO_HPP

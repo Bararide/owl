@@ -8,7 +8,7 @@
 #include <boost/url/parse.hpp>
 #include <boost/url/url.hpp>
 
-namespace vfs::network {
+namespace owl::network {
 namespace handler {
 
 auto create_root_handler() {
@@ -67,7 +67,7 @@ template <typename EmbeddedModel> auto create_file_handler() {
       spdlog::info("File path: {}", path);
       spdlog::info("Content length: {} bytes", content.size());
 
-      auto &shm_manager = vfs::shared::SharedMemoryManager::getInstance();
+      auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
       if (!shm_manager.initialize()) {
         spdlog::error("Failed to initialize shared memory");
         return utils::error_result("Internal server error");
@@ -113,7 +113,7 @@ template <typename EmbeddedModel> auto read_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     auto process_request = [&]() -> utils::HttpResult {
-      auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance()
+      auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
                       .get_vector_fs();
       auto path_param = req->getParameter("path");
 
@@ -163,7 +163,7 @@ template <typename EmbeddedModel> auto semantic_search_handler() {
   return utils::create_handler(
       [](const drogon::HttpRequestPtr &req,
          const std::vector<std::string> &) -> utils::HttpResult {
-        auto &vfs = vfs::instance::VFSInstance<EmbeddedModel>::getInstance()
+        auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
                         .get_vector_fs();
         auto json = req->getJsonObject();
 
@@ -208,6 +208,6 @@ auto rebuild_handler() {
 }
 
 } // namespace handler
-} // namespace vfs::network
+} // namespace owl::network
 
 #endif // VECTORFS_NETWORK_HANDLERS_HPP

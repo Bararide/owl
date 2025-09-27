@@ -6,7 +6,7 @@
 #include <drogon/HttpAppFramework.h>
 #include <memory>
 
-namespace vfs::network {
+namespace owl::network {
 
 template <typename EmbeddedModel> class VectorFSApi {
 public:
@@ -112,6 +112,6 @@ private:
 template <typename EmbeddedModel>
 std::map<std::string, utils::HttpHandler> VectorFSApi<EmbeddedModel>::handlers;
 
-} // namespace vfs::network
+} // namespace owl::network
 
 #endif

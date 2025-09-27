@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace vfs::ipc {
+namespace owl::ipc {
 
 struct FileCreateRequest {
   std::string path;
@@ -27,6 +27,6 @@ struct SyncResponse {
   std::string message;
 };
 
-} // namespace vfs::ipc
+} // namespace owl::ipc
 
 #endif // SHARED_TYPES_HPP

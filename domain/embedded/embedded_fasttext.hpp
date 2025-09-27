@@ -4,7 +4,7 @@
 #include "embedded_base.hpp"
 #include <fasttext.h>
 
-namespace vfs::embedded {
+namespace owl::embedded {
 class FastTextEmbedder;
 
 template <> struct EmbedderTraits<FastTextEmbedder> {
@@ -61,6 +61,6 @@ private:
   int dimension_ = 0;
   bool model_loaded_ = false;
 };
-} // namespace vfs::embedded
+} // namespace owl::embedded
 
 #endif // VECTORFS_EMBEDDED_FASTTEXT_HPP

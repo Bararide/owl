@@ -7,14 +7,16 @@
 
 #include "vectorfs.hpp"
 
-namespace vfs::instance {
+namespace owl::instance {
 
-template <typename EmbeddedModel> class VFSInstance {
+template <typename EmbeddedModel,
+          typename CompressorType = owl::compression::Compressor>
+class VFSInstance {
 public:
   VFSInstance(const VFSInstance &) = delete;
   VFSInstance &operator=(const VFSInstance &) = delete;
 
-  static VFSInstance<EmbeddedModel> &getInstance() {
+  static VFSInstance<EmbeddedModel, CompressorType> &getInstance() {
     if (!instance_) {
       throw std::runtime_error(
           "VFSInstance not initialized. Call initialize() first.");
@@ -26,8 +28,8 @@ public:
     if (instance_) {
       throw std::runtime_error("VFSInstance already initialized");
     }
-    instance_ = std::unique_ptr<VFSInstance<EmbeddedModel>>(
-        new VFSInstance<EmbeddedModel>(model_path));
+    instance_ = std::unique_ptr<VFSInstance<EmbeddedModel, CompressorType>>(
+        new VFSInstance<EmbeddedModel, CompressorType>(model_path));
   }
 
   static void shutdown() { instance_.reset(); }
@@ -56,16 +58,16 @@ public:
 private:
   VFSInstance(const std::string &model_path)
       : vector_fs_(vectorfs::VectorFS::getInstance()) {
-    vector_fs_->initialize<EmbeddedModel>(model_path);
+    vector_fs_->initialize<EmbeddedModel, CompressorType>(model_path);
   }
 
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
-  static std::unique_ptr<VFSInstance<EmbeddedModel>> instance_;
+  static std::unique_ptr<VFSInstance<EmbeddedModel, CompressorType>> instance_;
 };
 
-template <typename EmbeddedModel>
-std::unique_ptr<VFSInstance<EmbeddedModel>>
-    VFSInstance<EmbeddedModel>::instance_ = nullptr;
+template <typename EmbeddedModel, typename CompressorType>
+std::unique_ptr<VFSInstance<EmbeddedModel, CompressorType>>
+    VFSInstance<EmbeddedModel, CompressorType>::instance_ = nullptr;
 
-} // namespace vfs::instance
+} // namespace owl::instance
 #endif // INSTANCE_HPP

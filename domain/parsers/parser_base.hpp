@@ -7,7 +7,7 @@
 #include <string>
 #include <type_traits>
 
-namespace vfs::parser {
+namespace owl::parser {
 
 template <typename Derived> class ParserBase;
 
@@ -30,6 +30,6 @@ private:
   }
 };
 
-} // namespace vfs::parser
+} // namespace owl::parser
 
 #endif // VECTORFS_PARSER_BASE_HPP

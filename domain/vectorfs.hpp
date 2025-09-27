@@ -23,6 +23,7 @@
 #include <infrastructure/measure.hpp>
 #include <spdlog/spdlog.h>
 
+#include "algorithms/compressor/compressor.hpp"
 #include "embedded/embedded_base.hpp"
 #include "embedded/embedded_fasttext.hpp"
 #include "file/fileinfo.hpp"
@@ -30,10 +31,13 @@
 #include "shared_memory/shared_memory.hpp"
 #include "utils/quantization.hpp"
 
-namespace vfs::vectorfs {
+namespace owl::vectorfs {
 
 using EmbedderVariant =
     std::variant<std::unique_ptr<embedded::FastTextEmbedder>>;
+
+using CompressorVariant =
+    std::variant<std::unique_ptr<compression::Compressor>>;
 
 using idx_t = faiss::idx_t;
 
@@ -45,7 +49,7 @@ private:
   std::unique_ptr<faiss::IndexFlatL2> faiss_index_quantized;
   std::unique_ptr<utils::ScalarQuantizer> sq_quantizer;
   std::unique_ptr<utils::ProductQuantizer> pq_quantizer;
-  std::unique_ptr<vfs::shared::SharedMemoryManager> shm_manager;
+  std::unique_ptr<owl::shared::SharedMemoryManager> shm_manager;
   bool index_needs_rebuild;
   bool use_quantization;
   std::map<idx_t, std::string> index_to_path;
@@ -60,6 +64,8 @@ private:
 
   EmbedderVariant embedder_;
   std::string model_type_;
+
+  CompressorVariant compressor_;
 
   std::string normalize_text(const std::string &text);
 
@@ -77,6 +83,51 @@ private:
   std::string generate_enhanced_search_result(const std::string &query);
   void train_quantizers(const std::vector<float> &embeddings, size_t dim);
   std::vector<std::string> predict_next_files();
+
+  std::vector<uint8_t>
+  compress_data(const std::vector<uint8_t> &data) {
+    return std::visit(
+        [&](const auto &compressor) -> std::vector<uint8_t> {
+          auto result = compressor->compress_impl(data);
+          if (result.is_ok()) {
+            return result.unwrap();
+          } else {
+            return data;
+          }
+        },
+        compressor_);
+  }
+
+  std::vector<uint8_t>
+  decompress_data(const std::vector<uint8_t> &compressed_data) {
+    return std::visit(
+        [&](const auto &compressor) -> std::vector<uint8_t> {
+          auto result = compressor->decompress_impl(compressed_data);
+          if (result.is_ok()) {
+            return result.unwrap();
+          } else {
+            return compressed_data;
+          }
+        },
+        compressor_);
+  }
+
+  std::vector<uint8_t>
+  get_compressed_data_from_shm(const std::string &path) {
+    if (!shm_manager || !shm_manager->initialize()) {
+      return {};
+    }
+
+    for (int i = 0; i < shm_manager->getFileCount(); i++) {
+      const auto *shared_info = shm_manager->getFile(i);
+      if (shared_info && std::string(shared_info->path) == path) {
+        std::vector<uint8_t> compressed_data(
+            shared_info->content, shared_info->content + shared_info->size);
+        return decompress_data(compressed_data);
+      }
+    }
+    return {};
+  }
 
 public:
   VectorFS()
@@ -126,10 +177,11 @@ public:
   void record_file_access(const std::string &file_path,
                           const std::string &operation);
 
-  template <typename EmbeddedModel>
+  template <typename EmbeddedModel,
+            typename CompressorType = compression::Compressor>
   bool initialize(const std::string model_path, bool use_quantization = false) {
     try {
-      shm_manager = std::make_unique<vfs::shared::SharedMemoryManager>();
+      shm_manager = std::make_unique<owl::shared::SharedMemoryManager>();
       if (!shm_manager->initialize()) {
         spdlog::warn("Failed to initialize shared memory");
       }
@@ -138,6 +190,12 @@ public:
         auto embedder = std::make_unique<embedded::FastTextEmbedder>();
         embedder->loadModel(std::move(model_path));
         embedder_ = std::move(embedder);
+      }
+
+      if constexpr (std::is_same_v<CompressorType,
+                                   owl::compression::Compressor>) {
+        auto compressor = std::make_unique<owl::compression::Compressor>();
+        compressor_ = std::move(compressor);
       }
 
       this->use_quantization = use_quantization;
@@ -154,10 +212,18 @@ public:
         faiss_index = std::make_unique<faiss::IndexFlatL2>(dimension);
       }
 
+      spdlog::info("VectorFS initialized with {} compressor",
+                   std::visit(
+                       [](const auto &comp) {
+                         return owl::compression::CompressionTraits<
+                             std::decay_t<decltype(*comp)>>::Name;
+                       },
+                       compressor_));
+
       return true;
 
     } catch (const std::exception &e) {
-      spdlog::error("Failed to initialize embedder: {}", e.what());
+      spdlog::error("Failed to initialize VectorFS: {}", e.what());
       return false;
     }
   }
@@ -260,6 +326,6 @@ public:
   void test_semantic_search();
 };
 
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs
 
 #endif // VECTORFS_HPP

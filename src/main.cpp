@@ -27,18 +27,20 @@ int main(int argc, char *argv[]) {
         "crawl-300d-2M-subword.bin";
 
     core::measure::Measure::start();
-    vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::initialize(
-        std::move(fasttext_model_path));
+    owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
+                               owl::compression::Compressor>::
+        initialize(std::move(fasttext_model_path));
     core::measure::Measure::end();
     core::measure::Measure::result<std::chrono::milliseconds>(
-        "VectorFS initialized in {} ms");
+        "VectorFS initialized with compression in {} ms");
 
     core::measure::Measure::start();
-    auto &vectorfs = vfs::instance::VFSInstance<
-        vfs::embedded::FastTextEmbedder>::getInstance();
+    auto &vectorfs =
+        owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
+                                   owl::compression::Compressor>::getInstance();
     core::measure::Measure::end();
     core::measure::Measure::result<std::chrono::milliseconds>(
-        "VectorFS loaded in {} ms");
+        "VectorFS with compression loaded in {} ms");
 
     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
 
@@ -68,7 +70,7 @@ int main(int argc, char *argv[]) {
       core::measure::Measure::cancel();
     }
 
-    auto &shm_manager = vfs::shared::SharedMemoryManager::getInstance();
+    auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
     if (!shm_manager.initialize()) {
       spdlog::warn("Failed to initialize shared memory in main process");
     }
@@ -83,8 +85,8 @@ int main(int argc, char *argv[]) {
                    getpid());
       try {
         auto http_start = std::chrono::high_resolution_clock::now();
-        vfs::network::VectorFSApi<vfs::embedded::FastTextEmbedder>::init();
-        vfs::network::VectorFSApi<vfs::embedded::FastTextEmbedder>::run();
+        owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::init();
+        owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::run();
         auto http_end = std::chrono::high_resolution_clock::now();
         auto http_duration = std::chrono::duration_cast<std::chrono::seconds>(
             http_end - http_start);
@@ -122,7 +124,7 @@ int main(int argc, char *argv[]) {
         spdlog::warn("Failed to terminate HTTP server gracefully");
       }
 
-      vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
+      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
       spdlog::info("VectorFS shutdown complete");
       return result;
     } else {
@@ -133,7 +135,7 @@ int main(int argc, char *argv[]) {
     spdlog::error("Fatal error: {}", e.what());
     core::measure::Measure::cancel();
     try {
-      vfs::instance::VFSInstance<vfs::embedded::FastTextEmbedder>::shutdown();
+      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
     } catch (...) {
     }
     return EXIT_FAILURE;

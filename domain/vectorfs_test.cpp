@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace vfs::vectorfs {
+namespace owl::vectorfs {
 std::string VectorFS::generate_markov_test_result() {
   std::stringstream ss;
   ss << "=== Markov Chain Test Results ===\n\n";
@@ -431,4 +431,4 @@ void VectorFS::test_markov_chains() {
 
   spdlog::info("Markov chains test completed");
 }
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs

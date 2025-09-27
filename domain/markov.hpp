@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace vfs::markov {
+namespace owl::markov {
 
 struct Edge {
   std::string target;
@@ -571,6 +571,6 @@ private:
   }
 };
 
-} // namespace vfs::markov
+} // namespace owl::markov
 
 #endif // MARKOV_RECOMMENDER_HPP

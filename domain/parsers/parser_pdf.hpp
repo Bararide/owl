@@ -4,7 +4,7 @@
 #include "parser_base.hpp"
 #include "parser_utils.hpp"
 
-namespace vfs::parser {
+namespace owl::parser {
 class PdfParser;
 
 template <> struct ParserTraits<PdfParser> {
@@ -21,6 +21,6 @@ public:
 private:
   bool loadSegment(const std::string &path) { return true; }
 };
-} // namespace vfs::parser
+} // namespace owl::parser
 
 #endif // VECTORFS_PARSER_PDF_HPP

@@ -1,7 +1,7 @@
 #ifndef VECTORFS_UTILS_QUANTIZATION_HPP
 #define VECTORFS_UTILS_QUANTIZATION_HPP
 
-namespace vfs::utils {
+namespace owl::utils {
 class ScalarQuantizer {
 private:
   std::vector<float> min_vals;
@@ -273,6 +273,6 @@ public:
   size_t get_m() const { return m; }
   size_t get_k() const { return k; }
 };
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs
 
 #endif // VECTORFS_UTILS_QUANTIZATION_HPP

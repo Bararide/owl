@@ -1,20 +1,23 @@
 #ifndef CORE_INFRASTRUCTURE_RESULT_HPP
 #define CORE_INFRASTRUCTURE_RESULT_HPP
 
+#include "concepts.hpp"
 #include <concepts>
 #include <exception>
 #include <iostream>
 #include <type_traits>
+#include <utility>
 #include <variant>
-#include "concepts.hpp"
 
 namespace core {
-template <typename T, typename Err = std::exception> class Result {
+template <typename T, typename Err = std::runtime_error> class Result {
 private:
   std::variant<T, Err> data;
   bool ok_flag;
 
 public:
+  Result() noexcept : data(T{}), ok_flag(true) {}
+
   template <typename U>
     requires IsConvertable<T, U>
   Result(U &&value) noexcept : data(std::forward<U>(value)), ok_flag(true) {}
@@ -93,8 +96,16 @@ public:
     }
     return err_func(error());
   }
+
+  static Result Ok(T &&value) { return Result(std::forward<T>(value)); }
+  static Result Ok(const T &value) { return Result(value); }
+  static Result Ok() { return Result(); }
+  static Result Error(Err &&error) { return Result(std::forward<Err>(error)); }
+  static Result Error(const Err &error) { return Result(error); }
+  static Result Error() { return Result(Err{"Unknown error"}); }
+  static Result Error(const char *message) { return Result(Err{message}); }
 };
 
-} // namespace result
+} // namespace core
 
 #endif // RESULT_HPP

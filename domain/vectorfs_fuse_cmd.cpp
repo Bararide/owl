@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace vfs::vectorfs {
+namespace owl::vectorfs {
 int VectorFS::getattr(const char *path, struct stat *stbuf,
                       struct fuse_file_info *fi) {
   memset(stbuf, 0, sizeof(struct stat));
@@ -94,7 +94,7 @@ void VectorFS::updateFromSharedMemory() {
     return;
   }
 
-  spdlog::info("Updating from shared memory...");
+  spdlog::info("Updating from shared memory with compression...");
 
   int file_count = shm_manager->getFileCount();
   for (int i = 0; i < file_count; i++) {
@@ -106,7 +106,13 @@ void VectorFS::updateFromSharedMemory() {
         fileinfo::FileInfo fi;
         fi.mode = shared_info->mode;
         fi.size = shared_info->size;
-        fi.content = std::string(shared_info->content, shared_info->size);
+
+        std::vector<uint8_t> compressed_content(
+            shared_info->content, shared_info->content + shared_info->size);
+        auto decompressed_content = decompress_data(compressed_content);
+        fi.content = std::string(decompressed_content.begin(),
+                                 decompressed_content.end());
+
         fi.uid = shared_info->uid;
         fi.gid = shared_info->gid;
         fi.access_time = shared_info->access_time;
@@ -114,8 +120,9 @@ void VectorFS::updateFromSharedMemory() {
         fi.create_time = shared_info->create_time;
 
         virtual_files[path] = fi;
-        spdlog::info("Added file from shared memory: {} ({} bytes)", path,
-                     shared_info->size);
+        spdlog::info(
+            "Added compressed file from shared memory: {} ({} -> {} bytes)",
+            path, shared_info->size, fi.content.size());
 
         update_embedding(path.c_str());
         index_needs_rebuild = true;
@@ -124,7 +131,7 @@ void VectorFS::updateFromSharedMemory() {
   }
 
   shm_manager->clearUpdateFlag();
-  spdlog::info("Shared memory update completed");
+  spdlog::info("Shared memory update with compression completed");
 }
 
 int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
@@ -550,4 +557,4 @@ int VectorFS::listxattr(const char *path, char *list, size_t size) {
 
   return total_size;
 }
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs

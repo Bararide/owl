@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace vfs::vectorfs {
+namespace owl::vectorfs {
 void VectorFS::rebuild_index() {
   if (!index_needs_rebuild)
     return;
@@ -310,4 +310,4 @@ void VectorFS::train_quantizers(const std::vector<float> &embeddings,
 
   spdlog::info("Quantizers trained with {} vectors", num_vectors);
 }
-} // namespace vfs::vectorfs
+} // namespace owl::vectorfs

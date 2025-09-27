@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <vector>
 
-namespace vfs::shared {
+namespace owl::shared {
 
 struct SharedFileInfo {
   char path[1024];
@@ -149,6 +149,6 @@ private:
   SharedMemoryData *data;
 };
 
-} // namespace vfs::shared
+} // namespace owl::shared
 
 #endif // SHARED_MEMORY_HPP
