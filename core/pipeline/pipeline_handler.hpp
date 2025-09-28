@@ -2,16 +2,15 @@
 #define OWL_VECTORFS_PIPELINE_HANDLER_HPP
 
 #include <chrono>
-#include <infrastructure/concepts.hpp>
-#include <infrastructure/event.hpp>
-#include <infrastructure/result.hpp>
+#include "event.hpp"
+#include "result.hpp"
 #include <memory>
 #include <string>
 #include <thread>
 #include <type_traits>
 #include <vector>
 
-namespace owl::pipeline {
+namespace core::pipeline {
 
 class IHandler {
 public:

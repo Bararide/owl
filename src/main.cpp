@@ -1,15 +1,14 @@
 // #include "instance/instance.hpp"
 // #include "network/api.hpp"
 // #include "parsers/parser_pdf.hpp"
-#include "pipeline/pipeline.hpp"
-#include "pipeline/pipeline_handler.hpp"
+#include <pipeline/pipeline.hpp>
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <thread>
 #include <list>
 #include <string>
 
-using namespace owl::pipeline;
+using namespace core::pipeline;
 
 class DataValidator : public PipelineHandler<DataValidator, std::vector<int>> {
 public:
@@ -106,7 +105,7 @@ int main() {
   spdlog::set_level(spdlog::level::info);
 
   std::cout << "=== Processing integers ===" << std::endl;
-  owl::pipeline::Pipeline pipeline;
+  core::pipeline::Pipeline pipeline;
 
   auto validator = std::make_shared<DataValidator>();
   auto transformer = std::make_shared<DataTransformer>();
@@ -137,7 +136,7 @@ int main() {
   std::cout << pipeline.describe() << std::endl;
 
   std::cout << "\n=== Processing strings ===" << std::endl;
-  owl::pipeline::Pipeline string_pipeline;
+  core::pipeline::Pipeline string_pipeline;
   auto string_processor = std::make_shared<StringProcessor>();
   string_pipeline.add_handler(string_processor);
 

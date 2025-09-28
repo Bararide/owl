@@ -12,7 +12,7 @@
 #include <typeinfo>
 #include <vector>
 
-namespace owl::pipeline {
+namespace core::pipeline {
 
 class Pipeline {
 public:
