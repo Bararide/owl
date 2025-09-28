@@ -24,9 +24,16 @@ public:
     using CallbackType = std::function<void(const EventType &)>;
   };
 
-  template <template <typename> typename EventType, typename T>
-  handlerID Subscribe(std::function<void(const EventType<T> &)> handler) {
-    return SubscribeSingle<EventType<T>>(std::move(handler));
+  Event() = default;
+
+  Event(const Event &) = delete;
+  Event &operator=(const Event &) = delete;
+  Event(Event &&) = delete;
+  Event &operator=(Event &&) = delete;
+
+  template <typename EventType>
+  handlerID Subscribe(std::function<void(const EventType &)> handler) {
+    return SubscribeSingle<EventType>(std::move(handler));
   }
 
   template <typename... EventTypes>
@@ -64,9 +71,27 @@ public:
     return id;
   }
 
-  template <typename... EventTypes> void Unsubscribe(handlerID id) {
+  void Unsubscribe(handlerID id) {
     std::unique_lock lock(handler_mutex);
-    (UnsubscribeSingle<EventTypes>(id), ...);
+
+    for (auto it = event_handlers.begin(); it != event_handlers.end();) {
+      it->second->removeHandler(id);
+      if (it->second->empty()) {
+        it = event_handlers.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    for (auto it = chain_event_handlers.begin();
+         it != chain_event_handlers.end();) {
+      it->second->removeHandler(id);
+      if (it->second->empty()) {
+        it = chain_event_handlers.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 
   template <typename EventType> void Notify(const EventType &event) {
@@ -110,17 +135,37 @@ public:
 private:
   struct BaseHandler {
     virtual ~BaseHandler() = default;
+    virtual void removeHandler(handlerID id) = 0;
+    virtual bool empty() const = 0;
   };
 
   template <typename EventType> struct HandlerList : BaseHandler {
     using CallbackType = typename EventT<EventType>::CallbackType;
     std::vector<std::pair<handlerID, CallbackType>> handlers;
+
+    void removeHandler(handlerID id) override {
+      handlers.erase(
+          std::remove_if(handlers.begin(), handlers.end(),
+                         [id](const auto &pair) { return pair.first == id; }),
+          handlers.end());
+    }
+
+    bool empty() const override { return handlers.empty(); }
   };
 
   template <typename InputType, typename OutputType>
   struct ChainHandlerList : BaseHandler {
     using HandlerType = std::function<OutputType(const InputType &)>;
     std::vector<std::pair<handlerID, HandlerType>> handlers;
+
+    void removeHandler(handlerID id) override {
+      handlers.erase(
+          std::remove_if(handlers.begin(), handlers.end(),
+                         [id](const auto &pair) { return pair.first == id; }),
+          handlers.end());
+    }
+
+    bool empty() const override { return handlers.empty(); }
   };
 
   std::unordered_map<eventID, std::shared_ptr<BaseHandler>> event_handlers;
@@ -166,23 +211,8 @@ private:
     auto &handler_list = static_cast<HandlerList<EventType> &>(*base_handler);
     handler_list.handlers.emplace_back(id, std::move(handler));
   }
-
-  template <typename EventType> void UnsubscribeSingle(handlerID id) {
-    auto event_id = GetEventID<EventType>();
-    auto it = event_handlers.find(event_id);
-
-    if (it != event_handlers.end()) {
-      auto &handler_list = static_cast<HandlerList<EventType> &>(*it->second);
-      auto &handlers = handler_list.handlers;
-
-      handlers.erase(
-          std::remove_if(handlers.begin(), handlers.end(),
-                         [id](const auto &pair) { return pair.first == id; }),
-          handlers.end());
-    }
-  }
 };
 
 } // namespace core
 
-#endif // EVENT_HPP
+#endif // CORE_INFRASTRUCTURE_EVENT_HPP

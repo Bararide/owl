@@ -1,143 +1,283 @@
-#include "instance/instance.hpp"
-#include "network/api.hpp"
-#include "parsers/parser_pdf.hpp"
+// #include "instance/instance.hpp"
+// #include "network/api.hpp"
+// #include "parsers/parser_pdf.hpp"
+#include "pipeline/pipeline.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <iostream>
+#include <spdlog/spdlog.h>
+#include <sstream>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 
-std::atomic<bool> running{true};
+using namespace owl::pipeline;
 
-void signal_handler(int signal) {
-  spdlog::info("Received signal {}, shutting down...", signal);
-  running = false;
-}
+class DataValidator : public PipelineHandler<DataValidator> {
+public:
+  core::Result<std::vector<int>> handle(const std::vector<int> &data) {
+    std::cout << "DataValidator processing " << data.size() << " elements"
+              << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-int main(int argc, char *argv[]) {
-  try {
-    std::signal(SIGINT, signal_handler);
-    std::signal(SIGTERM, signal_handler);
-    spdlog::set_level(spdlog::level::info);
-    spdlog::info("Starting VectorFS...");
-
-    const std::string fasttext_model_path =
-        "/home/bararide/code/models/crawl-300d-2M-subword/"
-        "crawl-300d-2M-subword.bin";
-
-    core::measure::Measure::start();
-    owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
-                               owl::compression::Compressor>::
-        initialize(std::move(fasttext_model_path));
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "VectorFS initialized with compression in {} ms");
-
-    core::measure::Measure::start();
-    auto &vectorfs =
-        owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
-                                   owl::compression::Compressor>::getInstance();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "VectorFS with compression loaded in {} ms");
-
-    spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
-
-    core::measure::Measure::start();
-    vectorfs.test_semantic_search();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "Semantic search test completed in {} ms");
-
-    core::measure::Measure::start();
-    vectorfs.test_markov_model();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "Markov search test completed in {} ms");
-
-    try {
-      core::measure::Measure::start();
-      auto embedding = vectorfs.get_embedding("test sentence");
-      core::measure::Measure::end();
-      auto embed_duration =
-          core::measure::Measure::duration<std::chrono::microseconds>();
-      spdlog::info(
-          "Embedding generated successfully, dimension: {}, time: {} μs",
-          embedding.size(), embed_duration.count());
-    } catch (const std::exception &e) {
-      spdlog::warn("Embedding test failed: {}", e.what());
-      core::measure::Measure::cancel();
+    if (data.empty()) {
+      return core::Result<std::vector<int>>::Error("Empty data");
     }
 
-    auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-    if (!shm_manager.initialize()) {
-      spdlog::warn("Failed to initialize shared memory in main process");
-    }
-
-    core::measure::Measure::start();
-
-    pid_t http_pid = fork();
-    if (http_pid == 0) {
-      core::measure::Measure::reset();
-
-      spdlog::info("Starting HTTP server in child process (PID: {})...",
-                   getpid());
-      try {
-        auto http_start = std::chrono::high_resolution_clock::now();
-        owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::init();
-        owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::run();
-        auto http_end = std::chrono::high_resolution_clock::now();
-        auto http_duration = std::chrono::duration_cast<std::chrono::seconds>(
-            http_end - http_start);
-        spdlog::info("HTTP server ran for {} seconds", http_duration.count());
-      } catch (const std::exception &e) {
-        spdlog::error("HTTP server error: {}", e.what());
-        exit(EXIT_FAILURE);
+    // Проверяем данные
+    for (const auto &item : data) {
+      if (item < 0) {
+        return core::Result<std::vector<int>>::Error("Negative values found");
       }
-      exit(0);
-    } else if (http_pid > 0) {
-      spdlog::info("Starting FUSE in parent process (PID: {})...", getpid());
-      std::this_thread::sleep_for(std::chrono::seconds(2));
-
-      auto fuse_start = std::chrono::high_resolution_clock::now();
-      int result = vectorfs.initialize_fuse(argc, argv);
-      auto fuse_end = std::chrono::high_resolution_clock::now();
-      auto fuse_duration = std::chrono::duration_cast<std::chrono::seconds>(
-          fuse_end - fuse_start);
-
-      core::measure::Measure::end();
-      auto total_duration =
-          core::measure::Measure::duration<std::chrono::seconds>();
-
-      spdlog::info("FUSE exited with code: {}, ran for {} seconds", result,
-                   fuse_duration.count());
-      spdlog::info("Total application runtime: {} seconds",
-                   total_duration.count());
-
-      spdlog::info("Stopping HTTP server...");
-      if (kill(http_pid, SIGTERM) == 0) {
-        int status;
-        waitpid(http_pid, &status, 0);
-        spdlog::info("HTTP server terminated with status: {}", status);
-      } else {
-        spdlog::warn("Failed to terminate HTTP server gracefully");
-      }
-
-      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
-      spdlog::info("VectorFS shutdown complete");
-      return result;
-    } else {
-      spdlog::error("Failed to fork process for HTTP server");
-      return EXIT_FAILURE;
     }
-  } catch (const std::exception &e) {
-    spdlog::error("Fatal error: {}", e.what());
-    core::measure::Measure::cancel();
-    try {
-      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
-    } catch (...) {
-    }
-    return EXIT_FAILURE;
+
+    std::cout << "DataValidator: validation passed" << std::endl;
+    return core::Result<std::vector<int>>::Ok(data);
   }
+
+  void await() override {
+    std::cout << "DataValidator awaiting..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+private:
+  void doCompare(const std::vector<std::shared_ptr<IHandler>> &data,
+                 std::string &result) override {
+    result = "DataValidator";
+  }
+};
+
+class DataTransformer : public PipelineHandler<DataTransformer> {
+public:
+  core::Result<std::vector<int>> handle(const std::vector<int> &data) {
+    std::cout << "DataTransformer processing " << data.size() << " elements"
+              << std::endl;
+
+    std::vector<int> transformed = data;
+    for (auto &item : transformed) {
+      item += 10;
+    }
+
+    std::cout << "Transformed data: ";
+    for (const auto &item : transformed) {
+      std::cout << item << " ";
+    }
+    std::cout << std::endl;
+
+    return core::Result<std::vector<int>>::Ok(transformed);
+  }
+
+  void await() override {
+    std::cout << "DataTransformer awaiting..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+private:
+  void doCompare(const std::vector<std::shared_ptr<IHandler>> &data,
+                 std::string &result) override {
+    result = "DataTransformer";
+  }
+};
+
+class DataLogger : public PipelineHandler<DataLogger> {
+public:
+  core::Result<std::vector<int>> handle(const std::vector<int> &data) {
+    std::cout << "DataLogger received " << data.size() << " elements"
+              << std::endl;
+    std::cout << "Final data: ";
+    for (const auto &item : data) {
+      std::cout << item << " ";
+    }
+    std::cout << std::endl;
+
+    return core::Result<std::vector<int>>::Ok(data);
+  }
+
+  void await() override {
+    std::cout << "DataLogger awaiting..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+
+private:
+  void doCompare(const std::vector<std::shared_ptr<IHandler>> &data,
+                 std::string &result) override {
+    result = "DataLogger";
+  }
+};
+
+int main() {
+  owl::pipeline::Pipeline pipeline;
+
+  auto validator = std::make_shared<DataValidator>();
+  auto transformer = std::make_shared<DataTransformer>();
+  auto logger = std::make_shared<DataLogger>();
+
+  pipeline.add_handler(validator);
+  pipeline.add_handler(transformer);
+  pipeline.add_handler(logger);
+
+  std::vector<int> data = {1, 2, 3, 4, 5};
+
+  std::cout << "Original data: ";
+  for (const auto &item : data) {
+    std::cout << item << " ";
+  }
+  std::cout << std::endl;
+
+  spdlog::info("Starting pipeline processing...");
+  auto result = pipeline.process(data);
+  spdlog::info("Pipeline processing completed.");
+
+  if (result.is_ok()) {
+    std::cout << "Processing successful!" << std::endl;
+    auto processed_data = result.value();
+    std::cout << "Final result: ";
+    for (const auto &item : processed_data) {
+      std::cout << item << " ";
+    }
+    std::cout << std::endl;
+  } else {
+    std::cout << "Processing failed: " << result.error().what() << std::endl;
+  }
+
+  std::cout << pipeline.describe() << std::endl;
+
+  return 0;
 }
+
+// std::atomic<bool> running{true};
+
+// void signal_handler(int signal) {
+//   spdlog::info("Received signal {}, shutting down...", signal);
+//   running = false;
+// }
+
+// int main(int argc, char *argv[]) {
+//   try {
+//     std::signal(SIGINT, signal_handler);
+//     std::signal(SIGTERM, signal_handler);
+//     spdlog::set_level(spdlog::level::info);
+//     spdlog::info("Starting VectorFS...");
+
+//     const std::string fasttext_model_path =
+//         "/home/bararide/code/models/crawl-300d-2M-subword/"
+//         "crawl-300d-2M-subword.bin";
+
+//     core::measure::Measure::start();
+//     owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
+//                                owl::compression::Compressor>::
+//         initialize(std::move(fasttext_model_path));
+//     core::measure::Measure::end();
+//     core::measure::Measure::result<std::chrono::milliseconds>(
+//         "VectorFS initialized with compression in {} ms");
+
+//     core::measure::Measure::start();
+//     auto &vectorfs =
+//         owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
+//                                    owl::compression::Compressor>::getInstance();
+//     core::measure::Measure::end();
+//     core::measure::Measure::result<std::chrono::milliseconds>(
+//         "VectorFS with compression loaded in {} ms");
+
+//     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
+
+//     core::measure::Measure::start();
+//     vectorfs.test_semantic_search();
+//     core::measure::Measure::end();
+//     core::measure::Measure::result<std::chrono::milliseconds>(
+//         "Semantic search test completed in {} ms");
+
+//     core::measure::Measure::start();
+//     vectorfs.test_markov_model();
+//     core::measure::Measure::end();
+//     core::measure::Measure::result<std::chrono::milliseconds>(
+//         "Markov search test completed in {} ms");
+
+//     try {
+//       core::measure::Measure::start();
+//       auto embedding = vectorfs.get_embedding("test sentence");
+//       core::measure::Measure::end();
+//       auto embed_duration =
+//           core::measure::Measure::duration<std::chrono::microseconds>();
+//       spdlog::info(
+//           "Embedding generated successfully, dimension: {}, time: {} μs",
+//           embedding.size(), embed_duration.count());
+//     } catch (const std::exception &e) {
+//       spdlog::warn("Embedding test failed: {}", e.what());
+//       core::measure::Measure::cancel();
+//     }
+
+//     auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
+//     if (!shm_manager.initialize()) {
+//       spdlog::warn("Failed to initialize shared memory in main process");
+//     }
+
+//     core::measure::Measure::start();
+
+//     pid_t http_pid = fork();
+//     if (http_pid == 0) {
+//       core::measure::Measure::reset();
+
+//       spdlog::info("Starting HTTP server in child process (PID: {})...",
+//                    getpid());
+//       try {
+//         auto http_start = std::chrono::high_resolution_clock::now();
+//         owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::init();
+//         owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::run();
+//         auto http_end = std::chrono::high_resolution_clock::now();
+//         auto http_duration =
+//         std::chrono::duration_cast<std::chrono::seconds>(
+//             http_end - http_start);
+//         spdlog::info("HTTP server ran for {} seconds",
+//         http_duration.count());
+//       } catch (const std::exception &e) {
+//         spdlog::error("HTTP server error: {}", e.what());
+//         exit(EXIT_FAILURE);
+//       }
+//       exit(0);
+//     } else if (http_pid > 0) {
+//       spdlog::info("Starting FUSE in parent process (PID: {})...", getpid());
+//       std::this_thread::sleep_for(std::chrono::seconds(2));
+
+//       auto fuse_start = std::chrono::high_resolution_clock::now();
+//       int result = vectorfs.initialize_fuse(argc, argv);
+//       auto fuse_end = std::chrono::high_resolution_clock::now();
+//       auto fuse_duration = std::chrono::duration_cast<std::chrono::seconds>(
+//           fuse_end - fuse_start);
+
+//       core::measure::Measure::end();
+//       auto total_duration =
+//           core::measure::Measure::duration<std::chrono::seconds>();
+
+//       spdlog::info("FUSE exited with code: {}, ran for {} seconds", result,
+//                    fuse_duration.count());
+//       spdlog::info("Total application runtime: {} seconds",
+//                    total_duration.count());
+
+//       spdlog::info("Stopping HTTP server...");
+//       if (kill(http_pid, SIGTERM) == 0) {
+//         int status;
+//         waitpid(http_pid, &status, 0);
+//         spdlog::info("HTTP server terminated with status: {}", status);
+//       } else {
+//         spdlog::warn("Failed to terminate HTTP server gracefully");
+//       }
+
+//       owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
+//       spdlog::info("VectorFS shutdown complete");
+//       return result;
+//     } else {
+//       spdlog::error("Failed to fork process for HTTP server");
+//       return EXIT_FAILURE;
+//     }
+//   } catch (const std::exception &e) {
+//     spdlog::error("Fatal error: {}", e.what());
+//     core::measure::Measure::cancel();
+//     try {
+//       owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
+//     } catch (...) {
+//     }
+//     return EXIT_FAILURE;
+//   }
+// }
