@@ -2,30 +2,24 @@
 // #include "network/api.hpp"
 // #include "parsers/parser_pdf.hpp"
 #include "pipeline/pipeline.hpp"
-#include <atomic>
-#include <chrono>
-#include <csignal>
+#include "pipeline/pipeline_handler.hpp"
 #include <iostream>
 #include <spdlog/spdlog.h>
-#include <sstream>
-#include <sys/wait.h>
 #include <thread>
-#include <unistd.h>
+#include <list>
+#include <string>
 
 using namespace owl::pipeline;
 
-class DataValidator : public PipelineHandler<DataValidator> {
+class DataValidator : public PipelineHandler<DataValidator, std::vector<int>> {
 public:
-  core::Result<std::vector<int>> handle(const std::vector<int> &data) {
-    std::cout << "DataValidator processing " << data.size() << " elements"
-              << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  core::Result<std::vector<int>> handle(const std::vector<int> &data) override {
+    std::cout << "DataValidator processing " << data.size() << " elements" << std::endl;
 
     if (data.empty()) {
       return core::Result<std::vector<int>>::Error("Empty data");
     }
 
-    // Проверяем данные
     for (const auto &item : data) {
       if (item < 0) {
         return core::Result<std::vector<int>>::Error("Negative values found");
@@ -38,21 +32,13 @@ public:
 
   void await() override {
     std::cout << "DataValidator awaiting..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  }
-
-private:
-  void doCompare(const std::vector<std::shared_ptr<IHandler>> &data,
-                 std::string &result) override {
-    result = "DataValidator";
   }
 };
 
-class DataTransformer : public PipelineHandler<DataTransformer> {
+class DataTransformer : public PipelineHandler<DataTransformer, std::vector<int>> {
 public:
-  core::Result<std::vector<int>> handle(const std::vector<int> &data) {
-    std::cout << "DataTransformer processing " << data.size() << " elements"
-              << std::endl;
+  core::Result<std::vector<int>> handle(const std::vector<int> &data) override {
+    std::cout << "DataTransformer processing " << data.size() << " elements" << std::endl;
 
     std::vector<int> transformed = data;
     for (auto &item : transformed) {
@@ -70,21 +56,14 @@ public:
 
   void await() override {
     std::cout << "DataTransformer awaiting..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  }
-
-private:
-  void doCompare(const std::vector<std::shared_ptr<IHandler>> &data,
-                 std::string &result) override {
-    result = "DataTransformer";
   }
 };
 
-class DataLogger : public PipelineHandler<DataLogger> {
+class DataLogger : public PipelineHandler<DataLogger, std::vector<int>> {
 public:
-  core::Result<std::vector<int>> handle(const std::vector<int> &data) {
-    std::cout << "DataLogger received " << data.size() << " elements"
-              << std::endl;
+  core::Result<std::vector<int>> handle(const std::vector<int> &data) override {
+    std::cout << "DataLogger received " << data.size() << " elements" << std::endl;
+    
     std::cout << "Final data: ";
     for (const auto &item : data) {
       std::cout << item << " ";
@@ -98,15 +77,35 @@ public:
     std::cout << "DataLogger awaiting..." << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
+};
 
-private:
-  void doCompare(const std::vector<std::shared_ptr<IHandler>> &data,
-                 std::string &result) override {
-    result = "DataLogger";
+class StringProcessor : public PipelineHandler<StringProcessor, std::list<std::string>, std::list<std::string>> {
+public:
+  core::Result<std::list<std::string>> handle(const std::list<std::string> &data) override {
+    std::cout << "StringProcessor processing " << data.size() << " strings" << std::endl;
+
+    std::list<std::string> processed;
+    for (const auto &str : data) {
+      std::string upper = str;
+      for (auto &c : upper) {
+        c = std::toupper(c);
+      }
+      processed.push_back(upper);
+      std::cout << "Processed: " << str << " -> " << upper << std::endl;
+    }
+
+    return core::Result<std::list<std::string>>::Ok(processed);
+  }
+
+  void await() override {
+    std::cout << "StringProcessor awaiting..." << std::endl;
   }
 };
 
 int main() {
+  spdlog::set_level(spdlog::level::info);
+
+  std::cout << "=== Processing integers ===" << std::endl;
   owl::pipeline::Pipeline pipeline;
 
   auto validator = std::make_shared<DataValidator>();
@@ -125,23 +124,44 @@ int main() {
   }
   std::cout << std::endl;
 
-  spdlog::info("Starting pipeline processing...");
   auto result = pipeline.process(data);
-  spdlog::info("Pipeline processing completed.");
 
   if (result.is_ok()) {
     std::cout << "Processing successful!" << std::endl;
     auto processed_data = result.value();
-    std::cout << "Final result: ";
-    for (const auto &item : processed_data) {
-      std::cout << item << " ";
-    }
-    std::cout << std::endl;
+    std::cout << "Final result size: " << processed_data.size() << " elements" << std::endl;
   } else {
     std::cout << "Processing failed: " << result.error().what() << std::endl;
   }
 
   std::cout << pipeline.describe() << std::endl;
+
+  std::cout << "\n=== Processing strings ===" << std::endl;
+  owl::pipeline::Pipeline string_pipeline;
+  auto string_processor = std::make_shared<StringProcessor>();
+  string_pipeline.add_handler(string_processor);
+
+  std::list<std::string> strings = {"hello", "world", "test"};
+  
+  std::cout << "Original strings: ";
+  for (const auto &str : strings) {
+    std::cout << str << " ";
+  }
+  std::cout << std::endl;
+
+  auto string_result = string_pipeline.process(strings);
+
+  if (string_result.is_ok()) {
+    std::cout << "String processing successful!" << std::endl;
+    auto processed_strings = string_result.value();
+    std::cout << "Processed strings: ";
+    for (const auto &str : processed_strings) {
+      std::cout << str << " ";
+    }
+    std::cout << std::endl;
+  } else {
+    std::cout << "String processing failed: " << string_result.error().what() << std::endl;
+  }
 
   return 0;
 }
