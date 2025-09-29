@@ -89,7 +89,7 @@ public:
                       [this, data]() { return process(data); });
   }
 
-  std::string describe() const {
+  [[nodiscard]] std::string describe() const {
     std::string result =
         "Pipeline with " + std::to_string(handlers_.size()) + " handlers:\n";
     for (size_t i = 0; i < handlers_.size(); ++i) {
@@ -99,8 +99,8 @@ public:
     return result;
   }
 
-  bool empty() const { return handlers_.empty(); }
-  size_t size() const { return handlers_.size(); }
+  [[nodiscard]] bool empty() const { return handlers_.empty(); }
+  [[nodiscard]] int size() const noexcept { return handlers_.size(); }
 
 private:
   template <typename T>
