@@ -3,6 +3,7 @@
 // #include "parsers/parser_pdf.hpp"
 #include "application.hpp"
 #include "network/capnproto.hpp"
+#include <csignal>
 #include <iostream>
 #include <list>
 #include <pipeline/pipeline.hpp>
@@ -14,19 +15,87 @@ static constexpr const char *kEmbedderModel =
     "/home/bararide/code/models/crawl-300d-2M-subword/"
     "crawl-300d-2M-subword.bin";
 
+std::atomic<bool> g_shutdown_requested{false};
+
+void signalHandler(int signal) {
+  spdlog::info("Received signal: {}, initiating shutdown...", signal);
+  g_shutdown_requested.store(true);
+}
+
+void setupSignalHandlers() {
+  std::signal(SIGINT, signalHandler);
+  std::signal(SIGTERM, signalHandler);
+  std::signal(SIGQUIT, signalHandler);
+
+  std::signal(SIGPIPE, SIG_IGN);
+}
+
 int main(int argc, char *argv[]) {
-  spdlog::set_level(spdlog::level::info);
+  setupSignalHandlers();
 
-  auto app = owl::app::Application<>(argc, argv);
-  auto result = app.run(kEmbedderModel);
+  spdlog::info("Starting VectorFS Application");
 
-  if (result.is_ok()) {
-    spdlog::info("Application finished successfully");
-    return 0;
+  int exit_code = 0;
+  int restart_count = 0;
+  const int max_restarts = 5;
+
+  while (!g_shutdown_requested && restart_count < max_restarts) {
+    try {
+      auto app = owl::app::Application<>(argc, argv);
+      auto init_result = app.run(kEmbedderModel);
+
+      if (!init_result.is_ok()) {
+        spdlog::error("Failed to initialize application: {}",
+                      init_result.error().what());
+        return 1;
+      }
+
+      auto run_result = app.spin(g_shutdown_requested);
+
+      if (run_result.is_ok()) {
+        spdlog::info("Application finished successfully");
+        exit_code = 0;
+        break;
+      } else {
+        spdlog::error("Application finished with error: {}",
+                      run_result.error().what());
+
+        if (!g_shutdown_requested) {
+          restart_count++;
+          spdlog::warn("Restarting application (attempt {}/{})", restart_count,
+                       max_restarts);
+
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+          continue;
+        } else {
+          exit_code = 1;
+          break;
+        }
+      }
+
+    } catch (const std::exception &e) {
+      spdlog::critical("Unhandled exception in main: {}", e.what());
+
+      if (!g_shutdown_requested && restart_count < max_restarts) {
+        restart_count++;
+        spdlog::warn("Restarting after exception (attempt {}/{})",
+                     restart_count, max_restarts);
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        continue;
+      } else {
+        exit_code = 1;
+        break;
+      }
+    }
   }
 
-  spdlog::error("Application finished with error: {}", result.error().what());
-  return 1;
+  if (restart_count >= max_restarts) {
+    spdlog::critical("Maximum restart attempts reached. Exiting.");
+    exit_code = 1;
+  }
+
+  spdlog::info("Application shutdown complete");
+  return exit_code;
 }
 
 // class DataValidator : public PipelineHandler<DataValidator, std::vector<int>>
@@ -275,9 +344,11 @@ int main(int argc, char *argv[]) {
 //         owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::init();
 //         owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::run();
 //         auto http_end = std::chrono::high_resolution_clock::now();
-//         auto http_duration = std::chrono::duration_cast<std::chrono::seconds>(
+//         auto http_duration =
+//         std::chrono::duration_cast<std::chrono::seconds>(
 //             http_end - http_start);
-//         spdlog::info("HTTP server ran for {} seconds", http_duration.count());
+//         spdlog::info("HTTP server ran for {} seconds",
+//         http_duration.count());
 //       } catch (const std::exception &e) {
 //         spdlog::error("HTTP server error: {}", e.what());
 //         exit(EXIT_FAILURE);
