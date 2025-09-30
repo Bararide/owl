@@ -30,36 +30,43 @@ public:
     model_loaded_ = true;
   }
 
-  std::vector<float> getSentenceEmbeddingImpl(const std::string &text) {
-    validateModelLoaded();
-
-    std::istringstream iss(text);
-    fasttext::Vector vec(dimension_);
-    fasttext_->getSentenceVector(iss, vec);
-
-    std::vector<float> embedding(dimension_);
-    for (int i = 0; i < dimension_; ++i) {
-      embedding[i] = vec[i];
-    }
-    return embedding;
+  std::string getEmbedderInfo() const {
+    return fmt::format("Model: {}, Dimension: {}", getModelName(),
+                       getDimension());
   }
 
-  int getDimensionImpl() const {
-    validateModelLoaded();
-    return dimension_;
-  }
 
-  std::string getModelNameImpl() const {
-    return EmbedderTraits<FastTextEmbedder>::ModelName;
-  }
+std::vector<float>
+getSentenceEmbeddingImpl(const std::string &text) {
+  validateModelLoaded();
 
-  bool isModelLoadedImpl() const { return model_loaded_; }
+  std::istringstream iss(text);
+  fasttext::Vector vec(dimension_);
+  fasttext_->getSentenceVector(iss, vec);
+
+  std::vector<float> embedding(dimension_);
+  for (int i = 0; i < dimension_; ++i) {
+    embedding[i] = vec[i];
+  }
+  return embedding;
+}
+
+int getDimensionImpl() const {
+  validateModelLoaded();
+  return dimension_;
+}
+
+std::string getModelNameImpl() const {
+  return EmbedderTraits<FastTextEmbedder>::ModelName;
+}
+
+bool isModelLoadedImpl() const { return model_loaded_; }
 
 private:
-  std::unique_ptr<fasttext::FastText> fasttext_;
-  std::string model_path_;
-  int dimension_ = 0;
-  bool model_loaded_ = false;
+std::unique_ptr<fasttext::FastText> fasttext_;
+std::string model_path_;
+int dimension_ = 0;
+bool model_loaded_ = false;
 };
 } // namespace owl::embedded
 

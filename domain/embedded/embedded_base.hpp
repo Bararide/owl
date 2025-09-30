@@ -42,6 +42,10 @@ public:
     return static_cast<const Derived *>(this)->isModelLoadedImpl();
   }
 
+  std::string getEmbedderInfo() const {
+    return static_cast<const Derived *>(this)->getEmbedderInfo();
+  }
+
   virtual ~EmbeddedBase() = default;
 
 protected:

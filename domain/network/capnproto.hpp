@@ -8,8 +8,11 @@
 #include <memory>
 #include <unordered_map>
 
-#include "shared_memory/shared_memory.hpp"
+#include <infrastructure/event.hpp>
+
 #include "instance/instance.hpp"
+#include "schemas/fileinfo.hpp"
+#include "shared_memory/shared_memory.hpp"
 #include "vectorfs.capnp.h"
 
 namespace owl::capnp {
@@ -19,11 +22,22 @@ class VectorFSServiceImpl final : public VectorFSService::Server {
 public:
   VectorFSServiceImpl() = default;
 
+  core::Result<bool>
+  addEventService(const std::shared_ptr<core::Event> event_service) {
+    try {
+      event_service_ = event_service;
+      return core::Result<bool>(true);
+    } catch (const std::exception &e) {
+      return core::Result<bool>(false);
+    }
+  }
+
 protected:
   kj::Promise<void> createFile(CreateFileContext context) override {
     auto request = context.getParams().getRequest();
     std::string path = request.getPath();
     std::string content = request.getContent();
+    std::string name = request.getName();
 
     spdlog::info("=== File Creation Request ===");
     spdlog::info("File path: {}", path);
@@ -54,15 +68,26 @@ protected:
 
       response.setSuccess(true);
       auto fileInfo = response.initFile();
+      fileInfo.setName(name);
       fileInfo.setPath(path);
       fileInfo.setContent(content);
       fileInfo.setSize(content.size());
       fileInfo.setCreated(true);
 
+      schemas::FileInfo fileinfo = schemas::FileInfo();
+
+      fileinfo.path = path;
+      fileinfo.created = true;
+      fileinfo.name = name;
+      fileinfo.size = content.size();
+      fileinfo.content = content;
+
       spdlog::info("File creation completed successfully:");
       spdlog::info("  Path: {}", path);
       spdlog::info("  Size: {} bytes", content.size());
       spdlog::info("=============================");
+
+      event_service_->Notify(fileinfo);
 
     } catch (const kj::Exception &e) {
       spdlog::error("Error in createFile: {}", e.getDescription().cStr());
@@ -229,8 +254,11 @@ protected:
 
     return kj::READY_NOW;
   }
+
+private:
+  std::shared_ptr<core::Event> event_service_;
 };
 
-} // namespace owl::capnp_server
+} // namespace owl::capnp
 
 #endif // VECTORFS_CAPNP_SERVER_HPP

@@ -5,9 +5,10 @@ using Cxx = import "/capnp/c++.capnp";
 struct FileInfo {
     path @0 :Text;
     content @1 :Text;
-    size @2 :UInt64;
-    mode @3 :UInt32;
-    created @4 :Bool;
+    name @2 :Text;
+    size @3 :UInt64;
+    mode @4 :UInt32;
+    created @5 :Bool;
 }
 
 struct SearchResult {
@@ -33,6 +34,7 @@ struct FileRequest {
 struct FileCreateRequest {
     path @0 :Text;
     content @1 :Text;
+    name @2 :Text;
 }
 
 struct FileResponse {
