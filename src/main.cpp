@@ -1,6 +1,3 @@
-// #include "instance/instance.hpp"
-// #include "network/api.hpp"
-// #include "parsers/parser_pdf.hpp"
 #include "application.hpp"
 #include "network/capnproto.hpp"
 #include <csignal>
