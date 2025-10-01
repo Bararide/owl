@@ -1,169 +1,366 @@
-// #include "instance/instance.hpp"
-// #include "network/api.hpp"
-// #include "parsers/parser_pdf.hpp"
-#include <pipeline/pipeline.hpp>
+#include "application.hpp"
+#include "network/capnproto.hpp"
+#include <csignal>
 #include <iostream>
-#include <spdlog/spdlog.h>
-#include <thread>
 #include <list>
+#include <pipeline/pipeline.hpp>
+#include <spdlog/spdlog.h>
 #include <string>
+#include <thread>
 
-using namespace core::pipeline;
+static constexpr const char *kEmbedderModel =
+    "/home/bararide/code/models/crawl-300d-2M-subword/"
+    "crawl-300d-2M-subword.bin";
 
-class DataValidator : public PipelineHandler<DataValidator, std::vector<int>> {
-public:
-  core::Result<std::vector<int>> handle(const std::vector<int> &data) override {
-    std::cout << "DataValidator processing " << data.size() << " elements" << std::endl;
+std::atomic<bool> g_shutdown_requested{false};
 
-    if (data.empty()) {
-      return core::Result<std::vector<int>>::Error("Empty data");
-    }
-
-    for (const auto &item : data) {
-      if (item < 0) {
-        return core::Result<std::vector<int>>::Error("Negative values found");
-      }
-    }
-
-    std::cout << "DataValidator: validation passed" << std::endl;
-    return core::Result<std::vector<int>>::Ok(data);
-  }
-
-  void await() override {
-    std::cout << "DataValidator awaiting..." << std::endl;
-  }
-};
-
-class DataTransformer : public PipelineHandler<DataTransformer, std::vector<int>> {
-public:
-  core::Result<std::vector<int>> handle(const std::vector<int> &data) override {
-    std::cout << "DataTransformer processing " << data.size() << " elements" << std::endl;
-
-    std::vector<int> transformed = data;
-    for (auto &item : transformed) {
-      item += 10;
-    }
-
-    std::cout << "Transformed data: ";
-    for (const auto &item : transformed) {
-      std::cout << item << " ";
-    }
-    std::cout << std::endl;
-
-    return core::Result<std::vector<int>>::Ok(transformed);
-  }
-
-  void await() override {
-    std::cout << "DataTransformer awaiting..." << std::endl;
-  }
-};
-
-class DataLogger : public PipelineHandler<DataLogger, std::vector<int>> {
-public:
-  core::Result<std::vector<int>> handle(const std::vector<int> &data) override {
-    std::cout << "DataLogger received " << data.size() << " elements" << std::endl;
-    
-    std::cout << "Final data: ";
-    for (const auto &item : data) {
-      std::cout << item << " ";
-    }
-    std::cout << std::endl;
-
-    return core::Result<std::vector<int>>::Ok(data);
-  }
-
-  void await() override {
-    std::cout << "DataLogger awaiting..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  }
-};
-
-class StringProcessor : public PipelineHandler<StringProcessor, std::list<std::string>, std::list<std::string>> {
-public:
-  core::Result<std::list<std::string>> handle(const std::list<std::string> &data) override {
-    std::cout << "StringProcessor processing " << data.size() << " strings" << std::endl;
-
-    std::list<std::string> processed;
-    for (const auto &str : data) {
-      std::string upper = str;
-      for (auto &c : upper) {
-        c = std::toupper(c);
-      }
-      processed.push_back(upper);
-      std::cout << "Processed: " << str << " -> " << upper << std::endl;
-    }
-
-    return core::Result<std::list<std::string>>::Ok(processed);
-  }
-
-  void await() override {
-    std::cout << "StringProcessor awaiting..." << std::endl;
-  }
-};
-
-int main() {
-  spdlog::set_level(spdlog::level::info);
-
-  std::cout << "=== Processing integers ===" << std::endl;
-  core::pipeline::Pipeline pipeline;
-
-  auto validator = std::make_shared<DataValidator>();
-  auto transformer = std::make_shared<DataTransformer>();
-  auto logger = std::make_shared<DataLogger>();
-
-  pipeline.add_handler(validator);
-  pipeline.add_handler(transformer);
-  pipeline.add_handler(logger);
-
-  std::vector<int> data = {1, 2, 3, 4, 5};
-
-  std::cout << "Original data: ";
-  for (const auto &item : data) {
-    std::cout << item << " ";
-  }
-  std::cout << std::endl;
-
-  auto result = pipeline.process(data);
-
-  if (result.is_ok()) {
-    std::cout << "Processing successful!" << std::endl;
-    auto processed_data = result.value();
-    std::cout << "Final result size: " << processed_data.size() << " elements" << std::endl;
-  } else {
-    std::cout << "Processing failed: " << result.error().what() << std::endl;
-  }
-
-  std::cout << pipeline.describe() << std::endl;
-
-  std::cout << "\n=== Processing strings ===" << std::endl;
-  core::pipeline::Pipeline string_pipeline;
-  auto string_processor = std::make_shared<StringProcessor>();
-  string_pipeline.add_handler(string_processor);
-
-  std::list<std::string> strings = {"hello", "world", "test"};
-  
-  std::cout << "Original strings: ";
-  for (const auto &str : strings) {
-    std::cout << str << " ";
-  }
-  std::cout << std::endl;
-
-  auto string_result = string_pipeline.process(strings);
-
-  if (string_result.is_ok()) {
-    std::cout << "String processing successful!" << std::endl;
-    auto processed_strings = string_result.value();
-    std::cout << "Processed strings: ";
-    for (const auto &str : processed_strings) {
-      std::cout << str << " ";
-    }
-    std::cout << std::endl;
-  } else {
-    std::cout << "String processing failed: " << string_result.error().what() << std::endl;
-  }
-
-  return 0;
+void signalHandler(int signal) {
+  spdlog::info("Received signal: {}, initiating shutdown...", signal);
+  g_shutdown_requested.store(true);
 }
+
+void setupSignalHandlers() {
+  std::signal(SIGINT, signalHandler);
+  std::signal(SIGTERM, signalHandler);
+  std::signal(SIGQUIT, signalHandler);
+
+  std::signal(SIGPIPE, SIG_IGN);
+}
+
+void printUsage(const char *program_name) {
+  std::cout << "Usage: " << program_name << " [OPTIONS]" << std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout
+      << "  --server ADDRESS    Set server address (default: 0.0.0.0:12345)"
+      << std::endl;
+  std::cout << "  --model PATH        Path to embedder model file" << std::endl;
+  std::cout << "  --quantization      Enable quantization" << std::endl;
+  std::cout << "  --help              Show this help message" << std::endl;
+  std::cout << std::endl;
+  std::cout << "Examples:" << std::endl;
+  std::cout << "  " << program_name << " --server localhost:8080" << std::endl;
+  std::cout << "  " << program_name << " --server 0.0.0.0:54321 --quantization"
+            << std::endl;
+}
+
+void testServerConnection(owl::app::Application<> &app) {
+  spdlog::info("Testing server connection...");
+
+  auto status_result = app.getServerStatus();
+  if (status_result.is_ok()) {
+    spdlog::info("Server is running on: {}", app.getServerAddress());
+
+    app.createClient();
+
+  } else {
+    spdlog::error("Server is not running: {}", status_result.error().what());
+  }
+}
+
+int main(int argc, char *argv[]) {
+  setupSignalHandlers();
+
+  std::string server_address = "127.0.0.1:5346";
+  std::string model_path = kEmbedderModel;
+  bool use_quantization = false;
+
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--server" && i + 1 < argc) {
+      server_address = argv[++i];
+    } else if (arg == "--model" && i + 1 < argc) {
+      model_path = argv[++i];
+    } else if (arg == "--quantization") {
+      use_quantization = true;
+    } else if (arg == "--help") {
+      printUsage(argv[0]);
+      return 0;
+    } else {
+      spdlog::warn("Unknown argument: {}", arg);
+      printUsage(argv[0]);
+      return 1;
+    }
+  }
+
+  spdlog::info("Starting VectorFS Application");
+  spdlog::info("Configuration:");
+  spdlog::info("  Server address: {}", server_address);
+  spdlog::info("  Model path: {}", model_path);
+  spdlog::info("  Quantization: {}", use_quantization ? "enabled" : "disabled");
+
+  int exit_code = 0;
+  int restart_count = 0;
+  const int max_restarts = 5;
+
+  while (!g_shutdown_requested && restart_count < max_restarts) {
+    try {
+      auto app = owl::app::Application<>(argc, argv);
+
+      spdlog::info("Initializing application...");
+      auto init_result = app.run(model_path, use_quantization);
+
+      if (!init_result.is_ok()) {
+        spdlog::error("Failed to initialize application: {}",
+                      init_result.error().what());
+
+        if (!g_shutdown_requested && restart_count < max_restarts) {
+          restart_count++;
+          spdlog::warn("Restarting application (attempt {}/{})", restart_count,
+                       max_restarts);
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+          continue;
+        } else {
+          return 1;
+        }
+      }
+
+      testServerConnection(app);
+      try {
+        owl::capnp::TestClient client("127.0.0.1:5346");
+        client.testConnection();
+      } catch (const std::exception &e) {
+        std::cerr << "Failed to create client: " << e.what() << std::endl;
+        return 1;
+      }
+
+      spdlog::info(
+          "Application initialized successfully. Starting main loop...");
+
+      auto run_result = app.spin(g_shutdown_requested);
+
+      if (run_result.is_ok()) {
+        spdlog::info("Application finished successfully");
+        exit_code = 0;
+        break;
+      } else {
+        spdlog::error("Application finished with error: {}",
+                      run_result.error().what());
+
+        if (!g_shutdown_requested) {
+          restart_count++;
+          spdlog::warn("Restarting application (attempt {}/{})", restart_count,
+                       max_restarts);
+
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+          continue;
+        } else {
+          exit_code = 1;
+          break;
+        }
+      }
+
+    } catch (const std::exception &e) {
+      spdlog::critical("Unhandled exception in main: {}", e.what());
+
+      if (!g_shutdown_requested && restart_count < max_restarts) {
+        restart_count++;
+        spdlog::warn("Restarting after exception (attempt {}/{})",
+                     restart_count, max_restarts);
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        continue;
+      } else {
+        exit_code = 1;
+        break;
+      }
+    }
+  }
+
+  if (restart_count >= max_restarts) {
+    spdlog::critical("Maximum restart attempts reached. Exiting.");
+    exit_code = 1;
+  }
+
+  spdlog::info("Application shutdown complete");
+  return exit_code;
+}
+
+// void testClientOperations() {
+//   try {
+//     spdlog::info("Testing client operations...");
+
+//     auto client = owl::capnp::VectorFSClient("localhost:12345");
+//     auto service = client.getService();
+
+//     capnp::MallocMessageBuilder message;
+//     auto createRequest =
+//         message.initRoot<owl::capnp::VectorFSService::CreateFileRequest>();
+//     auto request = createRequest.initRequest();
+//     request.setPath("/test/file.txt");
+//     request.setName("test_file");
+//     request.setContent("Hello, World!");
+
+//     spdlog::info("Client test completed");
+
+//   } catch (const std::exception &e) {
+//     spdlog::error("Client test failed: {}", e.what());
+//   }
+// }
+
+// class DataValidator : public PipelineHandler<DataValidator, std::vector<int>>
+// { public:
+//   core::Result<std::vector<int>> handle(const std::vector<int> &data)
+//   override {
+//     std::cout << "DataValidator processing " << data.size() << " elements" <<
+//     std::endl;
+
+//     if (data.empty()) {
+//       return core::Result<std::vector<int>>::Error("Empty data");
+//     }
+
+//     for (const auto &item : data) {
+//       if (item < 0) {
+//         return core::Result<std::vector<int>>::Error("Negative values
+//         found");
+//       }
+//     }
+
+//     std::cout << "DataValidator: validation passed" << std::endl;
+//     return core::Result<std::vector<int>>::Ok(data);
+//   }
+
+//   void await() override {
+//     std::cout << "DataValidator awaiting..." << std::endl;
+//   }
+// };
+
+// class DataTransformer : public PipelineHandler<DataTransformer,
+// std::vector<int>> { public:
+//   core::Result<std::vector<int>> handle(const std::vector<int> &data)
+//   override {
+//     std::cout << "DataTransformer processing " << data.size() << " elements"
+//     << std::endl;
+
+//     std::vector<int> transformed = data;
+//     for (auto &item : transformed) {
+//       item += 10;
+//     }
+
+//     std::cout << "Transformed data: ";
+//     for (const auto &item : transformed) {
+//       std::cout << item << " ";
+//     }
+//     std::cout << std::endl;
+
+//     return core::Result<std::vector<int>>::Ok(transformed);
+//   }
+
+//   void await() override {
+//     std::cout << "DataTransformer awaiting..." << std::endl;
+//   }
+// };
+
+// class DataLogger : public PipelineHandler<DataLogger, std::vector<int>> {
+// public:
+//   core::Result<std::vector<int>> handle(const std::vector<int> &data)
+//   override {
+//     std::cout << "DataLogger received " << data.size() << " elements" <<
+//     std::endl;
+
+//     std::cout << "Final data: ";
+//     for (const auto &item : data) {
+//       std::cout << item << " ";
+//     }
+//     std::cout << std::endl;
+
+//     return core::Result<std::vector<int>>::Ok(data);
+//   }
+
+//   void await() override {
+//     std::cout << "DataLogger awaiting..." << std::endl;
+//     std::this_thread::sleep_for(std::chrono::milliseconds(2));
+//   }
+// };
+
+// class StringProcessor : public PipelineHandler<StringProcessor,
+// std::list<std::string>, std::list<std::string>> { public:
+//   core::Result<std::list<std::string>> handle(const std::list<std::string>
+//   &data) override {
+//     std::cout << "StringProcessor processing " << data.size() << " strings"
+//     << std::endl;
+
+//     std::list<std::string> processed;
+//     for (const auto &str : data) {
+//       std::string upper = str;
+//       for (auto &c : upper) {
+//         c = std::toupper(c);
+//       }
+//       processed.push_back(upper);
+//       std::cout << "Processed: " << str << " -> " << upper << std::endl;
+//     }
+
+//     return core::Result<std::list<std::string>>::Ok(processed);
+//   }
+
+//   void await() override {
+//     std::cout << "StringProcessor awaiting..." << std::endl;
+//   }
+// };
+
+// int main() {
+//   spdlog::set_level(spdlog::level::info);
+
+//   std::cout << "=== Processing integers ===" << std::endl;
+//   core::pipeline::Pipeline pipeline;
+
+//   auto validator = std::make_shared<DataValidator>();
+//   auto transformer = std::make_shared<DataTransformer>();
+//   auto logger = std::make_shared<DataLogger>();
+
+//   pipeline.add_handler(validator);
+//   pipeline.add_handler(transformer);
+//   pipeline.add_handler(logger);
+
+//   std::vector<int> data = {1, 2, 3, 4, 5};
+
+//   std::cout << "Original data: ";
+//   for (const auto &item : data) {
+//     std::cout << item << " ";
+//   }
+//   std::cout << std::endl;
+
+//   auto result = pipeline.process(data);
+
+//   if (result.is_ok()) {
+//     std::cout << "Processing successful!" << std::endl;
+//     auto processed_data = result.value();
+//     std::cout << "Final result size: " << processed_data.size() << "
+//     elements" << std::endl;
+//   } else {
+//     std::cout << "Processing failed: " << result.error().what() << std::endl;
+//   }
+
+//   std::cout << pipeline.describe() << std::endl;
+
+//   std::cout << "\n=== Processing strings ===" << std::endl;
+//   core::pipeline::Pipeline string_pipeline;
+//   auto string_processor = std::make_shared<StringProcessor>();
+//   string_pipeline.add_handler(string_processor);
+
+//   std::list<std::string> strings = {"hello", "world", "test"};
+
+//   std::cout << "Original strings: ";
+//   for (const auto &str : strings) {
+//     std::cout << str << " ";
+//   }
+//   std::cout << std::endl;
+
+//   auto string_result = string_pipeline.process(strings);
+
+//   if (string_result.is_ok()) {
+//     std::cout << "String processing successful!" << std::endl;
+//     auto processed_strings = string_result.value();
+//     std::cout << "Processed strings: ";
+//     for (const auto &str : processed_strings) {
+//       std::cout << str << " ";
+//     }
+//     std::cout << std::endl;
+//   } else {
+//     std::cout << "String processing failed: " << string_result.error().what()
+//     << std::endl;
+//   }
+
+//   return 0;
+// }
 
 // std::atomic<bool> running{true};
 

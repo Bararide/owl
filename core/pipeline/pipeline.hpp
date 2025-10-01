@@ -3,6 +3,7 @@
 
 #include "event.hpp"
 #include "pipeline_handler.hpp"
+#include <functional>
 #include <future>
 #include <map>
 #include <memory>
@@ -35,9 +36,8 @@ public:
 
   ~Pipeline() { cleanup_all_chains(); }
 
-  template <typename Handler>
-  void add_handler(std::shared_ptr<Handler> handler) {
-    handlers_.push_back(handler);
+  template <typename Handler> void add_handler(Handler &handler) {
+    handlers_.push_back(std::ref(handler));
   }
 
   template <typename T> core::Result<T> process(const T &data) {
@@ -57,27 +57,27 @@ public:
     auto promise = std::make_shared<std::promise<core::Result<T>>>();
     auto future = promise->get_future();
 
-    auto last_handler = handlers_.back();
-    auto final_handler_id = last_handler->get_event_bus().template Subscribe<T>(
+    auto &last_handler = handlers_.back().get();
+    auto final_handler_id = last_handler.get_event_bus().template Subscribe<T>(
         [promise](const T &final_data) {
           promise->set_value(core::Result<T>::Ok(final_data));
         });
 
     spdlog::info("Starting processing through event chain");
 
-    auto first_handler = handlers_.front();
-    first_handler->await();
+    auto &first_handler = handlers_.front().get();
+    first_handler.await();
 
-    auto first_result = dynamic_call_handle<T>(first_handler.get(), data);
+    auto first_result = dynamic_call_handle<T>(&first_handler, data);
     if (first_result.is_ok()) {
-      first_handler->get_event_bus().Notify(first_result.value());
+      first_handler.get_event_bus().Notify(first_result.value());
     } else {
       promise->set_value(first_result);
     }
 
     auto result = future.get();
 
-    last_handler->get_event_bus().Unsubscribe(final_handler_id);
+    last_handler.get_event_bus().Unsubscribe(final_handler_id);
     cleanup_all_chains();
 
     return result;
@@ -89,18 +89,18 @@ public:
                       [this, data]() { return process(data); });
   }
 
-  std::string describe() const {
+  [[nodiscard]] std::string describe() const {
     std::string result =
         "Pipeline with " + std::to_string(handlers_.size()) + " handlers:\n";
     for (size_t i = 0; i < handlers_.size(); ++i) {
       result += "  " + std::to_string(i) + ": " +
-                handlers_[i]->get_type_info() + "\n";
+                handlers_[i].get().get_type_info() + "\n";
     }
     return result;
   }
 
-  bool empty() const { return handlers_.empty(); }
-  size_t size() const { return handlers_.size(); }
+  [[nodiscard]] bool empty() const { return handlers_.empty(); }
+  [[nodiscard]] size_t size() const noexcept { return handlers_.size(); }
 
 private:
   template <typename T>
@@ -111,7 +111,7 @@ private:
     }
 
     spdlog::error("Handler type mismatch for type: {}", typeid(T).name());
-    return core::Result<T>::Error("Handler cannot process type: ");
+    return core::Result<T>::Error("Handler cannot process type");
   }
 
   template <typename T> bool setup_handler_chain() {
@@ -121,36 +121,25 @@ private:
     spdlog::info("Setting up handler chain for type: {}", typeid(T).name());
 
     for (size_t i = 0; i < handlers_.size() - 1; ++i) {
-      auto current_handler = handlers_[i];
-      auto next_handler = handlers_[i + 1];
-
-      if (!current_handler || !next_handler) {
-        spdlog::error("Invalid handler at position {}", i);
-        return false;
-      }
-
-      if (!dynamic_cast<ITypedHandler<T, T> *>(current_handler.get())) {
-        spdlog::error("Handler {} cannot process type {}", i, typeid(T).name());
-        return false;
-      }
+      auto &current_handler = handlers_[i].get();
+      auto &next_handler = handlers_[i + 1].get();
 
       auto subscription_id =
-          current_handler->get_event_bus().template Subscribe<T>(
-              [next_handler, this](const T &data) {
+          current_handler.get_event_bus().template Subscribe<T>(
+              [&next_handler, this](const T &data) {
                 spdlog::debug("Passing data to next handler");
-                next_handler->await();
+                next_handler.await();
 
-                auto result =
-                    this->dynamic_call_handle<T>(next_handler.get(), data);
+                auto result = this->dynamic_call_handle<T>(&next_handler, data);
                 if (result.is_ok()) {
-                  next_handler->get_event_bus().Notify(result.value());
+                  next_handler.get_event_bus().Notify(result.value());
                 } else {
                   spdlog::error("Handler chain interrupted: {}",
                                 result.error().what());
                 }
               });
 
-      chain_subscriptions_.push_back({current_handler.get(), subscription_id});
+      chain_subscriptions_.push_back({&current_handler, subscription_id});
     }
 
     return true;
@@ -164,11 +153,11 @@ private:
   }
 
 private:
-  std::vector<std::shared_ptr<IHandler>> handlers_;
+  std::vector<std::reference_wrapper<IHandler>> handlers_;
   std::vector<std::pair<IHandler *, core::Event::handlerID>>
       chain_subscriptions_;
 };
 
-} // namespace owl::pipeline
+} // namespace core::pipeline
 
 #endif // OWL_VECTORFS_PIPELINE_HPP

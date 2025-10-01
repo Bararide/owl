@@ -67,6 +67,21 @@ private:
 public:
   SemanticGraph() : gen(rd()) {}
 
+  SemanticGraph(SemanticGraph &&other) noexcept
+      : adjacency_list(std::move(other.adjacency_list)),
+        node_importance(std::move(other.node_importance)),
+        access_history(std::move(other.access_history)), rd(), gen(rd()) {}
+
+  SemanticGraph &operator=(SemanticGraph &&other) noexcept {
+    if (this != &other) {
+      adjacency_list = std::move(other.adjacency_list);
+      node_importance = std::move(other.node_importance);
+      access_history = std::move(other.access_history);
+      gen = std::mt19937(rd());
+    }
+    return *this;
+  }
+
   void add_edge(std::string from, std::string to, double semantic_similarity,
                 int usage_weight = 1) {
     double edge_weight = semantic_similarity * (1.0 + std::log(usage_weight));
