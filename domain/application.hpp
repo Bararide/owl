@@ -159,7 +159,17 @@ public:
   Application(const Application &) = delete;
   Application(Application &&) = delete;
 
-  ~Application() { shutdown(); }
+  ~Application() {
+    if (is_running_.load()) {
+      shutdown();
+    }
+
+    stopServer();
+
+    if (server_thread_ && server_thread_->joinable()) {
+      server_thread_->detach();
+    }
+  }
 
 private:
   void parseCommandLineArgs() {
@@ -373,6 +383,8 @@ private:
         spdlog::info("Server thread stopped");
       });
 
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
       if (server_->isRunning()) {
         spdlog::info("Server started successfully on address: {}",
                      server_address_);
@@ -393,7 +405,21 @@ private:
 
     if (server_thread_ && server_thread_->joinable()) {
       spdlog::info("Stopping server thread...");
-      server_thread_->join();
+
+      auto start = std::chrono::steady_clock::now();
+      auto timeout = std::chrono::seconds(3);
+
+      while (server_->isRunning() &&
+             std::chrono::steady_clock::now() - start < timeout) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+
+      if (server_thread_->joinable()) {
+        if (server_thread_->get_id() != std::this_thread::get_id()) {
+          server_thread_->detach();
+        }
+      }
+
       server_thread_.reset();
       spdlog::info("Server thread stopped");
     }

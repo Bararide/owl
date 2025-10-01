@@ -286,24 +286,27 @@ public:
     running_.store(true);
 
     try {
-      auto service_own =
-          kj::heap<VectorFSServiceImpl<EmbeddedModel>>(*service_impl);
-      server_ =
-          kj::heap<::capnp::EzRpcServer>(kj::mv(service_own), address_.c_str());
+      server_ = std::make_unique<::capnp::EzRpcServer>(
+          kj::heap<VectorFSServiceImpl<EmbeddedModel>>(*service_impl),
+          address_.c_str());
 
       spdlog::info("Cap'n Proto server started on {}", address_);
 
       auto &waitScope = server_->getWaitScope();
       kj::NEVER_DONE.wait(waitScope);
 
+    } catch (const kj::Exception &e) {
+      spdlog::error("KJ Exception in server: {}", e.getDescription().cStr());
     } catch (const std::exception &e) {
       spdlog::error("Server run exception: {}", e.what());
-      running_.store(false);
     }
+
+    running_.store(false);
   }
 
   void stop() {
     if (running_.exchange(false)) {
+      spdlog::info("Stopping server...");
       if (server_) {
         server_ = nullptr;
       }
@@ -315,7 +318,7 @@ public:
 private:
   std::string address_;
   std::unique_ptr<VectorFSServiceImpl<EmbeddedModel>> service_impl;
-  kj::Own<::capnp::EzRpcServer> server_;
+  std::unique_ptr<::capnp::EzRpcServer> server_;
   std::atomic<bool> running_{false};
 };
 
