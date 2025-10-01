@@ -68,7 +68,7 @@ void VectorFS::rebuild_index() {
 std::vector<float> VectorFS::get_embedding(const std::string &text) {
   return std::visit(
       [&text](auto &embedder_ptr) {
-        return embedder_ptr->getSentenceEmbedding(text);
+        return embedder_ptr->getSentenceEmbedding(text).unwrap();
       },
       embedder_);
 }
@@ -98,7 +98,7 @@ VectorFS::semantic_search(const std::string &query, int k) {
     return results;
   }
   std::string normalized_query = normalize_text(query);
-  std::vector<float> query_embedding = std::visit(
+  auto query_embedding = std::visit(
       [&normalized_query](auto &embedder_ptr) {
         return embedder_ptr->getSentenceEmbedding(normalized_query);
       },
@@ -107,8 +107,8 @@ VectorFS::semantic_search(const std::string &query, int k) {
   std::vector<float> D(k);
   if (use_quantization && faiss_index_quantized) {
     if (pq_quantizer->is_trained()) {
-      std::vector<uint8_t> query_codes = pq_quantizer->encode(query_embedding);
-      pq_quantizer->precompute_query_tables(query_embedding);
+      std::vector<uint8_t> query_codes = pq_quantizer->encode(query_embedding.unwrap());
+      pq_quantizer->precompute_query_tables(query_embedding.unwrap());
       std::vector<std::pair<float, std::string>> scored_results;
       for (const auto &[idx, path] : index_to_path) {
         const auto &file_info = virtual_files[path];
@@ -123,7 +123,7 @@ VectorFS::semantic_search(const std::string &query, int k) {
       }
     }
   } else if (faiss_index) {
-    faiss_index->search(1, query_embedding.data(), k, D.data(), I.data());
+    faiss_index->search(1, query_embedding.unwrap().data(), k, D.data(), I.data());
     for (int i = 0; i < k; ++i) {
       if (I[i] >= 0 && index_to_path.find(I[i]) != index_to_path.end()) {
         results.push_back({index_to_path[I[i]], D[i]});
@@ -188,7 +188,7 @@ void VectorFS::update_embedding(const std::string &path) {
     std::string normalized_content = normalize_text(it->second.content);
     it->second.embedding = std::visit(
         [&normalized_content](auto &embedder_ptr) {
-          return embedder_ptr->getSentenceEmbedding(normalized_content);
+          return embedder_ptr->getSentenceEmbedding(normalized_content).unwrap();
         },
         embedder_);
     it->second.embedding_updated = true;

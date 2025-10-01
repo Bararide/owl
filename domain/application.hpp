@@ -326,6 +326,11 @@ private:
   core::Result<bool> initializePipeline() {
     try {
       create_file_pipeline_ = core::pipeline::Pipeline();
+      if constexpr (std::is_same_v<EmbeddingModel,
+                                   embedded::FastTextEmbedder>) {
+        create_file_pipeline_.add_handler(
+            std::get<embedded::FastTextEmbedder>(embedder_));
+      }
       spdlog::info("Pipeline initialized");
       return core::Result<bool>::Ok(true);
     } catch (const std::exception &e) {

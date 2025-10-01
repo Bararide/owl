@@ -31,8 +31,8 @@ public:
     static_cast<Derived *>(this)->loadModelImpl(model_path);
   }
 
-  std::vector<float> getSentenceEmbedding(const std::string &text) {
-    return static_cast<Derived *>(this)->getSentenceEmbeddingImpl(text);
+  core::Result<std::vector<float>> getSentenceEmbedding(const std::string &text) {
+    return static_cast<Derived *>(this)->getSentenceEmbedding(text);
   }
 
   int getDimension() const {

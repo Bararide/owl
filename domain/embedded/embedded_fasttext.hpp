@@ -35,7 +35,8 @@ public:
                        getDimension());
   }
 
-  std::vector<float> getSentenceEmbeddingImpl(const std::string &text) {
+  core::Result<std::vector<float>>
+  getSentenceEmbedding(const std::string &text) {
     validateModelLoaded();
 
     std::istringstream iss(text);
@@ -46,7 +47,7 @@ public:
     for (int i = 0; i < dimension_; ++i) {
       embedding[i] = vec[i];
     }
-    return embedding;
+    return core::Result<std::vector<float>>::Ok(embedding);
   }
 
   int getDimensionImpl() const {
@@ -58,7 +59,18 @@ public:
     return EmbedderTraits<FastTextEmbedder>::ModelName;
   }
 
-  core::Result<schemas::FileInfo> handle(const schemas::FileInfo& file) {
+  core::Result<schemas::FileInfo> handle(const schemas::FileInfo &file) {
+    if (file.content.has_value()) {
+      auto result = getSentenceEmbedding(file.content.value());
+
+      if (result.is_ok()) {
+        spdlog::info("create embedding for file {} success", file.name.value());
+      } else {
+        spdlog::error("create embedding fault");
+      }
+    } else {
+      spdlog::error("file not have content");
+    }
 
     return core::Result<schemas::FileInfo>::Ok(file);
   }
