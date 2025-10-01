@@ -27,10 +27,66 @@ void setupSignalHandlers() {
   std::signal(SIGPIPE, SIG_IGN);
 }
 
+void printUsage(const char *program_name) {
+  std::cout << "Usage: " << program_name << " [OPTIONS]" << std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout
+      << "  --server ADDRESS    Set server address (default: 0.0.0.0:12345)"
+      << std::endl;
+  std::cout << "  --model PATH        Path to embedder model file" << std::endl;
+  std::cout << "  --quantization      Enable quantization" << std::endl;
+  std::cout << "  --help              Show this help message" << std::endl;
+  std::cout << std::endl;
+  std::cout << "Examples:" << std::endl;
+  std::cout << "  " << program_name << " --server localhost:8080" << std::endl;
+  std::cout << "  " << program_name << " --server 0.0.0.0:54321 --quantization"
+            << std::endl;
+}
+
+void testServerConnection(owl::app::Application<> &app) {
+  spdlog::info("Testing server connection...");
+
+  auto status_result = app.getServerStatus();
+  if (status_result.is_ok()) {
+    spdlog::info("✓ Server is running on: {}", app.getServerAddress());
+
+    app.createClient();
+
+  } else {
+    spdlog::error("✗ Server is not running: {}", status_result.error().what());
+  }
+}
+
 int main(int argc, char *argv[]) {
   setupSignalHandlers();
 
+  std::string server_address = "127.0.0.1:5346";
+  std::string model_path = kEmbedderModel;
+  bool use_quantization = false;
+
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--server" && i + 1 < argc) {
+      server_address = argv[++i];
+    } else if (arg == "--model" && i + 1 < argc) {
+      model_path = argv[++i];
+    } else if (arg == "--quantization") {
+      use_quantization = true;
+    } else if (arg == "--help") {
+      printUsage(argv[0]);
+      return 0;
+    } else {
+      spdlog::warn("Unknown argument: {}", arg);
+      printUsage(argv[0]);
+      return 1;
+    }
+  }
+
   spdlog::info("Starting VectorFS Application");
+  spdlog::info("Configuration:");
+  spdlog::info("  Server address: {}", server_address);
+  spdlog::info("  Model path: {}", model_path);
+  spdlog::info("  Quantization: {}", use_quantization ? "enabled" : "disabled");
 
   int exit_code = 0;
   int restart_count = 0;
@@ -39,13 +95,36 @@ int main(int argc, char *argv[]) {
   while (!g_shutdown_requested && restart_count < max_restarts) {
     try {
       auto app = owl::app::Application<>(argc, argv);
-      auto init_result = app.run(kEmbedderModel);
+
+      spdlog::info("Initializing application...");
+      auto init_result = app.run(model_path, use_quantization);
 
       if (!init_result.is_ok()) {
         spdlog::error("Failed to initialize application: {}",
                       init_result.error().what());
+
+        if (!g_shutdown_requested && restart_count < max_restarts) {
+          restart_count++;
+          spdlog::warn("Restarting application (attempt {}/{})", restart_count,
+                       max_restarts);
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+          continue;
+        } else {
+          return 1;
+        }
+      }
+
+      testServerConnection(app);
+      try {
+        owl::capnp::TestClient client("127.0.0.1:5346");
+        client.testConnection();
+      } catch (const std::exception &e) {
+        std::cerr << "Failed to create client: " << e.what() << std::endl;
         return 1;
       }
+
+      spdlog::info(
+          "Application initialized successfully. Starting main loop...");
 
       auto run_result = app.spin(g_shutdown_requested);
 
@@ -94,6 +173,28 @@ int main(int argc, char *argv[]) {
   spdlog::info("Application shutdown complete");
   return exit_code;
 }
+
+// void testClientOperations() {
+//   try {
+//     spdlog::info("Testing client operations...");
+
+//     auto client = owl::capnp::VectorFSClient("localhost:12345");
+//     auto service = client.getService();
+
+//     capnp::MallocMessageBuilder message;
+//     auto createRequest =
+//         message.initRoot<owl::capnp::VectorFSService::CreateFileRequest>();
+//     auto request = createRequest.initRequest();
+//     request.setPath("/test/file.txt");
+//     request.setName("test_file");
+//     request.setContent("Hello, World!");
+
+//     spdlog::info("Client test completed");
+
+//   } catch (const std::exception &e) {
+//     spdlog::error("Client test failed: {}", e.what());
+//   }
+// }
 
 // class DataValidator : public PipelineHandler<DataValidator, std::vector<int>>
 // { public:

@@ -6,6 +6,7 @@
 #include <memory>
 #include <pipeline/pipeline.hpp>
 #include <spdlog/spdlog.h>
+#include <thread>
 
 #include "algorithms/compressor/compressor.hpp"
 #include "embedded/embedded_fasttext.hpp"
@@ -36,10 +37,13 @@ public:
   Application(int argc, char **argv)
       : argc_(argc), argv_(argv),
         last_ranking_update_(std::chrono::steady_clock::now()),
-        is_running_(false) {}
+        is_running_(false), server_address_("127.0.0.1:5346") {
+
+    parseCommandLineArgs();
+  }
 
   core::Result<bool> run(const std::string embedder_model,
-                                bool use_quantization = false) {
+                         bool use_quantization = false) {
     spdlog::info("Starting VectorFS Application initialization");
 
     std::vector<std::function<core::Result<bool>()>> init_steps = {
@@ -77,7 +81,8 @@ public:
 
     is_running_.store(true);
     spdlog::info("Application initialized successfully");
-    return core::Result<bool>::Ok(true);
+
+    return startServer();
   }
 
   core::Result<bool> spin(std::atomic<bool> &shutdown_requested) {
@@ -90,6 +95,17 @@ public:
 
     try {
       while (!shutdown_requested && is_running_.load()) {
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - last_health_check >= health_check_interval) {
+          checkServerHealth();
+          last_health_check = now;
+        }
+
+        if (now - last_ranking_update >= ranking_update_interval) {
+          updateRanking();
+          last_ranking_update = now;
+        }
 
         processEvents();
 
@@ -107,8 +123,37 @@ public:
   core::Result<bool> shutdown() {
     spdlog::info("Initiating application shutdown");
     is_running_.store(false);
+    stopServer();
     cleanup();
     return core::Result<bool>::Ok(true);
+  }
+
+  core::Result<bool> restartServer(const std::string &new_address = "") {
+    if (!new_address.empty()) {
+      server_address_ = new_address;
+    }
+
+    stopServer();
+    return startServer();
+  }
+
+  core::Result<bool> getServerStatus() {
+    if (!server_ || !server_->isRunning()) {
+      return core::Result<bool>::Error("Server is not running");
+    }
+    return core::Result<bool>::Ok(true);
+  }
+
+  std::string getServerAddress() const { return server_address_; }
+
+  void createClient(const std::string &address = "") {
+    try {
+      std::string client_address = address.empty() ? server_address_ : address;
+      auto client = std::make_unique<capnp::VectorFSClient>(client_address);
+      spdlog::info("Client created for address: {}", client_address);
+    } catch (const std::exception &e) {
+      spdlog::error("Failed to create client: {}", e.what());
+    }
   }
 
   Application &operator=(const Application &) = delete;
@@ -119,11 +164,29 @@ public:
   ~Application() { shutdown(); }
 
 private:
+  void parseCommandLineArgs() {
+    for (int i = 1; i < argc_; ++i) {
+      std::string arg = argv_[i];
+      if (arg == "--server" && i + 1 < argc_) {
+        server_address_ = argv_[++i];
+        spdlog::info("Server address from command line: {}", server_address_);
+      } else if (arg == "--help") {
+        printHelp();
+      }
+    }
+  }
+
+  void printHelp() {
+    spdlog::info("VectorFS Application Usage:");
+    spdlog::info(
+        "  --server <address>    Set server address (default: 0.0.0.0:12345)");
+    spdlog::info("  --help                Show this help message");
+  }
+
   void cleanup() {
     spdlog::info("Cleaning up application resources");
-
+    stopServer();
     predictive_cache_.clear();
-
     spdlog::info("Cleanup completed");
   }
 
@@ -148,6 +211,14 @@ private:
       last_ranking_update_ = now;
     } catch (const std::exception &e) {
       spdlog::error("Ranking update exception: {}", e.what());
+    }
+  }
+
+  void checkServerHealth() {
+    if (server_ && server_->isRunning()) {
+      spdlog::debug("Server health check: OK");
+    } else {
+      spdlog::warn("Server health check: NOT RUNNING");
     }
   }
 
@@ -279,20 +350,66 @@ private:
 
   core::Result<bool> initializeServer() {
     try {
-      server_ = capnp::VectorFSServiceImpl<EmbeddingModel>();
+      server_ = std::make_unique<capnp::VectorFSServer<EmbeddingModel>>(
+          server_address_);
 
-      auto result = server_.addEventService(event_service_);
-      if (!result.is_ok()) {
-        return core::Result<bool>::Error(result.error());
-      }
+      server_->addEventService(event_service_);
 
-      // Запуск сервера в отдельном потоке, если нужно
-      // server_.startAsync();
-
-      spdlog::info("Server initialized");
+      spdlog::info("Server initialized with address: {}", server_address_);
       return core::Result<bool>::Ok(true);
     } catch (const std::exception &e) {
       return core::Result<bool>::Error(e.what());
+    }
+  }
+
+  core::Result<bool> startServer() {
+    try {
+      if (!server_) {
+        return core::Result<bool>::Error("Server not initialized");
+      }
+
+      if (server_->isRunning()) {
+        return core::Result<bool>::Error("Server is already running");
+      }
+
+      server_thread_ = std::make_unique<std::thread>([this]() {
+        spdlog::info("Starting server on thread for address: {}",
+                     server_address_);
+        try {
+          server_->run();
+        } catch (const std::exception &e) {
+          spdlog::error("Server thread exception: {}", e.what());
+        }
+        spdlog::info("Server thread stopped");
+      });
+
+      // Даем серверу время на запуск
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+      // Проверяем, запустился ли сервер
+      if (server_->isRunning()) {
+        spdlog::info("Server started successfully on address: {}",
+                     server_address_);
+        return core::Result<bool>::Ok(true);
+      } else {
+        return core::Result<bool>::Error("Server failed to start");
+      }
+
+    } catch (const std::exception &e) {
+      return core::Result<bool>::Error(e.what());
+    }
+  }
+
+  void stopServer() {
+    if (server_) {
+      server_->stop();
+    }
+
+    if (server_thread_ && server_thread_->joinable()) {
+      spdlog::info("Stopping server thread...");
+      server_thread_->join();
+      server_thread_.reset();
+      spdlog::info("Server thread stopped");
     }
   }
 
@@ -323,12 +440,14 @@ private:
   CompressorVariant compressor_;
   markov::SemanticGraph semantic_graph_;
   markov::HiddenMarkovModel hidden_markov_;
-  capnp::VectorFSServiceImpl<EmbeddingModel> server_;
+  std::unique_ptr<capnp::VectorFSServer<EmbeddingModel>> server_;
 
   std::map<std::string, std::vector<std::string>> predictive_cache_;
   std::chrono::time_point<std::chrono::steady_clock> last_ranking_update_;
 
   std::atomic<bool> is_running_;
+  std::unique_ptr<std::thread> server_thread_;
+  std::string server_address_;
 };
 
 } // namespace owl::app

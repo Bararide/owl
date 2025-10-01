@@ -5,6 +5,7 @@
 #include <capnp/message.h>
 #include <kj/debug.h>
 #include <kj/main.h>
+#include <kj/thread.h>
 #include <memory>
 #include <unordered_map>
 
@@ -87,7 +88,9 @@ protected:
       spdlog::info("  Size: {} bytes", content.size());
       spdlog::info("=============================");
 
-      event_service_->Notify(fileinfo);
+      if (event_service_) {
+        event_service_->Notify(fileinfo);
+      }
 
     } catch (const kj::Exception &e) {
       spdlog::error("Error in createFile: {}", e.getDescription().cStr());
@@ -257,6 +260,113 @@ protected:
 
 private:
   std::shared_ptr<core::Event> event_service_;
+};
+
+template <typename EmbeddedModel> class VectorFSServer {
+public:
+  VectorFSServer(const std::string &address = "127.0.0.1:5346")
+      : address_(address) {
+    service_impl = std::make_unique<VectorFSServiceImpl<EmbeddedModel>>();
+  }
+
+  ~VectorFSServer() { stop(); }
+
+  void addEventService(const std::shared_ptr<core::Event> event_service) {
+    if (service_impl) {
+      service_impl->addEventService(event_service);
+    }
+  }
+
+  void run() {
+    if (running_.load()) {
+      spdlog::warn("Server is already running");
+      return;
+    }
+
+    running_.store(true);
+
+    try {
+      auto service_own =
+          kj::heap<VectorFSServiceImpl<EmbeddedModel>>(*service_impl);
+      server_ =
+          kj::heap<::capnp::EzRpcServer>(kj::mv(service_own), address_.c_str());
+
+      spdlog::info("Cap'n Proto server started on {}", address_);
+
+      auto &waitScope = server_->getWaitScope();
+      kj::NEVER_DONE.wait(waitScope);
+
+    } catch (const std::exception &e) {
+      spdlog::error("Server run exception: {}", e.what());
+      running_.store(false);
+    }
+  }
+
+  void stop() {
+    if (running_.exchange(false)) {
+      if (server_) {
+        server_ = nullptr;
+      }
+    }
+  }
+
+  bool isRunning() const { return running_.load(); }
+
+private:
+  std::string address_;
+  std::unique_ptr<VectorFSServiceImpl<EmbeddedModel>> service_impl;
+  kj::Own<::capnp::EzRpcServer> server_;
+  std::atomic<bool> running_{false};
+};
+
+class VectorFSClient {
+public:
+  VectorFSClient(const std::string &address)
+      : client(address.c_str()), service(client.getMain<VectorFSService>()) {}
+
+  VectorFSService::Client getService() { return service; }
+
+private:
+  ::capnp::EzRpcClient client;
+  VectorFSService::Client service;
+};
+
+class TestClient {
+public:
+  TestClient(const std::string &address)
+      : client_(address.c_str()), service_(client_.getMain<VectorFSService>()) {
+    service_ = client_.getMain<VectorFSService>();
+  }
+
+  void testConnection() {
+    try {
+      auto &waitScope = client_.getWaitScope();
+      {
+        auto request = service_.createFileRequest();
+        auto req = request.initRequest();
+        req.setPath("/test_file.txt");
+        req.setName("test_file.txt");
+        req.setContent("This is test content");
+
+        auto promise = request.send();
+        auto response = promise.wait(waitScope);
+
+        if (response.getResponse().getSuccess()) {
+          std::cout << "✓ Create file test passed" << std::endl;
+        } else {
+          std::cout << "✗ Create file test failed: "
+                    << response.getResponse().getError().cStr() << std::endl;
+        }
+      }
+
+    } catch (const std::exception &e) {
+      std::cerr << "✗ Client test failed: " << e.what() << std::endl;
+    }
+  }
+
+private:
+  ::capnp::EzRpcClient client_;
+  VectorFSService::Client service_;
 };
 
 } // namespace owl::capnp
