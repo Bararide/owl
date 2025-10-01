@@ -58,6 +58,11 @@ public:
     return EmbedderTraits<FastTextEmbedder>::ModelName;
   }
 
+  core::Result<schemas::FileInfo> handle(const schemas::FileInfo& file) {
+
+    return core::Result<schemas::FileInfo>::Ok(file);
+  }
+
   bool isModelLoadedImpl() const { return model_loaded_; }
 
 private:

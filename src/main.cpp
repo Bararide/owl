@@ -48,12 +48,12 @@ void testServerConnection(owl::app::Application<> &app) {
 
   auto status_result = app.getServerStatus();
   if (status_result.is_ok()) {
-    spdlog::info("✓ Server is running on: {}", app.getServerAddress());
+    spdlog::info("Server is running on: {}", app.getServerAddress());
 
     app.createClient();
 
   } else {
-    spdlog::error("✗ Server is not running: {}", status_result.error().what());
+    spdlog::error("Server is not running: {}", status_result.error().what());
   }
 }
 

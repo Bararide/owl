@@ -107,8 +107,6 @@ public:
           last_ranking_update = now;
         }
 
-        processEvents();
-
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
     } catch (const std::exception &e) {
@@ -190,19 +188,6 @@ private:
     spdlog::info("Cleanup completed");
   }
 
-  void processEvents() {
-    try {
-      // Обработка событий из pipeline
-      // pipeline_.processPendingEvents();
-
-      // Обработка событий из event_service
-      // event_service_->processPendingEvents();
-
-    } catch (const std::exception &e) {
-      spdlog::error("Event processing exception: {}", e.what());
-    }
-  }
-
   void updateRanking() {
     try {
       auto now = std::chrono::steady_clock::now();
@@ -227,7 +212,7 @@ private:
       event_service_ = std::make_shared<core::Event>();
 
       event_service_->Subscribe<schemas::FileInfo>(
-          [](const schemas::FileInfo &file) {
+          [this](const schemas::FileInfo &file) {
             spdlog::info("Received file info: {}", file.name.value());
           });
 
@@ -242,7 +227,7 @@ private:
     try {
       if constexpr (std::is_same_v<EmbeddingModel,
                                    embedded::FastTextEmbedder>) {
-        embedder_ = embedded::FastTextEmbedder();
+        embedder_.emplace<embedded::FastTextEmbedder>();
         std::get<embedded::FastTextEmbedder>(embedder_).loadModel(model);
       }
 
@@ -258,7 +243,7 @@ private:
   core::Result<bool> initializeCompressor(bool use_quantization) {
     try {
       if constexpr (std::is_same_v<Compressor, compression::Compressor>) {
-        compressor_ = compression::Compressor();
+        compressor_.emplace<compression::Compressor>();
       }
       spdlog::info("Compressor initialized");
       return core::Result<bool>::Ok(true);
@@ -340,7 +325,7 @@ private:
 
   core::Result<bool> initializePipeline() {
     try {
-      pipeline_ = core::pipeline::Pipeline();
+      create_file_pipeline_ = core::pipeline::Pipeline();
       spdlog::info("Pipeline initialized");
       return core::Result<bool>::Ok(true);
     } catch (const std::exception &e) {
@@ -428,7 +413,7 @@ private:
 
   std::shared_ptr<core::Event> event_service_;
 
-  core::pipeline::Pipeline pipeline_;
+  core::pipeline::Pipeline create_file_pipeline_;
 
   int fileinfo_create_subscribe_;
 
@@ -436,6 +421,7 @@ private:
   CompressorVariant compressor_;
   markov::SemanticGraph semantic_graph_;
   markov::HiddenMarkovModel hidden_markov_;
+
   std::unique_ptr<capnp::VectorFSServer<EmbeddingModel>> server_;
 
   std::map<std::string, std::vector<std::string>> predictive_cache_;
