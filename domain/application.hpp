@@ -383,10 +383,6 @@ private:
         spdlog::info("Server thread stopped");
       });
 
-      // Даем серверу время на запуск
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-      // Проверяем, запустился ли сервер
       if (server_->isRunning()) {
         spdlog::info("Server started successfully on address: {}",
                      server_address_);
