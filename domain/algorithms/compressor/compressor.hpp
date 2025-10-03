@@ -179,6 +179,10 @@ public:
     return core::Result<schemas::FileInfo>::Ok(file);
   }
 
+  void await() {
+    spdlog::debug("await method in compressor");
+  }
+
 private:
   std::vector<uint8_t>
   decompress_block(const std::vector<uint8_t> &compressed_block,

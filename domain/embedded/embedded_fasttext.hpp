@@ -75,6 +75,10 @@ public:
     return core::Result<schemas::FileInfo>::Ok(file);
   }
 
+  void await() {
+    spdlog::debug("await method in embedded");
+  }
+
   bool isModelLoadedImpl() const { return model_loaded_; }
 
 private:
