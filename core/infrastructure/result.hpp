@@ -12,30 +12,30 @@
 namespace core {
 template <typename T, typename Err = std::runtime_error> class Result {
 private:
-  std::unique_ptr<T> value_ptr;
-  std::unique_ptr<Err> error_ptr;
+  std::shared_ptr<T> value_ptr;
+  std::shared_ptr<Err> error_ptr;
   bool ok_flag;
 
 public:
   Result() noexcept
     requires std::default_initializable<T>
-      : value_ptr(std::make_unique<T>()), ok_flag(true) {}
+      : value_ptr(std::make_shared<T>()), ok_flag(true) {}
 
   template <typename U>
     requires IsConvertable<T, U>
   Result(U &&value) noexcept
-      : value_ptr(std::make_unique<T>(std::forward<U>(value))), ok_flag(true) {}
+      : value_ptr(std::make_shared<T>(std::forward<U>(value))), ok_flag(true) {}
 
   template <typename U>
     requires std::is_same_v<std::decay_t<U>, T> &&
                  (!std::is_copy_constructible_v<T>)
   Result(U &&value) noexcept
-      : value_ptr(std::make_unique<T>(std::forward<U>(value))), ok_flag(true) {}
+      : value_ptr(std::make_shared<T>(std::forward<U>(value))), ok_flag(true) {}
 
   template <typename E>
     requires IsConvertable<Err, E>
   Result(E &&error) noexcept
-      : error_ptr(std::make_unique<Err>(std::forward<E>(error))),
+      : error_ptr(std::make_shared<Err>(std::forward<E>(error))),
         ok_flag(false) {}
 
   bool is_ok() const { return ok_flag; }

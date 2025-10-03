@@ -223,7 +223,7 @@ private:
 
       event_service_->Subscribe<schemas::FileInfo>(
           [this](const schemas::FileInfo &file) {
-            spdlog::info("Received file info: {}", file.name.value());
+            this->create_file_pipeline_.process(file);
           });
 
       spdlog::info("Event service initialized");
@@ -340,6 +340,11 @@ private:
                                    embedded::FastTextEmbedder>) {
         create_file_pipeline_.add_handler(
             std::get<embedded::FastTextEmbedder>(embedder_));
+      }
+
+      if constexpr (std::is_same_v<Compressor, compression::Compressor>) {
+        create_file_pipeline_.add_handler(
+            std::get<compression::Compressor>(compressor_));
       }
       spdlog::info("Pipeline initialized");
       return core::Result<bool>::Ok(true);

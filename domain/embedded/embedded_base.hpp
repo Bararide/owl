@@ -2,14 +2,6 @@
 #define EMBEDDED_BASE_HPP
 
 #include "schemas/fileinfo.hpp"
-#include <concepts>
-#include <infrastructure/result.hpp>
-#include <memory>
-#include <pipeline/pipeline.hpp>
-#include <stdexcept>
-#include <string>
-#include <type_traits>
-#include <vector>
 
 namespace owl::embedded {
 
@@ -58,8 +50,6 @@ public:
   void await() {
     if constexpr (requires(Derived d) { d.await(); }) {
       static_cast<Derived *>(this)->await();
-    } else {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }
 
