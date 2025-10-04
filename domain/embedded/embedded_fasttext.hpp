@@ -36,10 +36,12 @@ public:
   }
 
   core::Result<std::vector<float>>
-  getSentenceEmbedding(const std::string &text) {
+  getSentenceEmbedding(const std::vector<uint8_t> &text) {
     validateModelLoaded();
 
-    std::istringstream iss(text);
+    std::string text_str(text.begin(), text.end());
+
+    std::istringstream iss(text_str);
     fasttext::Vector vec(dimension_);
     fasttext_->getSentenceVector(iss, vec);
 
@@ -59,7 +61,7 @@ public:
     return EmbedderTraits<FastTextEmbedder>::ModelName;
   }
 
-  core::Result<schemas::FileInfo> handle(const schemas::FileInfo &file) {
+  core::Result<schemas::FileInfo> handle(schemas::FileInfo &file) {
     if (file.content.has_value()) {
       auto result = getSentenceEmbedding(file.content.value());
 
@@ -75,9 +77,7 @@ public:
     return core::Result<schemas::FileInfo>::Ok(file);
   }
 
-  void await() {
-    spdlog::debug("await method in embedded");
-  }
+  void await() { spdlog::debug("await method in embedded"); }
 
   bool isModelLoadedImpl() const { return model_loaded_; }
 

@@ -66,11 +66,12 @@ void VectorFS::rebuild_index() {
 }
 
 std::vector<float> VectorFS::get_embedding(const std::string &text) {
-  return std::visit(
-      [&text](auto &embedder_ptr) {
-        return embedder_ptr->getSentenceEmbedding(text).unwrap();
-      },
-      embedder_);
+  // return std::visit(
+  //     [&text](auto &embedder_ptr) {
+  //       return embedder_ptr->getSentenceEmbedding(text).unwrap();
+  //     },
+  //     embedder_);
+  return {1.0, 2.0};
 }
 
 std::string VectorFS::get_embedder_info() const {
@@ -85,52 +86,52 @@ std::string VectorFS::get_embedder_info() const {
 
 std::vector<std::pair<std::string, float>>
 VectorFS::semantic_search(const std::string &query, int k) {
-  std::vector<std::pair<std::string, float>> results;
-  if (!std::holds_alternative<std::unique_ptr<embedded::FastTextEmbedder>>(
-          embedder_) ||
-      (!faiss_index && !faiss_index_quantized)) {
-    spdlog::error("Embedder or index not initialized");
-    return results;
-  }
-  rebuild_index();
-  if (index_to_path.empty()) {
-    spdlog::warn("No files indexed for search");
-    return results;
-  }
-  std::string normalized_query = normalize_text(query);
-  auto query_embedding = std::visit(
-      [&normalized_query](auto &embedder_ptr) {
-        return embedder_ptr->getSentenceEmbedding(normalized_query);
-      },
-      embedder_);
-  std::vector<idx_t> I(k);
-  std::vector<float> D(k);
-  if (use_quantization && faiss_index_quantized) {
-    if (pq_quantizer->is_trained()) {
-      std::vector<uint8_t> query_codes = pq_quantizer->encode(query_embedding.unwrap());
-      pq_quantizer->precompute_query_tables(query_embedding.unwrap());
-      std::vector<std::pair<float, std::string>> scored_results;
-      for (const auto &[idx, path] : index_to_path) {
-        const auto &file_info = virtual_files[path];
-        if (!file_info.pq_codes.empty()) {
-          float dist = pq_quantizer->asymmetric_distance(file_info.pq_codes);
-          scored_results.emplace_back(dist, path);
-        }
-      }
-      std::sort(scored_results.begin(), scored_results.end());
-      for (int i = 0; i < std::min(k, (int)scored_results.size()); ++i) {
-        results.push_back({scored_results[i].second, scored_results[i].first});
-      }
-    }
-  } else if (faiss_index) {
-    faiss_index->search(1, query_embedding.unwrap().data(), k, D.data(), I.data());
-    for (int i = 0; i < k; ++i) {
-      if (I[i] >= 0 && index_to_path.find(I[i]) != index_to_path.end()) {
-        results.push_back({index_to_path[I[i]], D[i]});
-      }
-    }
-  }
-  return results;
+  // std::vector<std::pair<std::string, float>> results;
+  // if (!std::holds_alternative<std::unique_ptr<embedded::FastTextEmbedder>>(
+  //         embedder_) ||
+  //     (!faiss_index && !faiss_index_quantized)) {
+  //   spdlog::error("Embedder or index not initialized");
+  //   return results;
+  // }
+  // rebuild_index();
+  // if (index_to_path.empty()) {
+  //   spdlog::warn("No files indexed for search");
+  //   return results;
+  // }
+  // std::string normalized_query = normalize_text(query);
+  // auto query_embedding = std::visit(
+  //     [&normalized_query](auto &embedder_ptr) {
+  //       return embedder_ptr->getSentenceEmbedding(normalized_query);
+  //     },
+  //     embedder_);
+  // std::vector<idx_t> I(k);
+  // std::vector<float> D(k);
+  // if (use_quantization && faiss_index_quantized) {
+  //   if (pq_quantizer->is_trained()) {
+  //     std::vector<uint8_t> query_codes = pq_quantizer->encode(query_embedding.unwrap());
+  //     pq_quantizer->precompute_query_tables(query_embedding.unwrap());
+  //     std::vector<std::pair<float, std::string>> scored_results;
+  //     for (const auto &[idx, path] : index_to_path) {
+  //       const auto &file_info = virtual_files[path];
+  //       if (!file_info.pq_codes.empty()) {
+  //         float dist = pq_quantizer->asymmetric_distance(file_info.pq_codes);
+  //         scored_results.emplace_back(dist, path);
+  //       }
+  //     }
+  //     std::sort(scored_results.begin(), scored_results.end());
+  //     for (int i = 0; i < std::min(k, (int)scored_results.size()); ++i) {
+  //       results.push_back({scored_results[i].second, scored_results[i].first});
+  //     }
+  //   }
+  // } else if (faiss_index) {
+  //   faiss_index->search(1, query_embedding.unwrap().data(), k, D.data(), I.data());
+  //   for (int i = 0; i < k; ++i) {
+  //     if (I[i] >= 0 && index_to_path.find(I[i]) != index_to_path.end()) {
+  //       results.push_back({index_to_path[I[i]], D[i]});
+  //     }
+  //   }
+  // }
+  return {{"1", 1}};
 }
 
 void VectorFS::update_semantic_relationships() {
@@ -181,26 +182,26 @@ void VectorFS::record_file_access(const std::string &file_path,
 }
 
 void VectorFS::update_embedding(const std::string &path) {
-  auto it = virtual_files.find(path);
-  if (it == virtual_files.end())
-    return;
-  if (!it->second.content.empty()) {
-    std::string normalized_content = normalize_text(it->second.content);
-    it->second.embedding = std::visit(
-        [&normalized_content](auto &embedder_ptr) {
-          return embedder_ptr->getSentenceEmbedding(normalized_content).unwrap();
-        },
-        embedder_);
-    it->second.embedding_updated = true;
-    if (use_quantization && sq_quantizer && sq_quantizer->is_trained()) {
-      it->second.sq_codes = sq_quantizer->quantize(it->second.embedding);
-    }
-    if (use_quantization && pq_quantizer && pq_quantizer->is_trained()) {
-      it->second.pq_codes = pq_quantizer->encode(it->second.embedding);
-    }
-    index_needs_rebuild = true;
-    spdlog::debug("Updated embedding for file: {}", path);
-  }
+  // auto it = virtual_files.find(path);
+  // if (it == virtual_files.end())
+  //   return;
+  // if (!it->second.content.empty()) {
+  //   std::string normalized_content = normalize_text(it->second.content);
+  //   it->second.embedding = std::visit(
+  //       [&normalized_content](auto &embedder_ptr) {
+  //         return embedder_ptr->getSentenceEmbedding(normalized_content).unwrap();
+  //       },
+  //       embedder_);
+  //   it->second.embedding_updated = true;
+  //   if (use_quantization && sq_quantizer && sq_quantizer->is_trained()) {
+  //     it->second.sq_codes = sq_quantizer->quantize(it->second.embedding);
+  //   }
+  //   if (use_quantization && pq_quantizer && pq_quantizer->is_trained()) {
+  //     it->second.pq_codes = pq_quantizer->encode(it->second.embedding);
+  //   }
+  //   index_needs_rebuild = true;
+  //   spdlog::debug("Updated embedding for file: {}", path);
+  // }
 }
 
 std::string VectorFS::normalize_text(const std::string &text) {

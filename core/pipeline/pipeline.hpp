@@ -40,7 +40,7 @@ public:
     handlers_.push_back(std::ref(handler));
   }
 
-  template <typename T> core::Result<T> process(const T &data) {
+  template <typename T> core::Result<T> process(T &data) {
     spdlog::info("Starting pipeline processing with {} handlers",
                  handlers_.size());
 
@@ -104,7 +104,7 @@ public:
 
 private:
   template <typename T>
-  core::Result<T> dynamic_call_handle(IHandler *handler, const T &data) {
+  core::Result<T> dynamic_call_handle(IHandler *handler, T &data) {
     auto typed_handler = dynamic_cast<ITypedHandler<T, T> *>(handler);
     if (typed_handler) {
       return typed_handler->handle(data);
@@ -126,7 +126,7 @@ private:
 
       auto subscription_id =
           current_handler.get_event_bus().template Subscribe<T>(
-              [&next_handler, this](const T &data) {
+              [&next_handler, this](T &data) {
                 spdlog::debug("Passing data to next handler");
                 next_handler.await();
 

@@ -174,7 +174,17 @@ public:
   }
 
   auto
-  handle(const schemas::FileInfo &file) -> core::Result<schemas::FileInfo> {
+  handle(schemas::FileInfo &file) -> core::Result<schemas::FileInfo> {
+    std::string start = std::string(file.content.value().begin(), file.content.value().end());
+    spdlog::critical("{}", start);
+    file.content = compress(file.content.value()).unwrap();
+    file.size = file.content.value().size();
+    file.content.value().resize(file.size.value());
+    file.content.value().shrink_to_fit();
+
+    std::string result = std::string(file.content.value().begin(), file.content.value().end());
+    spdlog::critical("{}, {}, {}", file.size.value(), file.content.value().size(), file.content.value().capacity());
+    spdlog::critical("{}", result);
     spdlog::critical("handle(const schemas::FileInfo &file) -> core::Result<schemas::FileInfo> in COMPRESSOR");
     return core::Result<schemas::FileInfo>::Ok(file);
   }

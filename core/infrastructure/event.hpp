@@ -22,11 +22,17 @@ public:
 
   template <typename EventType> struct EventT {
     using CallbackType = std::function<void(const EventType &)>;
+    using MutableCallbackType = std::function<void(EventType &)>;
   };
 
-  template <template <typename> typename EventType, typename T>
-  handlerID Subscribe(std::function<void(const EventType<T> &)> handler) {
-    return SubscribeSingle<EventType<T>>(std::move(handler));
+  template <typename EventType>
+  handlerID Subscribe(std::function<void(const EventType &)> handler) {
+    return SubscribeSingle<EventType>(std::move(handler));
+  }
+
+  template <typename EventType>
+  handlerID Subscribe(std::function<void(EventType &)> handler) {
+    return SubscribeSingleMutable<EventType>(std::move(handler));
   }
 
   template <typename... EventTypes>
@@ -40,6 +46,20 @@ public:
     handlerID id = nextHandlerID++;
     std::unique_lock lock(handler_mutex);
     (SubscribeSingle<EventTypes>(id, std::move(handlers)), ...);
+    return id;
+  }
+
+  template <typename... EventTypes>
+  handlerID Subscribe(std::function<void(EventTypes &)>... handlers) {
+    static_assert(sizeof...(EventTypes) > 0,
+                  "At least one handler must be provided");
+    static_assert(
+        (... && std::is_invocable_v<decltype(handlers), EventTypes &>),
+        "Each handler must be callable with the corresponding event type.");
+
+    handlerID id = nextHandlerID++;
+    std::unique_lock lock(handler_mutex);
+    (SubscribeSingleMutable<EventTypes>(id, std::move(handlers)), ...);
     return id;
   }
 
@@ -75,7 +95,29 @@ public:
 
     if (it != event_handlers.end()) {
       auto &handler_list = static_cast<HandlerList<EventType> &>(*it->second);
-      for (const auto &[current_id, handler] : handler_list.handlers) {
+
+      for (const auto &[current_id, handler] : handler_list.const_handlers) {
+        handler(event);
+      }
+
+      for (const auto &[current_id, handler] : handler_list.mutable_handlers) {
+        handler(const_cast<EventType &>(event));
+      }
+    }
+  }
+
+  template <typename EventType> void Notify(EventType &event) {
+    std::shared_lock lock(handler_mutex);
+    auto it = event_handlers.find(GetEventID<EventType>());
+
+    if (it != event_handlers.end()) {
+      auto &handler_list = static_cast<HandlerList<EventType> &>(*it->second);
+
+      for (const auto &[current_id, handler] : handler_list.const_handlers) {
+        handler(event);
+      }
+
+      for (const auto &[current_id, handler] : handler_list.mutable_handlers) {
         handler(event);
       }
     }
@@ -107,6 +149,11 @@ public:
     return std::async(std::launch::async, [this, event]() { Notify(event); });
   }
 
+  template <typename EventType>
+  std::future<void> NotifyAsync(EventType &event) {
+    return std::async(std::launch::async, [this, &event]() { Notify(event); });
+  }
+
 private:
   struct BaseHandler {
     virtual ~BaseHandler() = default;
@@ -114,7 +161,9 @@ private:
 
   template <typename EventType> struct HandlerList : BaseHandler {
     using CallbackType = typename EventT<EventType>::CallbackType;
-    std::vector<std::pair<handlerID, CallbackType>> handlers;
+    using MutableCallbackType = typename EventT<EventType>::MutableCallbackType;
+    std::vector<std::pair<handlerID, CallbackType>> const_handlers;
+    std::vector<std::pair<handlerID, MutableCallbackType>> mutable_handlers;
   };
 
   template <typename InputType, typename OutputType>
@@ -148,7 +197,25 @@ private:
     }
 
     auto &handler_list = static_cast<HandlerList<EventType> &>(*base_handler);
-    handler_list.handlers.emplace_back(id, std::move(handler));
+    handler_list.const_handlers.emplace_back(id, std::move(handler));
+
+    return id;
+  }
+
+  template <typename EventType>
+  handlerID SubscribeSingleMutable(std::function<void(EventType &)> handler) {
+    handlerID id = nextHandlerID++;
+    std::unique_lock lock(handler_mutex);
+
+    auto event_id = GetEventID<EventType>();
+    auto &base_handler = event_handlers[event_id];
+
+    if (!base_handler) {
+      base_handler = std::make_shared<HandlerList<EventType>>();
+    }
+
+    auto &handler_list = static_cast<HandlerList<EventType> &>(*base_handler);
+    handler_list.mutable_handlers.emplace_back(id, std::move(handler));
 
     return id;
   }
@@ -164,7 +231,21 @@ private:
     }
 
     auto &handler_list = static_cast<HandlerList<EventType> &>(*base_handler);
-    handler_list.handlers.emplace_back(id, std::move(handler));
+    handler_list.const_handlers.emplace_back(id, std::move(handler));
+  }
+
+  template <typename EventType>
+  void SubscribeSingleMutable(handlerID id,
+                              std::function<void(EventType &)> handler) {
+    auto event_id = GetEventID<EventType>();
+    auto &base_handler = event_handlers[event_id];
+
+    if (!base_handler) {
+      base_handler = std::make_shared<HandlerList<EventType>>();
+    }
+
+    auto &handler_list = static_cast<HandlerList<EventType> &>(*base_handler);
+    handler_list.mutable_handlers.emplace_back(id, std::move(handler));
   }
 
   template <typename EventType> void UnsubscribeSingle(handlerID id) {
@@ -173,16 +254,22 @@ private:
 
     if (it != event_handlers.end()) {
       auto &handler_list = static_cast<HandlerList<EventType> &>(*it->second);
-      auto &handlers = handler_list.handlers;
 
-      handlers.erase(
-          std::remove_if(handlers.begin(), handlers.end(),
+      auto &const_handlers = handler_list.const_handlers;
+      const_handlers.erase(
+          std::remove_if(const_handlers.begin(), const_handlers.end(),
                          [id](const auto &pair) { return pair.first == id; }),
-          handlers.end());
+          const_handlers.end());
+
+      auto &mutable_handlers = handler_list.mutable_handlers;
+      mutable_handlers.erase(
+          std::remove_if(mutable_handlers.begin(), mutable_handlers.end(),
+                         [id](const auto &pair) { return pair.first == id; }),
+          mutable_handlers.end());
     }
   }
 };
 
-} // namespace event
+} // namespace core
 
 #endif // EVENT_HPP

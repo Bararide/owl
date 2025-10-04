@@ -43,7 +43,7 @@ public:
     return static_cast<const Derived *>(this)->getEmbedderInfo();
   }
 
-  core::Result<schemas::FileInfo> handle(const schemas::FileInfo &file) {
+  core::Result<schemas::FileInfo> handle(schemas::FileInfo &file) {
     return static_cast<Derived *>(this)->handle(file);
   }
 

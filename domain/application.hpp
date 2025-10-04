@@ -176,7 +176,6 @@ public:
     if (is_running_.load()) {
       shutdown();
     }
-    stopServer();
 
     if (server_thread_ && server_thread_->joinable()) {
       server_thread_->detach();
@@ -274,7 +273,7 @@ private:
         .map([this]() {
           event_service_ = std::make_shared<core::Event>();
           event_service_->Subscribe<schemas::FileInfo>(
-              [this](const schemas::FileInfo &file) {
+              [this](schemas::FileInfo &file) {
                 this->create_file_pipeline_.process(file);
               });
           spdlog::info("Event service initialized");
@@ -455,6 +454,11 @@ private:
         return true;
       }
 
+      if (server_thread_ && server_thread_->joinable()) {
+        server_thread_->join();
+        server_thread_.reset();
+      }
+
       server_thread_ = std::make_unique<std::thread>([this]() {
         spdlog::info("Starting server on thread for address: {}",
                      server_address_);
@@ -466,7 +470,7 @@ private:
         spdlog::info("Server thread stopped");
       });
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       if (server_->isRunning()) {
         spdlog::info("Server started successfully on address: {}",
@@ -482,27 +486,19 @@ private:
     return core::Result<bool>::Ok(true)
         .map([this]() {
           if (server_) {
+            spdlog::info("Stopping server...");
+
             server_->stop();
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
           }
 
           if (server_thread_ && server_thread_->joinable()) {
             spdlog::info("Stopping server thread...");
 
-            auto start = std::chrono::steady_clock::now();
-            auto timeout = std::chrono::seconds(3);
-
-            while (server_ && server_->isRunning() &&
-                   std::chrono::steady_clock::now() - start < timeout) {
-              std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-
-            if (server_thread_->joinable()) {
-              if (server_thread_->get_id() != std::this_thread::get_id()) {
-                server_thread_->detach();
-              }
-            }
-
+            server_thread_->join();
             server_thread_.reset();
+
             spdlog::info("Server thread stopped");
           }
           return true;
