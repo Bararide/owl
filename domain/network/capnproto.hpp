@@ -81,11 +81,12 @@ protected:
       fileinfo.created = true;
       fileinfo.name = name;
       fileinfo.size = content.size();
-      fileinfo.content = content;
+      fileinfo.content = std::vector<uint8_t>(content.begin(), content.end());
 
       spdlog::info("File creation completed successfully:");
       spdlog::info("  Path: {}", path);
       spdlog::info("  Size: {} bytes", content.size());
+      spdlog::info("  Content vector size: {} bytes", fileinfo.content->size());
       spdlog::info("=============================");
 
       if (event_service_) {

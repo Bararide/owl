@@ -10,7 +10,7 @@ namespace owl::schemas {
 struct FileInfo {
   std::optional<mode_t> mode;
   std::optional<size_t> size;
-  std::optional<std::string> content;
+  std::optional<std::vector<uint8_t>> content;
   std::optional<uid_t> uid;
   std::optional<gid_t> gid;
   std::optional<time_t> access_time;

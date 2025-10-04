@@ -23,7 +23,7 @@ public:
 template <typename Input, typename Output>
 class ITypedHandler : public IHandler {
 public:
-  virtual core::Result<Output> handle(const Input &data) = 0;
+  virtual core::Result<Output> handle(Input &data) = 0;
 
   std::string get_type_info() const override {
     return "ITypedHandler<" + std::string(typeid(Input).name()) + ", " +
@@ -38,7 +38,7 @@ public:
 
   core::Event &get_event_bus() override { return event_bus_; }
 
-  core::Result<Output> handle(const Input &data) override {
+  core::Result<Output> handle(Input &data) override {
     if constexpr (requires(Derived d) { d.handle(data); }) {
       return static_cast<Derived *>(this)->handle(data);
     } else {

@@ -33,7 +33,7 @@ public:
   }
 
   auto
-  handle(const schemas::FileInfo &file) -> core::Result<schemas::FileInfo> {
+  handle(schemas::FileInfo &file) -> core::Result<schemas::FileInfo> {
     return static_cast<Derived *>(this)->handle(file);
   }
 };
