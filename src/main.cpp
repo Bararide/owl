@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
+#include <iox2/client.hpp>
 
 std::atomic<bool> g_shutdown_requested{false};
 
