@@ -64,22 +64,23 @@ public:
         [this]() { return initializePipeline(); },
         [this]() { return initializeServer(); }};
 
-    for (size_t i = 0; i < init_steps.size(); ++i) {
-      auto result = init_steps[i]();
-      if (!result.is_ok()) {
-        spdlog::error("Initialization step {} failed: {}", i,
-                      result.error().what());
-        cleanup();
-        return core::Result<bool>::Error(result.error().what());
-      }
-    }
+    auto init_result = initializeSequence(init_steps, 0);
 
-    initializeHMMStates();
-
-    is_running_.store(true);
-    spdlog::info("Application initialized successfully");
-
-    return startServer();
+    return init_result
+        .and_then([this]() -> core::Result<bool> {
+          initializeHMMStates();
+          is_running_.store(true);
+          spdlog::info("Application initialized successfully");
+          return startServer();
+        })
+        .match(
+            [](bool) -> core::Result<bool> {
+              return core::Result<bool>::Ok(true);
+            },
+            [this](const auto &error) -> core::Result<bool> {
+              cleanup();
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> spin(std::atomic<bool> &shutdown_requested) {
@@ -90,65 +91,80 @@ public:
     auto last_health_check = std::chrono::steady_clock::now();
     auto last_ranking_update = std::chrono::steady_clock::now();
 
-    try {
-      while (!shutdown_requested && is_running_.load()) {
-        auto now = std::chrono::steady_clock::now();
+    return core::Result<bool>::Ok(true).and_then([&]() -> core::Result<bool> {
+      try {
+        while (!shutdown_requested && is_running_.load()) {
+          auto now = std::chrono::steady_clock::now();
 
-        if (now - last_health_check >= health_check_interval) {
-          checkServerHealth();
-          last_health_check = now;
+          if (now - last_health_check >= health_check_interval) {
+            checkServerHealth();
+            last_health_check = now;
+          }
+
+          if (now - last_ranking_update >= ranking_update_interval) {
+            updateRanking();
+            last_ranking_update = now;
+          }
+
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-
-        if (now - last_ranking_update >= ranking_update_interval) {
-          updateRanking();
-          last_ranking_update = now;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        spdlog::info("Main application loop stopped");
+        return core::Result<bool>::Ok(true);
+      } catch (const std::exception &e) {
+        spdlog::error("Exception in main loop: {}", e.what());
+        return core::Result<bool>::Error(e.what());
       }
-    } catch (const std::exception &e) {
-      spdlog::error("Exception in main loop: {}", e.what());
-      return core::Result<bool>::Error(e.what());
-    }
-
-    spdlog::info("Main application loop stopped");
-    return core::Result<bool>::Ok(true);
+    });
   }
 
   core::Result<bool> shutdown() {
     spdlog::info("Initiating application shutdown");
     is_running_.store(false);
-    stopServer();
-    cleanup();
-    return core::Result<bool>::Ok(true);
+
+    return stopServer().match(
+        [this](bool) -> core::Result<bool> {
+          cleanup();
+          return core::Result<bool>::Ok(true);
+        },
+        [this](const auto &error) -> core::Result<bool> {
+          cleanup();
+          return core::Result<bool>::Ok(true);
+        });
   }
 
   core::Result<bool> restartServer(const std::string &new_address = "") {
-    if (!new_address.empty()) {
-      server_address_ = new_address;
-    }
-
-    stopServer();
-    return startServer();
+    return stopServer().and_then([this, &new_address]() -> core::Result<bool> {
+      if (!new_address.empty()) {
+        server_address_ = new_address;
+      }
+      return startServer();
+    });
   }
 
   core::Result<bool> getServerStatus() {
-    if (!server_ || !server_->isRunning()) {
-      return core::Result<bool>::Error("Server is not running");
-    }
-    return core::Result<bool>::Ok(true);
+    return core::Result<bool>::Ok(server_ && server_->isRunning())
+        .and_then([](bool is_running) -> core::Result<bool> {
+          return is_running
+                     ? core::Result<bool>::Ok(true)
+                     : core::Result<bool>::Error("Server is not running");
+        });
   }
 
   std::string getServerAddress() const { return server_address_; }
 
   void createClient(const std::string &address = "") {
-    try {
-      std::string client_address = address.empty() ? server_address_ : address;
-      auto client = std::make_unique<capnp::VectorFSClient>(client_address);
-      spdlog::info("Client created for address: {}", client_address);
-    } catch (const std::exception &e) {
-      spdlog::error("Failed to create client: {}", e.what());
-    }
+    core::Result<bool>::Ok(true)
+        .map([this, &address]() {
+          std::string client_address =
+              address.empty() ? server_address_ : address;
+          auto client = std::make_unique<capnp::VectorFSClient>(client_address);
+          spdlog::info("Client created for address: {}", client_address);
+          return true;
+        })
+        .match([](bool) { /* success */ },
+               [](const auto &error) {
+                 spdlog::error("Failed to create client: {}", error.what());
+               });
   }
 
   Application &operator=(const Application &) = delete;
@@ -160,7 +176,6 @@ public:
     if (is_running_.load()) {
       shutdown();
     }
-
     stopServer();
 
     if (server_thread_ && server_thread_->joinable()) {
@@ -169,16 +184,47 @@ public:
   }
 
 private:
-  void parseCommandLineArgs() {
-    for (int i = 1; i < argc_; ++i) {
-      std::string arg = argv_[i];
-      if (arg == "--server" && i + 1 < argc_) {
-        server_address_ = argv_[++i];
-        spdlog::info("Server address from command line: {}", server_address_);
-      } else if (arg == "--help") {
-        printHelp();
-      }
+  core::Result<bool> initializeSequence(
+      const std::vector<std::function<core::Result<bool>()>> &steps,
+      size_t index) {
+    if (index >= steps.size()) {
+      return core::Result<bool>::Ok(true);
     }
+
+    return steps[index]()
+        .and_then([this, &steps, index]() -> core::Result<bool> {
+          return initializeSequence(steps, index + 1);
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [this, index](const auto &error) -> core::Result<bool> {
+              spdlog::error("Initialization step {} failed: {}", index,
+                            error.what());
+              return core::Result<bool>::Error(error.what());
+            });
+  }
+
+  void parseCommandLineArgs() {
+    core::Result<bool>::Ok(true)
+        .map([this]() {
+          for (int i = 1; i < argc_; ++i) {
+            std::string arg = argv_[i];
+            if (arg == "--server" && i + 1 < argc_) {
+              server_address_ = argv_[++i];
+              spdlog::info("Server address from command line: {}",
+                           server_address_);
+            } else if (arg == "--help") {
+              printHelp();
+            }
+          }
+          return true;
+        })
+        .match([](bool) { /* success */ },
+               [](const auto &error) {
+                 spdlog::error("Command line parsing failed: {}", error.what());
+               });
   }
 
   void printHelp() {
@@ -189,196 +235,224 @@ private:
   }
 
   void cleanup() {
-    spdlog::info("Cleaning up application resources");
-    stopServer();
-    predictive_cache_.clear();
-    spdlog::info("Cleanup completed");
+    core::Result<bool>::Ok(true)
+        .map([this]() {
+          spdlog::info("Cleaning up application resources");
+          stopServer();
+          predictive_cache_.clear();
+          spdlog::info("Cleanup completed");
+          return true;
+        })
+        .match([](bool) { /* success */ },
+               [](const auto &error) {
+                 spdlog::error("Cleanup failed: {}", error.what());
+               });
   }
 
   void updateRanking() {
-    try {
-      auto now = std::chrono::steady_clock::now();
-      spdlog::debug("Updating ranking cache");
-
-      last_ranking_update_ = now;
-    } catch (const std::exception &e) {
-      spdlog::error("Ranking update exception: {}", e.what());
-    }
+    core::Result<bool>::Ok(true)
+        .map([this]() {
+          auto now = std::chrono::steady_clock::now();
+          spdlog::debug("Updating ranking cache");
+          last_ranking_update_ = now;
+          return true;
+        })
+        .match([](bool) { /* success */ },
+               [](const auto &error) {
+                 spdlog::error("Ranking update exception: {}", error.what());
+               });
   }
 
   void checkServerHealth() {
-    if (server_ && server_->isRunning()) {
-      spdlog::debug("Server health check: OK");
-    } else {
-      spdlog::warn("Server health check: NOT RUNNING");
-    }
+    getServerStatus().match(
+        [](bool) { spdlog::debug("Server health check: OK"); },
+        [](const auto &) { spdlog::warn("Server health check: NOT RUNNING"); });
   }
 
   core::Result<bool> initializeEventService() {
-    try {
-      event_service_ = std::make_shared<core::Event>();
-
-      event_service_->Subscribe<schemas::FileInfo>(
-          [this](const schemas::FileInfo &file) {
-            this->create_file_pipeline_.process(file);
-          });
-
-      spdlog::info("Event service initialized");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return core::Result<bool>::Ok(true)
+        .map([this]() {
+          event_service_ = std::make_shared<core::Event>();
+          event_service_->Subscribe<schemas::FileInfo>(
+              [this](const schemas::FileInfo &file) {
+                this->create_file_pipeline_.process(file);
+              });
+          spdlog::info("Event service initialized");
+          return true;
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> initializeEmbedder(const std::string &model) {
-    try {
-      auto result = embedder_.set(model);
-      if (!result.is_ok()) {
-        return core::Result<bool>::Error(result.error().what());
-      }
-      spdlog::info("Embedder initialized successfully");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return embedder_.set(model)
+        .map([this](bool) {
+          spdlog::info("Embedder initialized successfully");
+          return true;
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> initializeCompressor(bool use_quantization) {
-    try {
-      auto result = compressor_.set();
-      if (!result.is_ok()) {
-        return core::Result<bool>::Error(result.error().what());
-      }
-
-      spdlog::info("Compressor initialized");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return compressor_.set()
+        .map([this](bool) {
+          spdlog::info("Compressor initialized");
+          return true;
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> initializeQuantization(bool use_quantization) {
-    try {
-      if (use_quantization) {
-        sq_quantizer_ = std::make_unique<utils::ScalarQuantizer>();
-        pq_quantizer_ = std::make_unique<utils::ProductQuantizer>();
-        spdlog::info("Quantization initialized");
-      }
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return core::Result<bool>::Ok(true)
+        .map([this, use_quantization]() {
+          if (use_quantization) {
+            sq_quantizer_ = std::make_unique<utils::ScalarQuantizer>();
+            pq_quantizer_ = std::make_unique<utils::ProductQuantizer>();
+            spdlog::info("Quantization initialized");
+          }
+          return true;
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> initializeFileinfo() {
-    try {
+    return core::Result<bool>::Ok(true).map([]() {
       spdlog::info("Fileinfo initialized");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+      return true;
+    });
   }
 
   core::Result<bool> initializeFaiss(bool use_quantization) {
-    try {
-      auto result = embedder_.embedder();
-      if (!result.is_ok()) {
-        return core::Result<bool>::Error(result.error().what());
-      }
-
-      auto &embedder = result.unwrap();
-      int dimension = embedder.getDimension();
-
-      faiss_service_ =
-          std::make_unique<faiss::FaissService>(dimension, use_quantization);
-      spdlog::info("FAISS service initialized");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return embedder_.embedder()
+        .and_then(
+            [this, use_quantization](auto &embedder) -> core::Result<bool> {
+              return core::Result<bool>::Ok(true).map(
+                  [this, &embedder, use_quantization]() {
+                    int dimension = embedder.getDimension();
+                    faiss_service_ = std::make_unique<faiss::FaissService>(
+                        dimension, use_quantization);
+                    spdlog::info("FAISS service initialized");
+                    return true;
+                  });
+            })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> initializeSemanticGraph() {
-    try {
+    return core::Result<bool>::Ok(true).map([this]() {
       semantic_graph_ = markov::SemanticGraph();
       spdlog::info("Semantic graph initialized");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+      return true;
+    });
   }
 
   core::Result<bool> initializeHiddenMarkov() {
-    try {
+    return core::Result<bool>::Ok(true).map([this]() {
       hidden_markov_ = markov::HiddenMarkovModel();
       spdlog::info("Hidden Markov initialized");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+      return true;
+    });
   }
 
   core::Result<bool> initializeSharedMemory() {
-    try {
-      shm_manager_ = std::make_unique<shared::SharedMemoryManager>();
-      if (shm_manager_->initialize()) {
-        spdlog::info("Shared memory initialized");
-        return core::Result<bool>::Ok(true);
-      } else {
-        return core::Result<bool>::Error("Failed to initialize shared memory");
-      }
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return core::Result<bool>::Ok(true)
+        .map([this]() {
+          shm_manager_ = std::make_unique<shared::SharedMemoryManager>();
+          return shm_manager_->initialize();
+        })
+        .and_then([](bool initialized) -> core::Result<bool> {
+          return initialized ? core::Result<bool>::Ok(true).map([]() {
+            spdlog::info("Shared memory initialized");
+            return true;
+          })
+                             : core::Result<bool>::Error(
+                                   "Failed to initialize shared memory");
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> initializePipeline() {
-    try {
-      create_file_pipeline_ = core::pipeline::Pipeline();
-
-      auto embedder_result = embedder_.embedder();
-      if (!embedder_result.is_ok()) {
-        return core::Result<bool>::Error(embedder_result.error().what());
-      }
-
-      create_file_pipeline_.add_handler(embedder_result.unwrap());
-
-      auto compressor_result = compressor_.compressor();
-      if (!compressor_result.is_ok()) {
-        return core::Result<bool>::Error(compressor_result.error().what());
-      }
-
-      create_file_pipeline_.add_handler(compressor_result.unwrap());
-
-      spdlog::info("Pipeline initialized");
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return embedder_.embedder()
+        .and_then([this](auto &embedder) -> core::Result<bool> {
+          return compressor_.compressor().and_then(
+              [this, &embedder](auto &compressor) -> core::Result<bool> {
+                return core::Result<bool>::Ok(true).map(
+                    [this, &embedder, &compressor]() {
+                      create_file_pipeline_ = core::pipeline::Pipeline();
+                      create_file_pipeline_.add_handler(embedder);
+                      create_file_pipeline_.add_handler(compressor);
+                      spdlog::info("Pipeline initialized");
+                      return true;
+                    });
+              });
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> initializeServer() {
-    try {
-      server_ = std::make_unique<capnp::VectorFSServer<EmbeddingModel>>(
-          server_address_);
-
-      server_->addEventService(event_service_);
-
-      spdlog::info("Server initialized with address: {}", server_address_);
-      return core::Result<bool>::Ok(true);
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    return core::Result<bool>::Ok(true)
+        .map([this]() {
+          server_ = std::make_unique<capnp::VectorFSServer<EmbeddingModel>>(
+              server_address_);
+          server_->addEventService(event_service_);
+          spdlog::info("Server initialized with address: {}", server_address_);
+          return true;
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
   }
 
   core::Result<bool> startServer() {
-    try {
-      if (!server_) {
-        return core::Result<bool>::Error("Server not initialized");
-      }
-
-      if (server_->isRunning()) {
-        return core::Result<bool>::Error("Server is already running");
+    return core::Result<bool>::Ok(true).map([this]() {
+      if (server_thread_ && server_->isRunning()) {
+        spdlog::info("Server is already running");
+        return true;
       }
 
       server_thread_ = std::make_unique<std::thread>([this]() {
@@ -397,50 +471,68 @@ private:
       if (server_->isRunning()) {
         spdlog::info("Server started successfully on address: {}",
                      server_address_);
-        return core::Result<bool>::Ok(true);
+        return true;
       } else {
-        return core::Result<bool>::Error("Server failed to start");
+        throw std::runtime_error("Server failed to start");
       }
-
-    } catch (const std::exception &e) {
-      return core::Result<bool>::Error(e.what());
-    }
+    });
   }
 
-  void stopServer() {
-    if (server_) {
-      server_->stop();
-    }
+  core::Result<bool> stopServer() {
+    return core::Result<bool>::Ok(true)
+        .map([this]() {
+          if (server_) {
+            server_->stop();
+          }
 
-    if (server_thread_ && server_thread_->joinable()) {
-      spdlog::info("Stopping server thread...");
+          if (server_thread_ && server_thread_->joinable()) {
+            spdlog::info("Stopping server thread...");
 
-      auto start = std::chrono::steady_clock::now();
-      auto timeout = std::chrono::seconds(3);
+            auto start = std::chrono::steady_clock::now();
+            auto timeout = std::chrono::seconds(3);
 
-      while (server_->isRunning() &&
-             std::chrono::steady_clock::now() - start < timeout) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
+            while (server_ && server_->isRunning() &&
+                   std::chrono::steady_clock::now() - start < timeout) {
+              std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
 
-      if (server_thread_->joinable()) {
-        if (server_thread_->get_id() != std::this_thread::get_id()) {
-          server_thread_->detach();
-        }
-      }
+            if (server_thread_->joinable()) {
+              if (server_thread_->get_id() != std::this_thread::get_id()) {
+                server_thread_->detach();
+              }
+            }
 
-      server_thread_.reset();
-      spdlog::info("Server thread stopped");
-    }
+            server_thread_.reset();
+            spdlog::info("Server thread stopped");
+          }
+          return true;
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              spdlog::warn("Server stop encountered issue: {}", error.what());
+              return core::Result<bool>::Ok(true);
+            });
   }
 
   void initializeHMMStates() {
-    hidden_markov_.add_state("code");
-    hidden_markov_.add_state("document");
-    hidden_markov_.add_state("config");
-    hidden_markov_.add_state("test");
-    hidden_markov_.add_state("misc");
-    spdlog::info("HMM states initialized");
+    core::Result<bool>::Ok(true)
+        .map([this]() {
+          hidden_markov_.add_state("code");
+          hidden_markov_.add_state("document");
+          hidden_markov_.add_state("config");
+          hidden_markov_.add_state("test");
+          hidden_markov_.add_state("misc");
+          spdlog::info("HMM states initialized");
+          return true;
+        })
+        .match([](bool) { /* success */ },
+               [](const auto &error) {
+                 spdlog::error("HMM states initialization failed: {}",
+                               error.what());
+               });
   }
 
   int argc_;

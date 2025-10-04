@@ -5,6 +5,7 @@
 #include <concepts>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -76,26 +77,42 @@ public:
   }
 
   template <typename F>
-  auto map(F &&func) -> Result<decltype(func(std::declval<T>())), Err> {
+  auto map(F &&func) -> Result<std::invoke_result_t<F, T &>, Err> {
     if (!ok_flag) {
-      return Result<decltype(func(std::declval<T>())), Err>::Error(
-          error_.value());
+      return Result<std::invoke_result_t<F, T &>, Err>::Error(error_.value());
     }
-    return Result<decltype(func(std::declval<T>())), Err>::Ok(
-        func(*value_ptr_));
+    return Result<std::invoke_result_t<F, T &>, Err>::Ok(func(*value_ptr_));
   }
 
   template <typename F>
-  auto and_then(F &&func) -> decltype(func(std::declval<T>())) {
+  auto map(F &&func) -> Result<std::invoke_result_t<F>, Err> {
     if (!ok_flag) {
-      return decltype(func(std::declval<T>()))::Error(error_.value());
+      return Result<std::invoke_result_t<F>, Err>::Error(error_.value());
+    }
+    return Result<std::invoke_result_t<F>, Err>::Ok(func());
+  }
+
+  template <typename F>
+  auto and_then(F &&func) -> std::invoke_result_t<F, T &> {
+    if (!ok_flag) {
+      using ResultType = std::invoke_result_t<F, T &>;
+      return ResultType::Error(error_.value());
     }
     return func(*value_ptr_);
   }
 
+  template <typename F> auto and_then(F &&func) -> std::invoke_result_t<F> {
+    if (!ok_flag) {
+      using ResultType = std::invoke_result_t<F>;
+      return ResultType::Error(error_.value());
+    }
+    return func();
+  }
+
   template <typename OkHandler, typename ErrHandler>
-  auto match(OkHandler &&ok_func,
-             ErrHandler &&err_func) -> decltype(ok_func(std::declval<T>())) {
+  auto match(OkHandler &&ok_func, ErrHandler &&err_func)
+      -> std::common_type_t<std::invoke_result_t<OkHandler, T &>,
+                            std::invoke_result_t<ErrHandler, Err &>> {
     if (ok_flag) {
       return ok_func(*value_ptr_);
     }
@@ -167,24 +184,41 @@ public:
   }
 
   template <typename F>
-  auto map(F &&func) -> Result<decltype(func(std::declval<T>())), Err> {
+  auto map(F &&func) -> Result<std::invoke_result_t<F, T>, Err> {
     if (!ok_flag) {
-      return Result<decltype(func(std::declval<T>())), Err>::Error(error());
+      return Result<std::invoke_result_t<F, T>, Err>::Error(error());
     }
-    return Result<decltype(func(std::declval<T>())), Err>::Ok(func(value()));
+    return Result<std::invoke_result_t<F, T>, Err>::Ok(func(value()));
   }
 
   template <typename F>
-  auto and_then(F &&func) -> decltype(func(std::declval<T>())) {
+  auto map(F &&func) -> Result<std::invoke_result_t<F>, Err> {
     if (!ok_flag) {
-      return decltype(func(std::declval<T>()))::Error(error());
+      return Result<std::invoke_result_t<F>, Err>::Error(error());
+    }
+    return Result<std::invoke_result_t<F>, Err>::Ok(func());
+  }
+
+  template <typename F> auto and_then(F &&func) -> std::invoke_result_t<F, T> {
+    if (!ok_flag) {
+      using ResultType = std::invoke_result_t<F, T>;
+      return ResultType::Error(error());
     }
     return func(value());
   }
 
+  template <typename F> auto and_then(F &&func) -> std::invoke_result_t<F> {
+    if (!ok_flag) {
+      using ResultType = std::invoke_result_t<F>;
+      return ResultType::Error(error());
+    }
+    return func();
+  }
+
   template <typename OkHandler, typename ErrHandler>
-  auto match(OkHandler &&ok_func,
-             ErrHandler &&err_func) -> decltype(ok_func(std::declval<T>())) {
+  auto match(OkHandler &&ok_func, ErrHandler &&err_func)
+      -> std::common_type_t<std::invoke_result_t<OkHandler, T>,
+                            std::invoke_result_t<ErrHandler, Err>> {
     if (ok_flag) {
       return ok_func(value());
     }
