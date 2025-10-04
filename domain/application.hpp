@@ -8,7 +8,7 @@
 #include <spdlog/spdlog.h>
 #include <thread>
 
-#include "algorithms/compressor/compressor.hpp"
+#include "algorithms/compressor/compressor_manager.hpp"
 #include "embedded/emdedded_manager.hpp"
 #include "file/fileinfo.hpp"
 #include "markov.hpp"
@@ -26,8 +26,6 @@
 #include <vector>
 
 namespace owl::app {
-
-using CompressorVariant = std::variant<compression::Compressor>;
 
 template <typename EmbeddingModel = embedded::FastTextEmbedder,
           typename Compressor = compression::Compressor>
@@ -247,9 +245,11 @@ private:
 
   core::Result<bool> initializeCompressor(bool use_quantization) {
     try {
-      if constexpr (std::is_same_v<Compressor, compression::Compressor>) {
-        compressor_.emplace<compression::Compressor>();
+      auto result = compressor_.set();
+      if (!result.is_ok()) {
+        return core::Result<bool>::Error(result.error().what());
       }
+
       spdlog::info("Compressor initialized");
       return core::Result<bool>::Ok(true);
     } catch (const std::exception &e) {
@@ -281,12 +281,12 @@ private:
 
   core::Result<bool> initializeFaiss(bool use_quantization) {
     try {
-      auto embedder_result = embedder_.embedder();
-      if (!embedder_result.is_ok()) {
-        return core::Result<bool>::Error(embedder_result.error().what());
+      auto result = embedder_.embedder();
+      if (!result.is_ok()) {
+        return core::Result<bool>::Error(result.error().what());
       }
 
-      auto &embedder = embedder_result.unwrap();
+      auto &embedder = result.unwrap();
       int dimension = embedder.getDimension();
 
       faiss_service_ =
@@ -341,15 +341,15 @@ private:
         return core::Result<bool>::Error(embedder_result.error().what());
       }
 
-      if constexpr (std::is_same_v<EmbeddingModel,
-                                   embedded::FastTextEmbedder>) {
-        create_file_pipeline_.add_handler(embedder_result.unwrap());
+      create_file_pipeline_.add_handler(embedder_result.unwrap());
+
+      auto compressor_result = compressor_.compressor();
+      if (!compressor_result.is_ok()) {
+        return core::Result<bool>::Error(compressor_result.error().what());
       }
 
-      if constexpr (std::is_same_v<Compressor, compression::Compressor>) {
-        create_file_pipeline_.add_handler(
-            std::get<compression::Compressor>(compressor_));
-      }
+      create_file_pipeline_.add_handler(compressor_result.unwrap());
+
       spdlog::info("Pipeline initialized");
       return core::Result<bool>::Ok(true);
     } catch (const std::exception &e) {
@@ -458,8 +458,8 @@ private:
   int fileinfo_create_subscribe_;
 
   EmbedderManager<EmbeddingModel> embedder_;
+  CompressorManager<Compressor> compressor_;
 
-  CompressorVariant compressor_;
   markov::SemanticGraph semantic_graph_;
   markov::HiddenMarkovModel hidden_markov_;
 
