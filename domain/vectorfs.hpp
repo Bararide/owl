@@ -88,7 +88,7 @@ private:
   compress_data(const std::vector<uint8_t> &data) {
     return std::visit(
         [&](const auto &compressor) -> std::vector<uint8_t> {
-          auto result = compressor->compress_impl(data);
+          auto result = compressor->compress(data);
           if (result.is_ok()) {
             return result.unwrap();
           } else {
@@ -102,7 +102,7 @@ private:
   decompress_data(const std::vector<uint8_t> &compressed_data) {
     return std::visit(
         [&](const auto &compressor) -> std::vector<uint8_t> {
-          auto result = compressor->decompress_impl(compressed_data);
+          auto result = compressor->decompress(compressed_data);
           if (result.is_ok()) {
             return result.unwrap();
           } else {

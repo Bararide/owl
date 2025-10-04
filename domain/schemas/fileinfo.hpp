@@ -2,6 +2,8 @@
 #define OWL_SCHEMAS_FILEINFO
 
 #include <optional>
+#include <infrastructure/result.hpp>
+#include <pipeline/pipeline.hpp>
 
 namespace owl::schemas {
 

@@ -13,7 +13,7 @@ static constexpr int kCompressionLevel = 9;
 
 class Compressor : public CompressionBase<Compressor> {
 public:
-  auto compress_impl(const std::vector<uint8_t> data)
+  auto compress(const std::vector<uint8_t> data)
       -> core::Result<std::vector<uint8_t>> {
     try {
       if (data.empty()) {
@@ -23,7 +23,7 @@ public:
       std::vector<uint8_t> compressed_data;
 
       const uint32_t magic = 0x4C5A3432;
-      const uint16_t version = 0x0100; 
+      const uint16_t version = 0x0100;
 
       size_t total_blocks = (data.size() + kBlockSize - 1) / kBlockSize;
       std::vector<uint32_t> kBlockSizes;
@@ -31,8 +31,7 @@ public:
 
       size_t header_size = sizeof(magic) + sizeof(version) + sizeof(uint32_t) +
                            total_blocks * (sizeof(uint32_t) * 2);
-      compressed_data.reserve(header_size +
-                              data.size() / 2);
+      compressed_data.reserve(header_size + data.size() / 2);
 
       std::vector<std::vector<uint8_t>> compressed_blocks;
       compressed_blocks.reserve(total_blocks);
@@ -82,8 +81,8 @@ public:
       }
 
       spdlog::info("Compressed {} bytes to {} bytes (ratio: {:.2f}%)",
-                    data.size(), compressed_data.size(),
-                    (compressed_data.size() * 100.0) / data.size());
+                   data.size(), compressed_data.size(),
+                   (compressed_data.size() * 100.0) / data.size());
 
       return core::Result<std::vector<uint8_t>>::Ok(compressed_data);
 
@@ -93,7 +92,7 @@ public:
     }
   }
 
-  auto decompress_impl(const std::vector<uint8_t> &data)
+  auto decompress(const std::vector<uint8_t> &data)
       -> core::Result<std::vector<uint8_t>> {
     try {
       if (data.empty()) {
@@ -174,10 +173,20 @@ public:
     }
   }
 
+  auto
+  handle(const schemas::FileInfo &file) -> core::Result<schemas::FileInfo> {
+    spdlog::critical("handle(const schemas::FileInfo &file) -> core::Result<schemas::FileInfo> in COMPRESSOR");
+    return core::Result<schemas::FileInfo>::Ok(file);
+  }
+
+  void await() {
+    spdlog::debug("await method in compressor");
+  }
+
 private:
   std::vector<uint8_t>
   decompress_block(const std::vector<uint8_t> &compressed_block,
-                               size_t original_size) {
+                   size_t original_size) {
     std::vector<uint8_t> decompressed(original_size);
 
     int decompressed_size = LZ4_decompress_safe(
@@ -194,8 +203,7 @@ private:
     return decompressed;
   }
 
-  std::vector<uint8_t>
-  compress_block(const std::vector<uint8_t> &block) {
+  std::vector<uint8_t> compress_block(const std::vector<uint8_t> &block) {
     int max_compressed_size = LZ4_compressBound(static_cast<int>(block.size()));
     if (max_compressed_size <= 0) {
       throw std::runtime_error("LZ4 compression bound calculation failed");
