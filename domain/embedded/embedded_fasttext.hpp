@@ -69,7 +69,7 @@ public:
             });
   }
 
-  int getDimension() const {
+  int getDimensionImpl() const {
     validateModelLoaded();
     return dimension_;
   }

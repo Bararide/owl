@@ -8,10 +8,6 @@
 #include <string>
 #include <thread>
 
-static constexpr const char *kEmbedderModel =
-    "/home/bararide/code/models/crawl-300d-2M-subword/"
-    "crawl-300d-2M-subword.bin";
-
 std::atomic<bool> g_shutdown_requested{false};
 
 void signalHandler(int signal) {
@@ -61,7 +57,7 @@ int main(int argc, char *argv[]) {
   setupSignalHandlers();
 
   std::string server_address = "127.0.0.1:5346";
-  std::string model_path = kEmbedderModel;
+  std::string model_path = owl::kEmbedderModel;
   bool use_quantization = false;
 
   for (int i = 1; i < argc; ++i) {
