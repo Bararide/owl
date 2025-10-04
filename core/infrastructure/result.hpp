@@ -10,82 +10,182 @@
 #include <variant>
 
 namespace core {
-template <typename T, typename Err = std::runtime_error> class Result {
+
+template <typename T, typename Err = std::runtime_error> class Result;
+
+template <typename T, typename Err> class Result<T &, Err> {
 private:
-  std::shared_ptr<T> value_ptr;
-  std::shared_ptr<Err> error_ptr;
+  T *value_ptr_;
+  std::optional<Err> error_;
   bool ok_flag;
 
 public:
-  Result() noexcept
-    requires std::default_initializable<T>
-      : value_ptr(std::make_shared<T>()), ok_flag(true) {}
-
-  template <typename U>
-    requires IsConvertable<T, U>
-  Result(U &&value) noexcept
-      : value_ptr(std::make_shared<T>(std::forward<U>(value))), ok_flag(true) {}
-
-  template <typename U>
-    requires std::is_same_v<std::decay_t<U>, T> &&
-                 (!std::is_copy_constructible_v<T>)
-  Result(U &&value) noexcept
-      : value_ptr(std::make_shared<T>(std::forward<U>(value))), ok_flag(true) {}
+  Result(T &value) noexcept
+      : value_ptr_(&value), error_(std::nullopt), ok_flag(true) {}
 
   template <typename E>
-    requires IsConvertable<Err, E>
-  Result(E &&error) noexcept
-      : error_ptr(std::make_shared<Err>(std::forward<E>(error))),
-        ok_flag(false) {}
+    requires std::is_constructible_v<Err, E &&>
+  Result(E &&error) noexcept(std::is_nothrow_constructible_v<Err, E &&>)
+      : value_ptr_(nullptr), error_(std::forward<E>(error)), ok_flag(false) {}
 
   bool is_ok() const { return ok_flag; }
 
-  T &value() { return *value_ptr; }
-  const T &value() const { return *value_ptr; }
-
-  Err &error() { return *error_ptr; }
-  const Err &error() const { return *error_ptr; }
-
-  T &unwrap() {
-    if (!is_ok()) {
-      throw error();
+  T &value() & {
+    if (!ok_flag) {
+      throw error_.value();
     }
-    return value();
+    return *value_ptr_;
   }
 
-  const T &unwrap() const {
-    if (!is_ok()) {
-      throw error();
+  const T &value() const & {
+    if (!ok_flag) {
+      throw error_.value();
     }
-    return value();
+    return *value_ptr_;
   }
 
-  T expect(const char *message) {
-    if (!is_ok()) {
+  Err &error() & {
+    if (ok_flag) {
+      throw std::runtime_error("No error in Result");
+    }
+    return error_.value();
+  }
+
+  const Err &error() const & {
+    if (ok_flag) {
+      throw std::runtime_error("No error in Result");
+    }
+    return error_.value();
+  }
+
+  Err &&error() && {
+    if (ok_flag) {
+      throw std::runtime_error("No error in Result");
+    }
+    return std::move(error_.value());
+  }
+
+  T &unwrap() & { return value(); }
+  const T &unwrap() const & { return value(); }
+
+  T &expect(const char *message) {
+    if (!ok_flag) {
       throw std::runtime_error(message);
     }
-    return value();
+    return *value_ptr_;
   }
 
   template <typename F>
-  auto map(F &&func) -> Result<decltype(func(value())), Err> {
-    if (!is_ok()) {
-      return Result<decltype(func(value())), Err>::Error(error());
+  auto map(F &&func) -> Result<decltype(func(std::declval<T>())), Err> {
+    if (!ok_flag) {
+      return Result<decltype(func(std::declval<T>())), Err>::Error(
+          error_.value());
     }
-    return Result<decltype(func(value())), Err>::Ok(func(value()));
+    return Result<decltype(func(std::declval<T>())), Err>::Ok(
+        func(*value_ptr_));
   }
 
-  template <typename F> auto and_then(F &&func) -> decltype(func(value())) {
-    if (!is_ok()) {
-      return decltype(func(value()))::Error(error());
+  template <typename F>
+  auto and_then(F &&func) -> decltype(func(std::declval<T>())) {
+    if (!ok_flag) {
+      return decltype(func(std::declval<T>()))::Error(error_.value());
+    }
+    return func(*value_ptr_);
+  }
+
+  template <typename OkHandler, typename ErrHandler>
+  auto match(OkHandler &&ok_func,
+             ErrHandler &&err_func) -> decltype(ok_func(std::declval<T>())) {
+    if (ok_flag) {
+      return ok_func(*value_ptr_);
+    }
+    return err_func(error_.value());
+  }
+
+  static Result Ok(T &value) { return Result(value); }
+
+  static Result Error(Err &&error) { return Result(std::forward<Err>(error)); }
+
+  static Result Error(const Err &error) { return Result(error); }
+
+  static Result Error(const char *message) { return Result(Err{message}); }
+};
+
+template <typename T, typename Err> class Result {
+private:
+  std::variant<T, Err> data_;
+  bool ok_flag;
+
+public:
+  template <typename U>
+    requires(!std::is_same_v<std::decay_t<U>, Err>) &&
+                std::is_constructible_v<T, U &&>
+  Result(U &&value) noexcept(std::is_nothrow_constructible_v<T, U &&>)
+      : data_(std::in_place_index<0>, std::forward<U>(value)), ok_flag(true) {}
+
+  template <typename E>
+    requires std::is_constructible_v<Err, E &&>
+  Result(E &&error) noexcept(std::is_nothrow_constructible_v<Err, E &&>)
+      : data_(std::in_place_index<1>, std::forward<E>(error)), ok_flag(false) {}
+
+  bool is_ok() const { return ok_flag; }
+
+  T &value() & { return std::get<0>(data_); }
+  const T &value() const & { return std::get<0>(data_); }
+  T &&value() && { return std::get<0>(std::move(data_)); }
+
+  Err &error() & { return std::get<1>(data_); }
+  const Err &error() const & { return std::get<1>(data_); }
+  Err &&error() && { return std::get<1>(std::move(data_)); }
+
+  T &unwrap() & {
+    if (!ok_flag) {
+      throw error();
+    }
+    return value();
+  }
+
+  const T &unwrap() const & {
+    if (!ok_flag) {
+      throw error();
+    }
+    return value();
+  }
+
+  T &&unwrap() && {
+    if (!ok_flag) {
+      throw error();
+    }
+    return std::move(value());
+  }
+
+  T expect(const char *message) {
+    if (!ok_flag) {
+      throw std::runtime_error(message);
+    }
+    return std::move(value());
+  }
+
+  template <typename F>
+  auto map(F &&func) -> Result<decltype(func(std::declval<T>())), Err> {
+    if (!ok_flag) {
+      return Result<decltype(func(std::declval<T>())), Err>::Error(error());
+    }
+    return Result<decltype(func(std::declval<T>())), Err>::Ok(func(value()));
+  }
+
+  template <typename F>
+  auto and_then(F &&func) -> decltype(func(std::declval<T>())) {
+    if (!ok_flag) {
+      return decltype(func(std::declval<T>()))::Error(error());
     }
     return func(value());
   }
 
   template <typename OkHandler, typename ErrHandler>
   auto match(OkHandler &&ok_func,
-             ErrHandler &&err_func) -> decltype(ok_func(value())) {
-    if (is_ok()) {
+             ErrHandler &&err_func) -> decltype(ok_func(std::declval<T>())) {
+    if (ok_flag) {
       return ok_func(value());
     }
     return err_func(error());
@@ -95,13 +195,13 @@ public:
 
   static Result Ok(const T &value) { return Result(value); }
 
-  static Result Ok() { return Result(); }
+  template <typename U> static Result Ok(U &&value) {
+    return Result(std::forward<U>(value));
+  }
 
   static Result Error(Err &&error) { return Result(std::forward<Err>(error)); }
 
   static Result Error(const Err &error) { return Result(error); }
-
-  static Result Error() { return Result(Err{"Unknown error"}); }
 
   static Result Error(const char *message) { return Result(Err{message}); }
 };

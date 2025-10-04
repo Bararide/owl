@@ -9,7 +9,7 @@
 #include <thread>
 
 #include "algorithms/compressor/compressor.hpp"
-#include "embedded/embedded_fasttext.hpp"
+#include "embedded/emdedded_manager.hpp"
 #include "file/fileinfo.hpp"
 #include "markov.hpp"
 #include "schemas/fileinfo.hpp"
@@ -27,7 +27,6 @@
 
 namespace owl::app {
 
-using EmbedderVariant = std::variant<embedded::FastTextEmbedder>;
 using CompressorVariant = std::variant<compression::Compressor>;
 
 template <typename EmbeddingModel = embedded::FastTextEmbedder,
@@ -235,15 +234,11 @@ private:
 
   core::Result<bool> initializeEmbedder(const std::string &model) {
     try {
-      if constexpr (std::is_same_v<EmbeddingModel,
-                                   embedded::FastTextEmbedder>) {
-        embedder_.emplace<embedded::FastTextEmbedder>();
-        std::get<embedded::FastTextEmbedder>(embedder_).loadModel(model);
+      auto result = embedder_.set(model);
+      if (!result.is_ok()) {
+        return core::Result<bool>::Error(result.error().what());
       }
-
-      spdlog::info(
-          "Embedder initialized: {}",
-          std::get<embedded::FastTextEmbedder>(embedder_).getEmbedderInfo());
+      spdlog::info("Embedder initialized successfully");
       return core::Result<bool>::Ok(true);
     } catch (const std::exception &e) {
       return core::Result<bool>::Error(e.what());
@@ -286,9 +281,13 @@ private:
 
   core::Result<bool> initializeFaiss(bool use_quantization) {
     try {
-      int dimension = std::visit(
-          [](const auto &embedder) { return embedder.getDimension(); },
-          embedder_);
+      auto embedder_result = embedder_.embedder();
+      if (!embedder_result.is_ok()) {
+        return core::Result<bool>::Error(embedder_result.error().what());
+      }
+
+      auto &embedder = embedder_result.unwrap();
+      int dimension = embedder.getDimension();
 
       faiss_service_ =
           std::make_unique<faiss::FaissService>(dimension, use_quantization);
@@ -336,10 +335,15 @@ private:
   core::Result<bool> initializePipeline() {
     try {
       create_file_pipeline_ = core::pipeline::Pipeline();
+
+      auto embedder_result = embedder_.embedder();
+      if (!embedder_result.is_ok()) {
+        return core::Result<bool>::Error(embedder_result.error().what());
+      }
+
       if constexpr (std::is_same_v<EmbeddingModel,
                                    embedded::FastTextEmbedder>) {
-        create_file_pipeline_.add_handler(
-            std::get<embedded::FastTextEmbedder>(embedder_));
+        create_file_pipeline_.add_handler(embedder_result.unwrap());
       }
 
       if constexpr (std::is_same_v<Compressor, compression::Compressor>) {
@@ -453,7 +457,8 @@ private:
 
   int fileinfo_create_subscribe_;
 
-  EmbedderVariant embedder_;
+  EmbedderManager<EmbeddingModel> embedder_;
+
   CompressorVariant compressor_;
   markov::SemanticGraph semantic_graph_;
   markov::HiddenMarkovModel hidden_markov_;
