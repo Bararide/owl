@@ -5,6 +5,8 @@
 #include <infrastructure/result.hpp>
 #include <pipeline/pipeline.hpp>
 
+#include "utils/constants.hpp"
+
 namespace owl::schemas {
 
 struct FileInfo {
