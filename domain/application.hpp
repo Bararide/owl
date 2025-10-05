@@ -234,11 +234,16 @@ private:
     spdlog::info("  --help                Show this help message");
   }
 
-  void cleanup() {
+void cleanup() {
     core::Result<bool>::Ok(true)
         .map([this]() {
           spdlog::info("Cleaning up application resources");
           stopServer();
+          
+          if (ipc_base_) {
+            ipc_base_->stop();
+          }
+          
           predictive_cache_.clear();
           spdlog::info("Cleanup completed");
           return true;
@@ -247,7 +252,7 @@ private:
                [](const auto &error) {
                  spdlog::error("Cleanup failed: {}", error.what());
                });
-  }
+}
 
   void updateRanking() {
     core::Result<bool>::Ok(true)
@@ -272,20 +277,19 @@ private:
   core::Result<bool> initializeIpc() {
     return core::Result<bool>::Ok(true).and_then(
         [this]() -> core::Result<bool> {
-          auto ipc_base = std::make_shared<IpcBaseService>("vectorfs_app");
+          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_app");
 
-          auto init_result = ipc_base->initialize();
+          auto init_result = ipc_base_->initialize();
           if (!init_result.is_ok()) {
             return core::Result<bool>::Error("Failed to initialize IPC base");
           }
 
-          auto publisher_result = ipc_base->createPublisher();
+          auto publisher_result = ipc_base_->createPublisher();
           if (!publisher_result.is_ok()) {
             return core::Result<bool>::Error("Failed to create IPC publisher");
           }
 
-          ipc_publisher_ = publisher_result.value();
-          ipc_pipeline_handler_ = IpcPipelineHandler(ipc_publisher_);
+          ipc_pipeline_handler_ = IpcPipelineHandler(publisher_result.value());
 
           create_file_pipeline_.add_handler(ipc_pipeline_handler_);
 
@@ -536,6 +540,7 @@ private:
   std::unique_ptr<utils::ProductQuantizer> pq_quantizer_;
 
   std::shared_ptr<core::Event> event_service_;
+  std::shared_ptr<IpcBaseService> ipc_base_;
   std::shared_ptr<IpcBaseService::PublisherType> ipc_publisher_;
 
   core::pipeline::Pipeline create_file_pipeline_;

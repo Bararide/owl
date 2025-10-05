@@ -42,12 +42,15 @@ public:
           "Publisher not initialized");
     }
 
-    spdlog::critical("IpcPipelineHandler");
+    auto send_result = sendMessage(file);
 
-    return sendMessage(file).and_then(
-        [&file]() -> core::Result<schemas::FileInfo> {
-          return core::Result<schemas::FileInfo>::Ok(file);
-        });
+    if (send_result.is_ok()) {
+      return core::Result<schemas::FileInfo>::Ok(file);
+    } else {
+      spdlog::warn("IPC send failed, but continuing pipeline: {}",
+                   send_result.error().what());
+      return core::Result<schemas::FileInfo>::Ok(file);
+    }
   }
 
   void await() override {
@@ -56,19 +59,49 @@ public:
 
   core::Result<bool> sendMessage(const schemas::FileInfo &file_info) {
     try {
+      spdlog::info("=== Starting sendMessage ===");
+
+      if (!publisher_) {
+        spdlog::critical("Publisher is null!");
+        return core::Result<bool>::Error("Publisher not initialized");
+      }
+
+      auto connections_result = publisher_->update_connections();
+      if (connections_result.has_error()) {
+        spdlog::warn("No subscribers connected to the publisher");
+      }
+
       auto serialized_data = schemas::FileInfoSerializer::serialize(file_info);
+      spdlog::info("Serialized data size: {}", serialized_data.size());
 
       iox::ImmutableSlice<const uint8_t> data_slice(serialized_data.data(),
                                                     serialized_data.size());
 
+      spdlog::info("Attempting to send slice with {} elements",
+                   data_slice.number_of_elements());
+
       auto send_result = publisher_->send_slice_copy(data_slice);
 
       if (send_result.has_error()) {
-        return core::Result<bool>::Error("Failed to send data");
+        auto error = send_result.error();
+        spdlog::critical("SEND FAILED - Error code: {}",
+                         static_cast<int>(error));
+
+        switch (static_cast<int>(error)) {
+        case 2:
+          spdlog::warn("No subscribers available to receive the message");
+          return core::Result<bool>::Ok(true);
+        default:
+          return core::Result<bool>::Error("Failed to send data");
+        }
       }
 
+      spdlog::info("Send successful to {} recipients", send_result.value());
+      spdlog::info("=== sendMessage completed ===");
       return core::Result<bool>::Ok(true);
+
     } catch (const std::exception &e) {
+      spdlog::critical("Exception in sendMessage: {}", e.what());
       return core::Result<bool>::Error(e.what());
     }
   }
