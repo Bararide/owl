@@ -11,7 +11,7 @@
 #include "algorithms/compressor/compressor_manager.hpp"
 #include "embedded/emdedded_manager.hpp"
 #include "file/fileinfo.hpp"
-#include "ipc/ipc.hpp"
+#include "ipc/ipc_pipeline_handler.hpp"
 #include "markov.hpp"
 #include "schemas/fileinfo.hpp"
 #include "shared_memory/shared_memory.hpp"
@@ -61,7 +61,7 @@ public:
         },
         [this]() { return initializeSemanticGraph(); },
         [this]() { return initializeHiddenMarkov(); },
-        [this]() { return initializeSharedMemory(); },
+        [this]() { return initializeIpc(); },
         [this]() { return initializePipeline(); },
         [this]() { return initializeServer(); }};
 
@@ -270,35 +270,28 @@ private:
   }
 
   core::Result<bool> initializeIpc() {
-    return core::Result<bool>::Ok(true)
-        .map([this]() {
-          ipc_service_ = IpcService("vectorfs_app");
+    return core::Result<bool>::Ok(true).and_then(
+        [this]() -> core::Result<bool> {
+          auto ipc_base = std::make_shared<IpcBaseService>("vectorfs_app");
 
-          if (is_ipc_server_.load()) {
-            return ipc_service_.initialize().and_then([this]() {
-              is_ipc_server_.store(true);
-              return ipc_service_.startServer();
-            });
-          } else {
-            return ipc_service_.initialize().and_then([this]() {
-              is_ipc_server_.store(true);
-              return ipc_service_.startClient([this](const auto &file_info) {
-                this->handleIpcMessage(file_info);
-              });
-            });
+          auto init_result = ipc_base->initialize();
+          if (!init_result.is_ok()) {
+            return core::Result<bool>::Error("Failed to initialize IPC base");
           }
-        })
-        .and_then([](bool success) -> core::Result<bool> {
-          spdlog::info("IPC service initialized successfully");
+
+          auto publisher_result = ipc_base->createPublisher();
+          if (!publisher_result.is_ok()) {
+            return core::Result<bool>::Error("Failed to create IPC publisher");
+          }
+
+          ipc_publisher_ = publisher_result.value();
+          ipc_pipeline_handler_ = IpcPipelineHandler(ipc_publisher_);
+
+          create_file_pipeline_.add_handler(ipc_pipeline_handler_);
+
+          spdlog::info("IPC Pipeline Handler initialized successfully");
           return core::Result<bool>::Ok(true);
-        })
-        .match(
-            [](bool success) -> core::Result<bool> {
-              return core::Result<bool>::Ok(success);
-            },
-            [](const auto &error) -> core::Result<bool> {
-              return core::Result<bool>::Error(error.what());
-            });
+        });
   }
 
   core::Result<bool> initializeEventService() {
@@ -415,29 +408,6 @@ private:
     });
   }
 
-  core::Result<bool> initializeSharedMemory() {
-    return core::Result<bool>::Ok(true)
-        .map([this]() {
-          shm_manager_ = std::make_unique<shared::SharedMemoryManager>();
-          return shm_manager_->initialize();
-        })
-        .and_then([](bool initialized) -> core::Result<bool> {
-          return initialized ? core::Result<bool>::Ok(true).map([]() {
-            spdlog::info("Shared memory initialized");
-            return true;
-          })
-                             : core::Result<bool>::Error(
-                                   "Failed to initialize shared memory");
-        })
-        .match(
-            [](bool success) -> core::Result<bool> {
-              return core::Result<bool>::Ok(success);
-            },
-            [](const auto &error) -> core::Result<bool> {
-              return core::Result<bool>::Error(error.what());
-            });
-  }
-
   core::Result<bool> initializePipeline() {
     return embedder_.embedder().and_then(
         [this](auto &embedder) -> core::Result<bool> {
@@ -448,7 +418,7 @@ private:
                       create_file_pipeline_ = core::pipeline::Pipeline();
                       create_file_pipeline_.add_handler(embedder);
                       create_file_pipeline_.add_handler(compressor);
-                      create_file_pipeline_.add_handler(ipc_service_);
+                      create_file_pipeline_.add_handler(ipc_pipeline_handler_);
                       spdlog::info("Pipeline with IPC initialized");
                       return true;
                     });
@@ -562,11 +532,11 @@ private:
   char **argv_;
 
   std::unique_ptr<faiss::FaissService> faiss_service_;
-  std::unique_ptr<shared::SharedMemoryManager> shm_manager_;
   std::unique_ptr<utils::ScalarQuantizer> sq_quantizer_;
   std::unique_ptr<utils::ProductQuantizer> pq_quantizer_;
 
   std::shared_ptr<core::Event> event_service_;
+  std::shared_ptr<IpcBaseService::PublisherType> ipc_publisher_;
 
   core::pipeline::Pipeline create_file_pipeline_;
 
@@ -576,7 +546,7 @@ private:
 
   EmbedderManager<EmbeddingModel> embedder_;
   CompressorManager<Compressor> compressor_;
-  owl::IpcService ipc_service_;
+  IpcPipelineHandler ipc_pipeline_handler_;
 
   markov::SemanticGraph semantic_graph_;
   markov::HiddenMarkovModel hidden_markov_;
