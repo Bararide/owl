@@ -11,6 +11,7 @@
 #include "algorithms/compressor/compressor_manager.hpp"
 #include "embedded/emdedded_manager.hpp"
 #include "file/fileinfo.hpp"
+#include "ipc/ipc_pipeline_handler.hpp"
 #include "markov.hpp"
 #include "schemas/fileinfo.hpp"
 #include "shared_memory/shared_memory.hpp"
@@ -60,7 +61,7 @@ public:
         },
         [this]() { return initializeSemanticGraph(); },
         [this]() { return initializeHiddenMarkov(); },
-        [this]() { return initializeSharedMemory(); },
+        [this]() { return initializeIpc(); },
         [this]() { return initializePipeline(); },
         [this]() { return initializeServer(); }};
 
@@ -268,6 +269,31 @@ private:
         [](const auto &) { spdlog::warn("Server health check: NOT RUNNING"); });
   }
 
+  core::Result<bool> initializeIpc() {
+    return core::Result<bool>::Ok(true).and_then(
+        [this]() -> core::Result<bool> {
+          auto ipc_base = std::make_shared<IpcBaseService>("vectorfs_app");
+
+          auto init_result = ipc_base->initialize();
+          if (!init_result.is_ok()) {
+            return core::Result<bool>::Error("Failed to initialize IPC base");
+          }
+
+          auto publisher_result = ipc_base->createPublisher();
+          if (!publisher_result.is_ok()) {
+            return core::Result<bool>::Error("Failed to create IPC publisher");
+          }
+
+          ipc_publisher_ = publisher_result.value();
+          ipc_pipeline_handler_ = IpcPipelineHandler(ipc_publisher_);
+
+          create_file_pipeline_.add_handler(ipc_pipeline_handler_);
+
+          spdlog::info("IPC Pipeline Handler initialized successfully");
+          return core::Result<bool>::Ok(true);
+        });
+  }
+
   core::Result<bool> initializeEventService() {
     return core::Result<bool>::Ok(true)
         .map([this]() {
@@ -382,32 +408,9 @@ private:
     });
   }
 
-  core::Result<bool> initializeSharedMemory() {
-    return core::Result<bool>::Ok(true)
-        .map([this]() {
-          shm_manager_ = std::make_unique<shared::SharedMemoryManager>();
-          return shm_manager_->initialize();
-        })
-        .and_then([](bool initialized) -> core::Result<bool> {
-          return initialized ? core::Result<bool>::Ok(true).map([]() {
-            spdlog::info("Shared memory initialized");
-            return true;
-          })
-                             : core::Result<bool>::Error(
-                                   "Failed to initialize shared memory");
-        })
-        .match(
-            [](bool success) -> core::Result<bool> {
-              return core::Result<bool>::Ok(success);
-            },
-            [](const auto &error) -> core::Result<bool> {
-              return core::Result<bool>::Error(error.what());
-            });
-  }
-
   core::Result<bool> initializePipeline() {
-    return embedder_.embedder()
-        .and_then([this](auto &embedder) -> core::Result<bool> {
+    return embedder_.embedder().and_then(
+        [this](auto &embedder) -> core::Result<bool> {
           return compressor_.compressor().and_then(
               [this, &embedder](auto &compressor) -> core::Result<bool> {
                 return core::Result<bool>::Ok(true).map(
@@ -415,18 +418,12 @@ private:
                       create_file_pipeline_ = core::pipeline::Pipeline();
                       create_file_pipeline_.add_handler(embedder);
                       create_file_pipeline_.add_handler(compressor);
-                      spdlog::info("Pipeline initialized");
+                      create_file_pipeline_.add_handler(ipc_pipeline_handler_);
+                      spdlog::info("Pipeline with IPC initialized");
                       return true;
                     });
               });
-        })
-        .match(
-            [](bool success) -> core::Result<bool> {
-              return core::Result<bool>::Ok(success);
-            },
-            [](const auto &error) -> core::Result<bool> {
-              return core::Result<bool>::Error(error.what());
-            });
+        });
   }
 
   core::Result<bool> initializeServer() {
@@ -535,18 +532,21 @@ private:
   char **argv_;
 
   std::unique_ptr<faiss::FaissService> faiss_service_;
-  std::unique_ptr<shared::SharedMemoryManager> shm_manager_;
   std::unique_ptr<utils::ScalarQuantizer> sq_quantizer_;
   std::unique_ptr<utils::ProductQuantizer> pq_quantizer_;
 
   std::shared_ptr<core::Event> event_service_;
+  std::shared_ptr<IpcBaseService::PublisherType> ipc_publisher_;
 
   core::pipeline::Pipeline create_file_pipeline_;
 
   int fileinfo_create_subscribe_;
 
+  std::atomic<bool> is_ipc_server_{false};
+
   EmbedderManager<EmbeddingModel> embedder_;
   CompressorManager<Compressor> compressor_;
+  IpcPipelineHandler ipc_pipeline_handler_;
 
   markov::SemanticGraph semantic_graph_;
   markov::HiddenMarkovModel hidden_markov_;

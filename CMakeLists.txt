@@ -26,6 +26,7 @@ find_package(Drogon REQUIRED)
 find_package(fmt REQUIRED)
 find_package(iceoryx2-cxx REQUIRED)
 find_package(spdlog REQUIRED)
+find_library(IOX2_FFI_C_LIB iceoryx2_ffi_c PATHS /usr/local/lib REQUIRED)
 
 add_subdirectory(3dparty/boost EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/faiss EXCLUDE_FROM_ALL)
@@ -102,13 +103,14 @@ target_link_libraries(owl
     faiss
     sentencepiece
     fasttext-shared
-    spdlog  # Переместим spdlog выше
+    spdlog
     ${JSONCPP_LIBRARIES}
     Drogon::Drogon
     Boost::url
     fmt::fmt
     ${LZ4_LIBRARIES}
-    iceoryx2_cxx  # Теперь работает!
+    iceoryx2_cxx 
+    ${IOX2_FFI_C_LIB}
     ${CAPNP_RPC_LIBRARIES} ${CAPNP_LIBRARIES} ${KJ_LIBRARIES}
 )
 
