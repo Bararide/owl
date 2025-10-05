@@ -11,6 +11,7 @@
 #include "algorithms/compressor/compressor_manager.hpp"
 #include "embedded/emdedded_manager.hpp"
 #include "file/fileinfo.hpp"
+#include "ipc/ipc.hpp"
 #include "markov.hpp"
 #include "schemas/fileinfo.hpp"
 #include "shared_memory/shared_memory.hpp"
@@ -268,6 +269,38 @@ private:
         [](const auto &) { spdlog::warn("Server health check: NOT RUNNING"); });
   }
 
+  core::Result<bool> initializeIpc() {
+    return core::Result<bool>::Ok(true)
+        .map([this]() {
+          ipc_service_ = IpcService("vectorfs_app");
+
+          if (is_ipc_server_.load()) {
+            return ipc_service_.initialize().and_then([this]() {
+              is_ipc_server_.store(true);
+              return ipc_service_.startServer();
+            });
+          } else {
+            return ipc_service_.initialize().and_then([this]() {
+              is_ipc_server_.store(true);
+              return ipc_service_.startClient([this](const auto &file_info) {
+                this->handleIpcMessage(file_info);
+              });
+            });
+          }
+        })
+        .and_then([](bool success) -> core::Result<bool> {
+          spdlog::info("IPC service initialized successfully");
+          return core::Result<bool>::Ok(true);
+        })
+        .match(
+            [](bool success) -> core::Result<bool> {
+              return core::Result<bool>::Ok(success);
+            },
+            [](const auto &error) -> core::Result<bool> {
+              return core::Result<bool>::Error(error.what());
+            });
+  }
+
   core::Result<bool> initializeEventService() {
     return core::Result<bool>::Ok(true)
         .map([this]() {
@@ -406,8 +439,8 @@ private:
   }
 
   core::Result<bool> initializePipeline() {
-    return embedder_.embedder()
-        .and_then([this](auto &embedder) -> core::Result<bool> {
+    return embedder_.embedder().and_then(
+        [this](auto &embedder) -> core::Result<bool> {
           return compressor_.compressor().and_then(
               [this, &embedder](auto &compressor) -> core::Result<bool> {
                 return core::Result<bool>::Ok(true).map(
@@ -415,18 +448,12 @@ private:
                       create_file_pipeline_ = core::pipeline::Pipeline();
                       create_file_pipeline_.add_handler(embedder);
                       create_file_pipeline_.add_handler(compressor);
-                      spdlog::info("Pipeline initialized");
+                      create_file_pipeline_.add_handler(ipc_service_);
+                      spdlog::info("Pipeline with IPC initialized");
                       return true;
                     });
               });
-        })
-        .match(
-            [](bool success) -> core::Result<bool> {
-              return core::Result<bool>::Ok(success);
-            },
-            [](const auto &error) -> core::Result<bool> {
-              return core::Result<bool>::Error(error.what());
-            });
+        });
   }
 
   core::Result<bool> initializeServer() {
@@ -545,8 +572,11 @@ private:
 
   int fileinfo_create_subscribe_;
 
+  std::atomic<bool> is_ipc_server_{false};
+
   EmbedderManager<EmbeddingModel> embedder_;
   CompressorManager<Compressor> compressor_;
+  owl::IpcService ipc_service_;
 
   markov::SemanticGraph semantic_graph_;
   markov::HiddenMarkovModel hidden_markov_;
