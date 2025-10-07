@@ -2,6 +2,7 @@
 #include "basement/basement.hpp"
 #include "network/capnproto.hpp"
 #include <csignal>
+#include <filesystem>
 #include <iostream>
 #include <iox2/client.hpp>
 #include <list>
@@ -30,23 +31,17 @@ void printUsage(const char *program_name) {
   std::cout << "Usage: " << program_name << " [OPTIONS]" << std::endl;
   std::cout << "Options:" << std::endl;
   std::cout
-      << "  --server ADDRESS    Set server address (default: 0.0.0.0:12345)"
+      << "  --server ADDRESS    Set server address (default: 127.0.0.1:5346)"
       << std::endl;
   std::cout << "  --model PATH        Path to embedder model file" << std::endl;
   std::cout << "  --quantization      Enable quantization" << std::endl;
   std::cout << "  --mount POINT       FUSE mount point (default: /mnt/vectorfs)"
             << std::endl;
   std::cout << "  --help              Show this help message" << std::endl;
-  std::cout << std::endl;
-  std::cout << "Examples:" << std::endl;
-  std::cout << "  " << program_name << " --server localhost:8080" << std::endl;
-  std::cout << "  " << program_name << " --server 0.0.0.0:54321 --quantization"
-            << std::endl;
 }
 
 void testServerConnection(owl::app::Application<> &app) {
   spdlog::info("Testing server connection...");
-
   auto status_result = app.getServerStatus();
   if (status_result.is_ok()) {
     spdlog::info("Server is running on: {}", app.getServerAddress());
@@ -56,7 +51,24 @@ void testServerConnection(owl::app::Application<> &app) {
   }
 }
 
+bool createMountPoint(const std::string &mount_point) {
+  try {
+    if (!std::filesystem::exists(mount_point)) {
+      spdlog::info("Creating mount point: {}", mount_point);
+      return std::filesystem::create_directories(mount_point);
+    }
+    return true;
+  } catch (const std::exception &e) {
+    spdlog::error("Failed to create mount point: {}", e.what());
+    return false;
+  }
+}
+
 pid_t startFuseProcess(const std::string &mount_point) {
+  if (!createMountPoint(mount_point)) {
+    return -1;
+  }
+
   std::vector<std::string> fuse_args = {"vectorfs", "-f", "-s", mount_point};
 
   std::vector<char *> fuse_argv;
@@ -122,7 +134,7 @@ int main(int argc, char *argv[]) {
 
   std::string server_address = "127.0.0.1:5346";
   std::string model_path = owl::kEmbedderModel;
-  std::string mount_point = "/mnt/vectorfs";
+  std::string mount_point = "~/my_fuse_mount";
   bool use_quantization = false;
 
   for (int i = 1; i < argc; ++i) {
@@ -158,12 +170,15 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  spdlog::info("Waiting for FUSE process to initialize...");
+  std::this_thread::sleep_for(std::chrono::seconds(3));
 
   if (!isProcessAlive(fuse_pid)) {
     spdlog::error("FUSE process failed to start");
     return 1;
   }
+
+  spdlog::info("FUSE process started successfully with PID: {}", fuse_pid);
 
   int exit_code = 0;
   int restart_count = 0;
@@ -178,7 +193,7 @@ int main(int argc, char *argv[]) {
       if (!g_shutdown_requested && restart_count < max_restarts) {
         current_fuse_pid = startFuseProcess(mount_point);
         if (current_fuse_pid > 0) {
-          std::this_thread::sleep_for(std::chrono::seconds(2));
+          std::this_thread::sleep_for(std::chrono::seconds(3));
           if (isProcessAlive(current_fuse_pid)) {
             restart_count++;
             spdlog::warn("Restarted FUSE process (attempt {}/{})",
@@ -198,7 +213,6 @@ int main(int argc, char *argv[]) {
       if (!init_result.is_ok()) {
         spdlog::error("Failed to initialize application: {}",
                       init_result.error().what());
-
         if (!g_shutdown_requested && restart_count < max_restarts) {
           restart_count++;
           spdlog::warn("Restarting application (attempt {}/{})", restart_count,
@@ -216,14 +230,13 @@ int main(int argc, char *argv[]) {
         owl::capnp::TestClient client("127.0.0.1:5346");
         client.testConnection();
       } catch (const std::exception &e) {
-        std::cerr << "Failed to create client: " << e.what() << std::endl;
+        spdlog::error("Failed to create client: {}", e.what());
         exit_code = 1;
         break;
       }
 
       spdlog::info(
           "Application initialized successfully. Starting main loop...");
-
       auto run_result = app.spin(g_shutdown_requested);
 
       if (run_result.is_ok()) {
@@ -233,7 +246,6 @@ int main(int argc, char *argv[]) {
       } else {
         spdlog::error("Application finished with error: {}",
                       run_result.error().what());
-
         if (!g_shutdown_requested) {
           restart_count++;
           spdlog::warn("Restarting application (attempt {}/{})", restart_count,
@@ -248,7 +260,6 @@ int main(int argc, char *argv[]) {
 
     } catch (const std::exception &e) {
       spdlog::critical("Unhandled exception in main: {}", e.what());
-
       if (!g_shutdown_requested && restart_count < max_restarts) {
         restart_count++;
         spdlog::warn("Restarting after exception (attempt {}/{})",
