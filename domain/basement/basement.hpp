@@ -561,12 +561,13 @@ public:
 
 private:
   std::shared_ptr<IpcBaseService> ipc_base_;
-  std::shared_ptr<IpcBaseService::SubscriberType> ipc_publisher_;
+  std::shared_ptr<IpcBaseService::SubscriberType> ipc_subscriber_;
+  std::mutex files_mutex_;
 
   core::Result<bool> initializeIpc() {
     return core::Result<bool>::Ok(true).and_then(
         [this]() -> core::Result<bool> {
-          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_app");
+          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_fuse");
 
           auto init_result = ipc_base_->initialize();
           if (!init_result.is_ok()) {
@@ -578,10 +579,32 @@ private:
             return core::Result<bool>::Error("Failed to create subscriber");
           }
 
-          ipc_publisher_ = subscriber_result.value();
+          ipc_subscriber_ = subscriber_result.value();
+
+          ipc_base_->startReceiving(ipc_subscriber_,
+                                    [this](const schemas::FileInfo &file_info) {
+                                      this->handleIpcMessage(file_info);
+                                    });
+
           spdlog::info("IPC subscriber initialized successfully");
           return core::Result<bool>::Ok(true);
         });
+  }
+
+  void handleIpcMessage(const schemas::FileInfo &file_info) {
+    // spdlog::info("Received IPC message for file: {}", file_info.path);
+
+    std::lock_guard<std::mutex> lock(files_mutex_);
+
+    // Конвертируем schemas::FileInfo в ваш внутренний fileinfo::FileInfo
+    schemas::FileInfo internal_info;
+    internal_info.path = file_info.path;
+    internal_info.size = file_info.size;
+    internal_info.mode = file_info.mode;
+
+    // virtual_files_[file_info.path] = internal_info;
+
+    spdlog::debug("Updated virtual files with: {}", file_info.path.value());
   }
 };
 

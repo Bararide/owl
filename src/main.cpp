@@ -7,13 +7,24 @@
 #include <iox2/client.hpp>
 #include <list>
 #include <pipeline/pipeline.hpp>
+#include <pwd.h>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <sys/wait.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 std::atomic<bool> g_shutdown_requested{false};
+
+std::string getHomeDirectory() {
+  const char *home = getenv("HOME");
+  if (home)
+    return home;
+
+  struct passwd *pw = getpwuid(getuid());
+  return pw ? pw->pw_dir : "";
+}
 
 void signalHandler(int signal) {
   spdlog::info("Received signal: {}, initiating shutdown...", signal);
@@ -134,7 +145,7 @@ int main(int argc, char *argv[]) {
 
   std::string server_address = "127.0.0.1:5346";
   std::string model_path = owl::kEmbedderModel;
-  std::string mount_point = "~/my_fuse_mount";
+  std::string mount_point = getHomeDirectory() + "/my_fuse_mount";
   bool use_quantization = false;
 
   for (int i = 1; i < argc; ++i) {

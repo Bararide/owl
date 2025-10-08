@@ -234,16 +234,16 @@ private:
     spdlog::info("  --help                Show this help message");
   }
 
-void cleanup() {
+  void cleanup() {
     core::Result<bool>::Ok(true)
         .map([this]() {
           spdlog::info("Cleaning up application resources");
           stopServer();
-          
+
           if (ipc_base_) {
             ipc_base_->stop();
           }
-          
+
           predictive_cache_.clear();
           spdlog::info("Cleanup completed");
           return true;
@@ -252,7 +252,7 @@ void cleanup() {
                [](const auto &error) {
                  spdlog::error("Cleanup failed: {}", error.what());
                });
-}
+  }
 
   void updateRanking() {
     core::Result<bool>::Ok(true)
@@ -289,8 +289,8 @@ void cleanup() {
             return core::Result<bool>::Error("Failed to create IPC publisher");
           }
 
-          ipc_pipeline_handler_ = IpcPipelineHandler(publisher_result.value());
-
+          ipc_publisher_ = publisher_result.value();
+          ipc_pipeline_handler_ = IpcPipelineHandler(ipc_publisher_);
           create_file_pipeline_.add_handler(ipc_pipeline_handler_);
 
           spdlog::info("IPC Pipeline Handler initialized successfully");
