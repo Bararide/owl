@@ -2,15 +2,9 @@
 #define OWL_APPLICATION
 
 #include "application_initialize.hpp"
-#include "ipc/ipc_pipeline_handler.hpp"
-#include "markov.hpp"
-#include "network/capnproto.hpp"
 #include "state.hpp"
-#include "utils/quantization.hpp"
-#include "vector_faiss_logic.hpp"
 #include <atomic>
 #include <memory>
-#include <pipeline/pipeline.hpp>
 #include <thread>
 
 namespace owl::app {
@@ -18,9 +12,9 @@ namespace owl::app {
 class Application {
 public:
   Application(int argc, char **argv)
-      : argc_(argc), argv_(argv), state_(),
+      : argc_(argc), argv_(argv),
         last_ranking_update_(std::chrono::steady_clock::now()),
-        is_running_(false), server_address_("127.0.0.1:5346") {
+        server_address_("127.0.0.1:5346") {
     parseCommandLineArgs();
   }
 
@@ -28,12 +22,13 @@ public:
                          bool use_quantization = false) {
     spdlog::info("Starting VectorFS Application initialization");
 
-    auto init_result = initializeAll(embedder_model, use_quantization);
+    auto init_result = InitializeManager::initializeAll(
+        state_, embedder_model, use_quantization, server_address_);
 
     return init_result
         .and_then([this]() -> core::Result<bool> {
           initializeHMMStates();
-          is_running_.store(true);
+          state_.is_running_.store(true);
           spdlog::info("Application initialized successfully");
           return startServer();
         })
@@ -57,7 +52,7 @@ public:
 
     return core::Result<bool>::Ok(true).and_then([&]() -> core::Result<bool> {
       try {
-        while (!shutdown_requested && is_running_.load()) {
+        while (!shutdown_requested && state_.is_running_.load()) {
           auto now = std::chrono::steady_clock::now();
 
           if (now - last_health_check >= health_check_interval) {
@@ -83,7 +78,7 @@ public:
 
   core::Result<bool> shutdown() {
     spdlog::info("Initiating application shutdown");
-    is_running_.store(false);
+    state_.is_running_.store(false);
 
     return stopServer().match(
         [this](bool) -> core::Result<bool> {
@@ -106,7 +101,7 @@ public:
   }
 
   core::Result<bool> getServerStatus() {
-    return core::Result<bool>::Ok(server_ && server_->isRunning())
+    return core::Result<bool>::Ok(state_.server_ && state_.server_->isRunning())
         .and_then([](bool is_running) -> core::Result<bool> {
           return is_running
                      ? core::Result<bool>::Ok(true)
@@ -128,7 +123,7 @@ public:
   Application(Application &&) = delete;
 
   ~Application() {
-    if (is_running_.load()) {
+    if (state_.is_running_.load()) {
       shutdown();
     }
 
@@ -138,15 +133,6 @@ public:
   }
 
 private:
-  core::Result<bool> initializeAll(const std::string &embedder_model,
-                                   bool use_quantization) {
-    return InitializeManager::initializeAll(
-        state_, embedder_model, use_quantization, event_service_, ipc_base_,
-        ipc_publisher_, create_file_pipeline_, ipc_pipeline_handler_,
-        semantic_graph_, hidden_markov_, faiss_service_, sq_quantizer_,
-        pq_quantizer_, server_, server_address_);
-  }
-
   void parseCommandLineArgs() {
     for (int i = 1; i < argc_; ++i) {
       std::string arg = argv_[i];
@@ -170,18 +156,18 @@ private:
     spdlog::info("Cleaning up application resources");
     stopServer();
 
-    if (ipc_base_) {
-      ipc_base_->stop();
+    if (state_.ipc_base_) {
+      state_.ipc_base_->stop();
     }
 
-    predictive_cache_.clear();
+    state_.predictive_cache_.clear();
     spdlog::info("Cleanup completed");
   }
 
   void updateRanking() {
     auto now = std::chrono::steady_clock::now();
     spdlog::debug("Updating ranking cache");
-    last_ranking_update_ = now;
+    state_.last_ranking_update_ = now;
     spdlog::info("update ranking success");
   }
 
@@ -192,7 +178,7 @@ private:
   }
 
   core::Result<bool> startServer() {
-    if (server_thread_ && server_->isRunning()) {
+    if (server_thread_ && state_.server_->isRunning()) {
       spdlog::info("Server is already running");
       return core::Result<bool>::Ok(true);
     }
@@ -206,7 +192,7 @@ private:
       spdlog::info("Starting server on thread for address: {}",
                    server_address_);
       try {
-        server_->run();
+        state_.server_->run();
       } catch (const std::exception &e) {
         spdlog::error("Server thread exception: {}", e.what());
       }
@@ -215,7 +201,7 @@ private:
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    if (server_->isRunning()) {
+    if (state_.server_->isRunning()) {
       spdlog::info("Server started successfully on address: {}",
                    server_address_);
       return core::Result<bool>::Ok(true);
@@ -225,9 +211,9 @@ private:
   }
 
   core::Result<bool> stopServer() {
-    if (server_) {
+    if (state_.server_) {
       spdlog::info("Stopping server...");
-      server_->stop();
+      state_.server_->stop();
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
@@ -242,11 +228,11 @@ private:
   }
 
   void initializeHMMStates() {
-    hidden_markov_.add_state("code");
-    hidden_markov_.add_state("document");
-    hidden_markov_.add_state("config");
-    hidden_markov_.add_state("test");
-    hidden_markov_.add_state("misc");
+    state_.hidden_markov_.add_state("code");
+    state_.hidden_markov_.add_state("document");
+    state_.hidden_markov_.add_state("config");
+    state_.hidden_markov_.add_state("test");
+    state_.hidden_markov_.add_state("misc");
     spdlog::info("HMM states initialized");
   }
 
@@ -254,27 +240,7 @@ private:
   char **argv_;
 
   State state_;
-
-  std::unique_ptr<faiss::FaissService> faiss_service_;
-  std::unique_ptr<utils::ScalarQuantizer> sq_quantizer_;
-  std::unique_ptr<utils::ProductQuantizer> pq_quantizer_;
-
-  std::shared_ptr<core::Event> event_service_;
-  std::shared_ptr<IpcBaseService> ipc_base_;
-  std::shared_ptr<IpcBaseService::PublisherType> ipc_publisher_;
-
-  core::pipeline::Pipeline create_file_pipeline_;
-  IpcPipelineHandler ipc_pipeline_handler_;
-
-  markov::SemanticGraph semantic_graph_;
-  markov::HiddenMarkovModel hidden_markov_;
-
-  std::unique_ptr<capnp::VectorFSServer<embedded::FastTextEmbedder>> server_;
-
-  std::map<std::string, std::vector<std::string>> predictive_cache_;
   std::chrono::time_point<std::chrono::steady_clock> last_ranking_update_;
-
-  std::atomic<bool> is_running_;
   std::unique_ptr<std::thread> server_thread_;
   std::string server_address_;
 };
