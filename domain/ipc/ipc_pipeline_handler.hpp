@@ -62,7 +62,7 @@ public:
   core::Result<bool> sendMessage(const schemas::FileInfo &file_info) {
     const int max_retries = 5;
     const auto retry_delay = std::chrono::milliseconds(100);
-
+    
     for (int attempt = 0; attempt < max_retries; ++attempt) {
       try {
         spdlog::info("=== Starting sendMessage (attempt {}/{}) ===",

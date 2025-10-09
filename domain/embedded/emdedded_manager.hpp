@@ -9,7 +9,7 @@ using namespace embedded;
 
 using EmbedderVariant = std::variant<embedded::FastTextEmbedder>;
 
-template <typename T> class EmbedderManager {
+template <typename T = FastTextEmbedder> class EmbedderManager {
 public:
   EmbedderManager() = default;
 

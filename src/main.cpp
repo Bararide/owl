@@ -51,7 +51,7 @@ void printUsage(const char *program_name) {
   std::cout << "  --help              Show this help message" << std::endl;
 }
 
-void testServerConnection(owl::app::Application<> &app) {
+void testServerConnection(owl::app::Application &app) {  // Убрали <>
   spdlog::info("Testing server connection...");
   auto status_result = app.getServerStatus();
   if (status_result.is_ok()) {
@@ -216,7 +216,7 @@ int main(int argc, char *argv[]) {
     }
 
     try {
-      auto app = owl::app::Application<>(argc, argv);
+      owl::app::Application app(argc, argv);  // Убрали <>
 
       spdlog::info("Initializing application...");
       auto init_result = app.run(model_path, use_quantization);
