@@ -276,7 +276,8 @@ private:
   core::Result<bool> initializeIpc() {
     return core::Result<bool>::Ok(true).and_then(
         [this]() -> core::Result<bool> {
-          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_app");
+          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_app",
+                                                       "owl_ipc", "default");
 
           auto init_result = ipc_base_->initialize();
           if (!init_result.is_ok()) {
@@ -290,7 +291,6 @@ private:
 
           ipc_publisher_ = publisher_result.value();
           ipc_pipeline_handler_ = IpcPipelineHandler(ipc_publisher_);
-          create_file_pipeline_.add_handler(ipc_pipeline_handler_);
 
           spdlog::info("IPC Pipeline Handler initialized successfully");
           return core::Result<bool>::Ok(true);

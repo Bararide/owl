@@ -570,12 +570,16 @@ private:
   core::Result<bool> initializeIpc() {
     return core::Result<bool>::Ok(true).and_then(
         [this]() -> core::Result<bool> {
-          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_fuse");
+          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_app",
+                                                       "owl_ipc", "default");
 
           auto init_result = ipc_base_->initialize();
           if (!init_result.is_ok()) {
             return core::Result<bool>::Error("Failed to initialize IPC base");
           }
+
+          spdlog::info("Waiting for publisher to be ready...");
+          std::this_thread::sleep_for(std::chrono::seconds(2));
 
           auto subscriber_result = ipc_base_->createSubscriber();
           if (!subscriber_result.is_ok()) {
@@ -598,8 +602,6 @@ private:
     // spdlog::info("Received IPC message for file: {}", file_info.path);
 
     std::lock_guard<std::mutex> lock(files_mutex_);
-
-
 
     schemas::FileInfo internal_info;
     internal_info.path = file_info.path;

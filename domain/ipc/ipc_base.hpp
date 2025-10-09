@@ -12,6 +12,7 @@
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <thread>
+#include "utils/constants.hpp"
 
 namespace owl {
 
@@ -37,6 +38,9 @@ public:
 
   core::Result<bool> initialize() {
     try {
+      setenv("IOX2_CONFIG_FILE", kIceoryxConfigPath, 1);
+      spdlog::info("Setting Iceoryx2 config path: {}", kIceoryxConfigPath);
+
       iox2::NodeBuilder node_builder;
       auto node_name_result = iox2::NodeName::create(node_name_.c_str());
       if (!node_name_result.has_value()) {
