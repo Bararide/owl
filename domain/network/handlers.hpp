@@ -67,16 +67,16 @@ template <typename EmbeddedModel> auto create_file_handler() {
       spdlog::info("File path: {}", path);
       spdlog::info("Content length: {} bytes", content.size());
 
-      auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-      if (!shm_manager.initialize()) {
-        spdlog::error("Failed to initialize shared memory");
-        return utils::error_result("Internal server error");
-      }
+      // auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
+      // if (!shm_manager.initialize()) {
+      //   spdlog::error("Failed to initialize shared memory");
+      //   return utils::error_result("Internal server error");
+      // }
 
-      if (!shm_manager.addFile(path, content)) {
-        spdlog::error("Failed to add file to shared memory: {}", path);
-        return utils::error_result("Failed to create file");
-      }
+      // if (!shm_manager.addFile(path, content)) {
+      //   spdlog::error("Failed to add file to shared memory: {}", path);
+      //   return utils::error_result("Failed to create file");
+      // }
 
       spdlog::info("Successfully added file to shared memory: {}", path);
 

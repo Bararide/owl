@@ -42,6 +42,8 @@ public:
           "Publisher not initialized");
     }
 
+    spdlog::info("Create ipc handle");
+
     auto send_result = sendMessage(file);
 
     if (send_result.is_ok()) {

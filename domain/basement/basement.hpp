@@ -2,6 +2,7 @@
 #define OWL_FILE_SYSTEM_BASEMENT
 
 #include "ipc/ipc_pipeline_handler.hpp"
+#include "storage.hpp"
 #include <fuse3/fuse.h>
 #include <infrastructure/result.hpp>
 
@@ -564,6 +565,8 @@ private:
   std::shared_ptr<IpcBaseService::SubscriberType> ipc_subscriber_;
   std::mutex files_mutex_;
 
+  storage::Storage<schemas::FileInfo> virtual_storage;
+
   core::Result<bool> initializeIpc() {
     return core::Result<bool>::Ok(true).and_then(
         [this]() -> core::Result<bool> {
@@ -596,7 +599,8 @@ private:
 
     std::lock_guard<std::mutex> lock(files_mutex_);
 
-    // Конвертируем schemas::FileInfo в ваш внутренний fileinfo::FileInfo
+
+
     schemas::FileInfo internal_info;
     internal_info.path = file_info.path;
     internal_info.size = file_info.size;
@@ -604,7 +608,7 @@ private:
 
     // virtual_files_[file_info.path] = internal_info;
 
-    spdlog::debug("Updated virtual files with: {}", file_info.path.value());
+    spdlog::info("Updated virtual files with: {}", file_info.path.value());
   }
 };
 

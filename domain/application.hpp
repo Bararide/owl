@@ -14,7 +14,6 @@
 #include "ipc/ipc_pipeline_handler.hpp"
 #include "markov.hpp"
 #include "schemas/fileinfo.hpp"
-#include "shared_memory/shared_memory.hpp"
 #include "utils/quantization.hpp"
 #include "vector_faiss_logic.hpp"
 #include <algorithm>

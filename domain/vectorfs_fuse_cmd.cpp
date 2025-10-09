@@ -85,52 +85,52 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
 }
 
 void VectorFS::updateFromSharedMemory() {
-  if (!shm_manager || !shm_manager->initialize()) {
-    spdlog::warn("Failed to initialize shared memory in FUSE");
-    return;
-  }
+  // if (!shm_manager || !shm_manager->initialize()) {
+  //   spdlog::warn("Failed to initialize shared memory in FUSE");
+  //   return;
+  // }
 
-  if (!shm_manager->needsUpdate()) {
-    return;
-  }
+  // if (!shm_manager->needsUpdate()) {
+  //   return;
+  // }
 
   spdlog::info("Updating from shared memory with compression...");
 
-  int file_count = shm_manager->getFileCount();
-  for (int i = 0; i < file_count; i++) {
-    const auto *shared_info = shm_manager->getFile(i);
-    if (shared_info) {
-      std::string path(shared_info->path);
+  // int file_count = shm_manager->getFileCount();
+  // for (int i = 0; i < file_count; i++) {
+  //   const auto *shared_info = shm_manager->getFile(i);
+  //   if (shared_info) {
+  //     std::string path(shared_info->path);
 
-      if (virtual_files.count(path) == 0) {
-        fileinfo::FileInfo fi;
-        fi.mode = shared_info->mode;
-        fi.size = shared_info->size;
+  //     if (virtual_files.count(path) == 0) {
+  //       fileinfo::FileInfo fi;
+  //       fi.mode = shared_info->mode;
+  //       fi.size = shared_info->size;
 
-        std::vector<uint8_t> compressed_content(
-            shared_info->content, shared_info->content + shared_info->size);
-        auto decompressed_content = decompress_data(compressed_content);
-        fi.content = std::string(decompressed_content.begin(),
-                                 decompressed_content.end());
+  //       std::vector<uint8_t> compressed_content(
+  //           shared_info->content, shared_info->content + shared_info->size);
+  //       auto decompressed_content = decompress_data(compressed_content);
+  //       fi.content = std::string(decompressed_content.begin(),
+  //                                decompressed_content.end());
 
-        fi.uid = shared_info->uid;
-        fi.gid = shared_info->gid;
-        fi.access_time = shared_info->access_time;
-        fi.modification_time = shared_info->modification_time;
-        fi.create_time = shared_info->create_time;
+  //       fi.uid = shared_info->uid;
+  //       fi.gid = shared_info->gid;
+  //       fi.access_time = shared_info->access_time;
+  //       fi.modification_time = shared_info->modification_time;
+  //       fi.create_time = shared_info->create_time;
 
-        virtual_files[path] = fi;
-        spdlog::info(
-            "Added compressed file from shared memory: {} ({} -> {} bytes)",
-            path, shared_info->size, fi.content.size());
+  //       virtual_files[path] = fi;
+  //       spdlog::info(
+  //           "Added compressed file from shared memory: {} ({} -> {} bytes)",
+  //           path, shared_info->size, fi.content.size());
 
-        update_embedding(path.c_str());
-        index_needs_rebuild = true;
-      }
-    }
-  }
+  //       update_embedding(path.c_str());
+  //       index_needs_rebuild = true;
+  //     }
+  //   }
+  // }
 
-  shm_manager->clearUpdateFlag();
+  // shm_manager->clearUpdateFlag();
   spdlog::info("Shared memory update with compression completed");
 }
 
@@ -147,48 +147,48 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-    if (shm_manager->initialize()) {
-      if (shm_manager->needsUpdate()) {
-        updateFromSharedMemory();
-        shm_manager->clearUpdateFlag();
-      }
+    // if (shm_manager->initialize()) {
+    //   if (shm_manager->needsUpdate()) {
+    //     updateFromSharedMemory();
+    //     shm_manager->clearUpdateFlag();
+    //   }
 
-      int file_count = shm_manager->getFileCount();
-      for (int i = 0; i < file_count; i++) {
-        const auto *shared_info = shm_manager->getFile(i);
-        if (shared_info) {
-          std::string file_path(shared_info->path);
-          const char *file_name = file_path.c_str();
-          if (file_name[0] == '/') {
-            file_name++;
-          }
-          filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-        }
-      }
+    //   int file_count = shm_manager->getFileCount();
+    //   for (int i = 0; i < file_count; i++) {
+    //     const auto *shared_info = shm_manager->getFile(i);
+    //     if (shared_info) {
+    //       std::string file_path(shared_info->path);
+    //       const char *file_name = file_path.c_str();
+    //       if (file_name[0] == '/') {
+    //         file_name++;
+    //       }
+    //       filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+    //     }
+    //   }
 
-      for (const auto &dir : virtual_dirs) {
-        if (dir != "/") {
-          const char *dir_name = dir.c_str();
-          if (dir_name[0] == '/') {
-            dir_name++;
-          }
-          filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-        }
-      }
+    //   for (const auto &dir : virtual_dirs) {
+    //     if (dir != "/") {
+    //       const char *dir_name = dir.c_str();
+    //       if (dir_name[0] == '/') {
+    //         dir_name++;
+    //       }
+    //       filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+    //     }
+    //   }
 
-      for (const auto &file : virtual_files) {
-        const char *file_name = file.first.c_str();
-        if (file_name[0] == '/') {
-          file_name++;
-        }
-        filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-      }
-    } else if (strcmp(path, "/.search") == 0) {
-      filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
-      filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    } else {
-      return -ENOENT;
-    }
+    //   for (const auto &file : virtual_files) {
+    //     const char *file_name = file.first.c_str();
+    //     if (file_name[0] == '/') {
+    //       file_name++;
+    //     }
+    //     filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+    //   }
+    // } else if (strcmp(path, "/.search") == 0) {
+    //   filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    //   filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    // } else {
+      // return -ENOENT;
+    // }
   }
 
   return 0;
@@ -267,10 +267,10 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi) {
   record_file_access(path, "read");
 
-  if (shm_manager->initialize() && shm_manager->needsUpdate()) {
-    updateFromSharedMemory();
-    shm_manager->clearUpdateFlag();
-  }
+  // if (shm_manager->initialize() && shm_manager->needsUpdate()) {
+  //   updateFromSharedMemory();
+  //   shm_manager->clearUpdateFlag();
+  // }
 
   if (strcmp(path, "/.debug") == 0) {
     std::stringstream ss;

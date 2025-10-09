@@ -28,7 +28,6 @@
 #include "embedded/embedded_fasttext.hpp"
 #include "file/fileinfo.hpp"
 #include "markov.hpp"
-#include "shared_memory/shared_memory.hpp"
 #include "utils/quantization.hpp"
 
 namespace owl::vectorfs {
@@ -49,7 +48,7 @@ private:
   std::unique_ptr<faiss::IndexFlatL2> faiss_index_quantized;
   std::unique_ptr<utils::ScalarQuantizer> sq_quantizer;
   std::unique_ptr<utils::ProductQuantizer> pq_quantizer;
-  std::unique_ptr<owl::shared::SharedMemoryManager> shm_manager;
+  // std::unique_ptr<owl::shared::SharedMemoryManager> shm_manager;
   bool index_needs_rebuild;
   bool use_quantization;
   std::map<idx_t, std::string> index_to_path;
@@ -114,18 +113,18 @@ private:
 
   std::vector<uint8_t>
   get_compressed_data_from_shm(const std::string &path) {
-    if (!shm_manager || !shm_manager->initialize()) {
-      return {};
-    }
+    // if (!shm_manager || !shm_manager->initialize()) {
+    //   return {};
+    // }
 
-    for (int i = 0; i < shm_manager->getFileCount(); i++) {
-      const auto *shared_info = shm_manager->getFile(i);
-      if (shared_info && std::string(shared_info->path) == path) {
-        std::vector<uint8_t> compressed_data(
-            shared_info->content, shared_info->content + shared_info->size);
-        return decompress_data(compressed_data);
-      }
-    }
+    // for (int i = 0; i < shm_manager->getFileCount(); i++) {
+    //   const auto *shared_info = shm_manager->getFile(i);
+    //   if (shared_info && std::string(shared_info->path) == path) {
+    //     std::vector<uint8_t> compressed_data(
+    //         shared_info->content, shared_info->content + shared_info->size);
+    //     return decompress_data(compressed_data);
+    //   }
+    // }
     return {};
   }
 
@@ -181,10 +180,10 @@ public:
             typename CompressorType = compression::Compressor>
   bool initialize(const std::string model_path, bool use_quantization = false) {
     try {
-      shm_manager = std::make_unique<owl::shared::SharedMemoryManager>();
-      if (!shm_manager->initialize()) {
-        spdlog::warn("Failed to initialize shared memory");
-      }
+      // shm_manager = std::make_unique<owl::shared::SharedMemoryManager>();
+      // if (!shm_manager->initialize()) {
+      //   spdlog::warn("Failed to initialize shared memory");
+      // }
 
       if constexpr (std::is_same_v<EmbeddedModel, embedded::FastTextEmbedder>) {
         auto embedder = std::make_unique<embedded::FastTextEmbedder>();
