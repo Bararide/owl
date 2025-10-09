@@ -7,4 +7,7 @@ static constexpr const char *kEmbedderModel =
     "crawl-300d-2M-subword.bin";
 }
 
+static constexpr const char *kIceoryxConfigPath =
+    "/home/bararide/code/Cpp/owl/iceoryx2_config.toml";
+
 #endif // OWL_CONSTANTS

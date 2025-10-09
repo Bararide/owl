@@ -2,6 +2,7 @@
 #define OWL_FILE_SYSTEM_BASEMENT
 
 #include "ipc/ipc_pipeline_handler.hpp"
+#include "storage.hpp"
 #include <fuse3/fuse.h>
 #include <infrastructure/result.hpp>
 
@@ -9,10 +10,19 @@ namespace owl {
 
 class Basement {
 public:
-  core::Result<bool> init() { auto result = initializeIpc(); }
+  core::Result<bool> init() {
+    spdlog::info("Initializing Basement...");
+    auto result = initializeIpc();
+    if (!result.is_ok()) {
+      spdlog::error("Failed to initialize Basement IPC");
+      return result;
+    }
+    spdlog::info("Basement initialized successfully");
+    return core::Result<bool>::Ok(true);
+  }
 
   static int getattr(const char *path, struct stat *stbuf,
-                               struct fuse_file_info *fi) {
+                     struct fuse_file_info *fi) {
     memset(stbuf, 0, sizeof(struct stat));
 
     if (strcmp(path, "/.search") == 0) {
@@ -94,10 +104,9 @@ public:
     return -ENOENT;
   }
 
-  static int readdir(const char *path, void *buf,
-                               fuse_fill_dir_t filler, off_t offset,
-                               struct fuse_file_info *fi,
-                               enum fuse_readdir_flags flags) {
+  static int readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+                     off_t offset, struct fuse_file_info *fi,
+                     enum fuse_readdir_flags flags) {
     if (strcmp(path, "/") == 0) {
       filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
       filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -225,8 +234,8 @@ public:
     return 0;
   }
 
-  static int read(const char *path, char *buf, size_t size,
-                            off_t offset, struct fuse_file_info *fi) {
+  static int read(const char *path, char *buf, size_t size, off_t offset,
+                  struct fuse_file_info *fi) {
     //   record_file_access(path, "read");
 
     //   if (shm_manager->initialize() && shm_manager->needsUpdate()) {
@@ -382,8 +391,7 @@ public:
     return 0;
   }
 
-  static int create(const char *path, mode_t mode,
-                              struct fuse_file_info *fi) {
+  static int create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     //   if (virtual_files.count(path) > 0 || virtual_dirs.count(path) > 0) {
     //     spdlog::error("File already exists: {}", path);
     //     return -EEXIST;
@@ -401,7 +409,7 @@ public:
   }
 
   static int utimens(const char *path, const struct timespec tv[2],
-                               struct fuse_file_info *fi) {
+                     struct fuse_file_info *fi) {
     //   auto it = virtual_files.find(path);
     //   if (it == virtual_files.end()) {
     //     return -ENOENT;
@@ -413,8 +421,8 @@ public:
     return 0;
   }
 
-  static int write(const char *path, const char *buf, size_t size,
-                             off_t offset, struct fuse_file_info *fi) {
+  static int write(const char *path, const char *buf, size_t size, off_t offset,
+                   struct fuse_file_info *fi) {
     //   if (fi->fh == 0) {
     //     auto it = virtual_files.find(path);
     //     if (it == virtual_files.end()) {
@@ -470,13 +478,13 @@ public:
     return 0;
   }
 
-  static int setxattr(const char *path, const char *name,
-                                const char *value, size_t size, int flags) {
+  static int setxattr(const char *path, const char *name, const char *value,
+                      size_t size, int flags) {
     return -ENOTSUP;
   }
 
   static int getxattr(const char *path, const char *name, char *value,
-                                size_t size) {
+                      size_t size) {
     //   auto it = virtual_files.find(path);
     //   if (it == virtual_files.end())
     //     return -ENOENT;
@@ -554,26 +562,55 @@ public:
 
 private:
   std::shared_ptr<IpcBaseService> ipc_base_;
-  std::shared_ptr<IpcBaseService::SubscriberType> ipc_publisher_;
+  std::shared_ptr<IpcBaseService::SubscriberType> ipc_subscriber_;
+  std::mutex files_mutex_;
+
+  storage::Storage<schemas::FileInfo> virtual_storage;
 
   core::Result<bool> initializeIpc() {
     return core::Result<bool>::Ok(true).and_then(
         [this]() -> core::Result<bool> {
-          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_app");
+          ipc_base_ = std::make_shared<IpcBaseService>("vectorfs_app",
+                                                       "owl_ipc", "default");
 
           auto init_result = ipc_base_->initialize();
           if (!init_result.is_ok()) {
-            return core::Result<bool>::Error("Failed to initalize IPC base");
+            return core::Result<bool>::Error("Failed to initialize IPC base");
           }
+
+          spdlog::info("Waiting for publisher to be ready...");
+          std::this_thread::sleep_for(std::chrono::seconds(2));
 
           auto subscriber_result = ipc_base_->createSubscriber();
           if (!subscriber_result.is_ok()) {
-            return core::Result<bool>::Error("Failed creeate subscriber");
+            return core::Result<bool>::Error("Failed to create subscriber");
           }
 
-          spdlog::info("Ipc subscriber initialize successfully");
+          ipc_subscriber_ = subscriber_result.value();
+
+          ipc_base_->startReceiving(ipc_subscriber_,
+                                    [this](const schemas::FileInfo &file_info) {
+                                      this->handleIpcMessage(file_info);
+                                    });
+
+          spdlog::info("IPC subscriber initialized successfully");
           return core::Result<bool>::Ok(true);
         });
+  }
+
+  void handleIpcMessage(const schemas::FileInfo &file_info) {
+    // spdlog::info("Received IPC message for file: {}", file_info.path);
+
+    std::lock_guard<std::mutex> lock(files_mutex_);
+
+    schemas::FileInfo internal_info;
+    internal_info.path = file_info.path;
+    internal_info.size = file_info.size;
+    internal_info.mode = file_info.mode;
+
+    // virtual_files_[file_info.path] = internal_info;
+
+    spdlog::info("Updated virtual files with: {}", file_info.path.value());
   }
 };
 

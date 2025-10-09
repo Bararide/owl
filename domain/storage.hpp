@@ -1,8 +1,8 @@
 #ifndef OWL_STORAGE
 #define OWL_STORAGE
 
-#include <infrastructure/result.hpp>
 #include <infrastructure/event.hpp>
+#include <infrastructure/result.hpp>
 
 namespace owl::storage {
 
@@ -43,10 +43,39 @@ public:
     return core::Result<bool>::Ok(true);
   }
 
+  core::Result<T &> findFile(const std::string &path) {
+    auto result = file_storage_.find(path);
+    if (result != file_storage_.end()) {
+      return core::Result<T &>::Ok(result);
+    }
+
+    return core::Result<T &>::Error("Not find file in storage with path: {}",
+                                    path);
+  }
+
+  core::Result<std::string> findDir(const std::string &path) {
+    if (dirs_storage_.find(path) != dirs_storage_.end()) {
+      return core::Result<std::string>::Ok(dirs_storage_.find(path));
+    }
+
+    return core::Result<std::string>::Error("Not find dir");
+  }
+
+  core::Result<T &> operator[](const std::string &path) {
+    auto result = file_storage_.find(path);
+    if (result != file_storage_.end()) {
+      return core::Result<T &>::Ok(result);
+    }
+
+    return core::Result<T &>::Error("Not find file in storage with path: {}",
+                                    path);
+  }
+
 private:
   std::map<std::string, T> file_storage_;
   std::set<std::string> dirs_storage_;
-}
+};
+
 } // namespace owl::storage
 
 #endif // OWL_STORAGE

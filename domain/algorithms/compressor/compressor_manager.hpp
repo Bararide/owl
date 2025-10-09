@@ -9,7 +9,7 @@ using namespace compression;
 
 using CompressorVariant = std::variant<Compressor>;
 
-template <typename T> class CompressorManager {
+template <typename T = Compressor> class CompressorManager {
 public:
   CompressorManager() = default;
 

@@ -12,6 +12,7 @@
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <thread>
+#include "utils/constants.hpp"
 
 namespace owl {
 
@@ -37,6 +38,9 @@ public:
 
   core::Result<bool> initialize() {
     try {
+      setenv("IOX2_CONFIG_FILE", kIceoryxConfigPath, 1);
+      spdlog::info("Setting Iceoryx2 config path: {}", kIceoryxConfigPath);
+
       iox2::NodeBuilder node_builder;
       auto node_name_result = iox2::NodeName::create(node_name_.c_str());
       if (!node_name_result.has_value()) {
@@ -99,15 +103,22 @@ public:
 
   core::Result<std::shared_ptr<SubscriberType>> createSubscriber() {
     try {
+      spdlog::info("Creating subscriber for service: {}/{}", service_name_,
+                   instance_name_);
+
       auto service_name_result =
           iox2::ServiceName::create(service_name_.c_str());
       if (!service_name_result.has_value()) {
+        spdlog::error("Invalid service name: {}", service_name_);
         return core::Result<std::shared_ptr<SubscriberType>>::Error(
             "Invalid service name");
       }
 
+      spdlog::info("Service name created successfully");
+
       auto service_builder = std::move(node_)->service_builder(
           std::move(service_name_result.value()));
+      spdlog::info("Service builder created");
 
       auto service_result =
           std::move(service_builder)
@@ -115,24 +126,30 @@ public:
               .open_or_create();
 
       if (!service_result.has_value()) {
+        spdlog::error("Failed to create service");
         return core::Result<std::shared_ptr<SubscriberType>>::Error(
             "Failed to create service");
       }
 
+      spdlog::info("Service created successfully");
       auto service = std::move(service_result.value());
+
       auto subscriber_result = service.subscriber_builder().create();
       if (!subscriber_result.has_value()) {
+        spdlog::error("Failed to create subscriber");
         return core::Result<std::shared_ptr<SubscriberType>>::Error(
             "Failed to create subscriber");
       }
 
       auto subscriber = std::make_shared<SubscriberType>(
           std::move(subscriber_result.value()));
-      spdlog::info("Subscriber created for service: {}/{}", service_name_,
-                   instance_name_);
+      spdlog::info("Subscriber created successfully for service: {}/{}",
+                   service_name_, instance_name_);
       return core::Result<std::shared_ptr<SubscriberType>>::Ok(
           std::move(subscriber));
+
     } catch (const std::exception &e) {
+      spdlog::error("Exception in createSubscriber: {}", e.what());
       return core::Result<std::shared_ptr<SubscriberType>>::Error(e.what());
     }
   }

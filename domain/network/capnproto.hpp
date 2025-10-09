@@ -13,7 +13,6 @@
 
 #include "instance/instance.hpp"
 #include "schemas/fileinfo.hpp"
-#include "shared_memory/shared_memory.hpp"
 #include "vectorfs.capnp.h"
 
 namespace owl::capnp {
@@ -53,17 +52,17 @@ protected:
         spdlog::info("Normalized path to: {}", path);
       }
 
-      auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-      if (!shm_manager.initialize()) {
-        throw kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
-                            kj::str("Failed to initialize shared memory"));
-      }
+      // auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
+      // if (!shm_manager.initialize()) {
+      //   throw kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
+      //                       kj::str("Failed to initialize shared memory"));
+      // }
 
-      if (!shm_manager.addFile(path, content)) {
-        throw kj::Exception(
-            kj::Exception::Type::FAILED, __FILE__, __LINE__,
-            kj::str("Failed to add file to shared memory: ", path));
-      }
+      // if (!shm_manager.addFile(path, content)) {
+      //   throw kj::Exception(
+      //       kj::Exception::Type::FAILED, __FILE__, __LINE__,
+      //       kj::str("Failed to add file to shared memory: ", path));
+      // }
 
       spdlog::info("Successfully added file to shared memory: {}", path);
 
@@ -237,19 +236,19 @@ protected:
     auto response = results.initResponse();
 
     try {
-      auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-      auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
-                      .get_vector_fs();
+      // auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
+      // auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
+      //                 .get_vector_fs();
 
-      size_t file_count = vfs.get_virtual_files().size();
-      size_t total_size = 0;
-      for (const auto &[path, file_info] : vfs.get_virtual_files()) {
-        total_size += file_info.content.size();
-      }
+      // size_t file_count = vfs.get_virtual_files().size();
+      // size_t total_size = 0;
+      // for (const auto &[path, file_info] : vfs.get_virtual_files()) {
+      //   total_size += file_info.content.size();
+      // }
 
-      response.setSuccess(true);
-      response.setMessage(kj::str("Files: ", file_count,
-                                  ", Total size: ", total_size, " bytes"));
+      // response.setSuccess(true);
+      // response.setMessage(kj::str("Files: ", file_count,
+      //                             ", Total size: ", total_size, " bytes"));
 
     } catch (const kj::Exception &e) {
       response.setSuccess(false);

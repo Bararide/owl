@@ -1,0 +1,8 @@
+[general]
+version = 1
+
+[segment]
+size = "16MB"
+
+[service_discovery]
+enabled = true
