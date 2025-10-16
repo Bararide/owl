@@ -13,4 +13,6 @@ target_link_libraries(domain PUBLIC
     fasttext-shared
     spdlog
     core
+    chunkees
+    ossec
 )

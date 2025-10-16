@@ -2,7 +2,7 @@
 #define VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
 
 #include "knowledge_container.hpp"
-#include "ossec/memory/pid_container.hpp"
+#include <memory/pid_container.hpp>
 #include <filesystem>
 #include <fstream>
 

@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
         "crawl-300d-2M-subword.bin";
 
     core::measure::Measure::start();
-    owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
+    owl::instance::VFSInstance<embedded::FastTextEmbedder,
                                owl::compression::Compressor>::
         initialize(std::move(fasttext_model_path));
     core::measure::Measure::end();
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 
     core::measure::Measure::start();
     auto &vectorfs =
-        owl::instance::VFSInstance<owl::embedded::FastTextEmbedder,
+        owl::instance::VFSInstance<embedded::FastTextEmbedder,
                                    owl::compression::Compressor>::getInstance();
     core::measure::Measure::end();
     core::measure::Measure::result<std::chrono::milliseconds>(
@@ -85,8 +85,8 @@ int main(int argc, char *argv[]) {
                    getpid());
       try {
         auto http_start = std::chrono::high_resolution_clock::now();
-        owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::init();
-        owl::network::VectorFSApi<owl::embedded::FastTextEmbedder>::run();
+        owl::network::VectorFSApi<embedded::FastTextEmbedder>::init();
+        owl::network::VectorFSApi<embedded::FastTextEmbedder>::run();
         auto http_end = std::chrono::high_resolution_clock::now();
         auto http_duration = std::chrono::duration_cast<std::chrono::seconds>(
             http_end - http_start);
@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
         spdlog::warn("Failed to terminate HTTP server gracefully");
       }
 
-      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
+      owl::instance::VFSInstance<embedded::FastTextEmbedder>::shutdown();
       spdlog::info("VectorFS shutdown complete");
       return result;
     } else {
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
     spdlog::error("Fatal error: {}", e.what());
     core::measure::Measure::cancel();
     try {
-      owl::instance::VFSInstance<owl::embedded::FastTextEmbedder>::shutdown();
+      owl::instance::VFSInstance<embedded::FastTextEmbedder>::shutdown();
     } catch (...) {
     }
     return EXIT_FAILURE;

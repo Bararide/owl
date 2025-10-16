@@ -24,12 +24,13 @@
 #include <spdlog/spdlog.h>
 
 #include "algorithms/compressor/compressor.hpp"
-#include "embedded/embedded_base.hpp"
-#include "embedded/embedded_fasttext.hpp"
+#include "container_manager.hpp"
 #include "file/fileinfo.hpp"
 #include "markov.hpp"
 #include "shared_memory/shared_memory.hpp"
 #include "utils/quantization.hpp"
+#include <embedded/embedded_base.hpp>
+#include <embedded/embedded_fasttext.hpp>
 
 namespace owl::vectorfs {
 
@@ -54,6 +55,8 @@ private:
   bool use_quantization;
   std::map<idx_t, std::string> index_to_path;
   std::map<std::string, std::string> search_results_cache;
+
+  // owl::vectorfs::ContainerManager &container_manager_;
 
   std::unique_ptr<markov::SemanticGraph> semantic_graph;
   std::unique_ptr<markov::HiddenMarkovModel> hmm_model;
@@ -84,8 +87,7 @@ private:
   void train_quantizers(const std::vector<float> &embeddings, size_t dim);
   std::vector<std::string> predict_next_files();
 
-  std::vector<uint8_t>
-  compress_data(const std::vector<uint8_t> &data) {
+  std::vector<uint8_t> compress_data(const std::vector<uint8_t> &data) {
     return std::visit(
         [&](const auto &compressor) -> std::vector<uint8_t> {
           auto result = compressor->compress_impl(data);
@@ -112,8 +114,7 @@ private:
         compressor_);
   }
 
-  std::vector<uint8_t>
-  get_compressed_data_from_shm(const std::string &path) {
+  std::vector<uint8_t> get_compressed_data_from_shm(const std::string &path) {
     if (!shm_manager || !shm_manager->initialize()) {
       return {};
     }
