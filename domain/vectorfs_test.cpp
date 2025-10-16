@@ -62,8 +62,7 @@ std::string VectorFS::generate_markov_test_result() {
 }
 
 void VectorFS::test_semantic_search() {
-  if (!std::holds_alternative<std::unique_ptr<embedded::FastTextEmbedder>>(
-          embedder_) ||
+  if (std::is_same_v<decltype(embedder_.embedder()), FastTextEmbedder> ||
       !faiss_index) {
     spdlog::error("Embedder or index not initialized for testing");
     return;

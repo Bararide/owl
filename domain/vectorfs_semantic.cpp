@@ -22,18 +22,11 @@ void VectorFS::rebuild_index() {
     if (use_quantization) {
       if (!sq_quantizer->is_trained() || !pq_quantizer->is_trained()) {
         train_quantizers(all_embeddings,
-                         std::visit(
-                             [](const auto &embedder_ptr) {
-                               return embedder_ptr->getDimension();
-                             },
-                             embedder_));
+                         embedder_.embedder().value().getDimension());
       }
       if (!faiss_index_quantized) {
-        faiss_index_quantized = std::make_unique<faiss::IndexFlatL2>(std::visit(
-            [](const auto &embedder_ptr) {
-              return embedder_ptr->getDimension();
-            },
-            embedder_));
+        faiss_index_quantized = std::make_unique<faiss::IndexFlatL2>(
+            embedder_.embedder().value().getDimension());
       } else {
         faiss_index_quantized->reset();
       }
@@ -50,11 +43,8 @@ void VectorFS::rebuild_index() {
           reinterpret_cast<const float *>(pq_codes.data()));
     } else {
       if (!faiss_index) {
-        faiss_index = std::make_unique<faiss::IndexFlatL2>(std::visit(
-            [](const auto &embedder_ptr) {
-              return embedder_ptr->getDimension();
-            },
-            embedder_));
+        faiss_index = std::make_unique<faiss::IndexFlatL2>(
+            embedder_.embedder().value().getDimension());
       } else {
         faiss_index->reset();
       }
@@ -66,28 +56,19 @@ void VectorFS::rebuild_index() {
 }
 
 std::vector<float> VectorFS::get_embedding(const std::string &text) {
-  return std::visit(
-      [&text](auto &embedder_ptr) {
-        return embedder_ptr->getSentenceEmbedding(text);
-      },
-      embedder_);
+  return embedder_.embedder().value().getSentenceEmbedding(text).value();
 }
 
-std::string VectorFS::get_embedder_info() const {
-  return std::visit(
-      [](const auto &embedder_ptr) {
-        return fmt::format("Model: {}, Dimension: {}",
-                           embedder_ptr->getModelName(),
-                           embedder_ptr->getDimension());
-      },
-      embedder_);
+std::string VectorFS::get_embedder_info() {
+  return fmt::format("Model: {}, Dimension: {}",
+                     embedder_.embedder().value().getModelName(),
+                     embedder_.embedder().value().getDimension());
 }
 
 std::vector<std::pair<std::string, float>>
 VectorFS::semantic_search(const std::string &query, int k) {
   std::vector<std::pair<std::string, float>> results;
-  if (!std::holds_alternative<std::unique_ptr<embedded::FastTextEmbedder>>(
-          embedder_) ||
+  if (!std::is_same_v<decltype(embedder_.embedder()), FastTextEmbedder> ||
       (!faiss_index && !faiss_index_quantized)) {
     spdlog::error("Embedder or index not initialized");
     return results;
@@ -98,11 +79,8 @@ VectorFS::semantic_search(const std::string &query, int k) {
     return results;
   }
   std::string normalized_query = normalize_text(query);
-  std::vector<float> query_embedding = std::visit(
-      [&normalized_query](auto &embedder_ptr) {
-        return embedder_ptr->getSentenceEmbedding(normalized_query);
-      },
-      embedder_);
+  std::vector<float> query_embedding =
+      embedder_.embedder().value().getSentenceEmbedding(normalized_query).value();
   std::vector<idx_t> I(k);
   std::vector<float> D(k);
   if (use_quantization && faiss_index_quantized) {
@@ -186,11 +164,10 @@ void VectorFS::update_embedding(const std::string &path) {
     return;
   if (!it->second.content.empty()) {
     std::string normalized_content = normalize_text(it->second.content);
-    it->second.embedding = std::visit(
-        [&normalized_content](auto &embedder_ptr) {
-          return embedder_ptr->getSentenceEmbedding(normalized_content);
-        },
-        embedder_);
+    it->second.embedding = embedder_.embedder()
+                               .value()
+                               .getSentenceEmbedding(normalized_content)
+                               .value();
     it->second.embedding_updated = true;
     if (use_quantization && sq_quantizer && sq_quantizer->is_trained()) {
       it->second.sq_codes = sq_quantizer->quantize(it->second.embedding);

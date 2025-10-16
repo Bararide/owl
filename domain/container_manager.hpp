@@ -114,9 +114,8 @@ public:
     return result;
   }
 
-  // Статистика
   size_t get_container_count() const {
-    std::lock_guard<std::mutex> lock(containers_mutex_);
+    // std::lock_guard<std::mutex> lock(containers_mutex_);
     return containers_.size();
   }
 

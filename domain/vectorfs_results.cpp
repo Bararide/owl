@@ -128,12 +128,7 @@ std::string VectorFS::generate_search_result(const std::string &query) {
   }
   ss << "\n=== Search Info ===\n";
   ss << "Total indexed files: " << index_to_path.size() << "\n";
-  ss << "Embedder dimension: "
-     << std::visit(
-            [](const auto &embedder_ptr) {
-              return embedder_ptr->getDimension();
-            },
-            embedder_)
+  ss << "Embedder dimension: " << embedder_.embedder().value().getDimension()
      << "\n";
   return ss.str();
 }

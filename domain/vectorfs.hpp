@@ -30,12 +30,9 @@
 #include "shared_memory/shared_memory.hpp"
 #include "utils/quantization.hpp"
 #include <embedded/embedded_base.hpp>
-#include <embedded/embedded_fasttext.hpp>
+#include <embedded/emdedded_manager.hpp>
 
 namespace owl::vectorfs {
-
-using EmbedderVariant =
-    std::variant<std::unique_ptr<embedded::FastTextEmbedder>>;
 
 using CompressorVariant =
     std::variant<std::unique_ptr<compression::Compressor>>;
@@ -65,7 +62,7 @@ private:
 
   std::map<std::string, std::vector<std::string>> predictive_cache;
 
-  EmbedderVariant embedder_;
+  EmbedderManager<> embedder_;
   std::string model_type_;
 
   CompressorVariant compressor_;
@@ -188,9 +185,7 @@ public:
       }
 
       if constexpr (std::is_same_v<EmbeddedModel, embedded::FastTextEmbedder>) {
-        auto embedder = std::make_unique<embedded::FastTextEmbedder>();
-        embedder->loadModel(std::move(model_path));
-        embedder_ = std::move(embedder);
+        embedder_.set(std::move(model_path));
       }
 
       if constexpr (std::is_same_v<CompressorType,
@@ -201,9 +196,7 @@ public:
 
       this->use_quantization = use_quantization;
 
-      int dimension = std::visit(
-          [](const auto &embedder_ptr) { return embedder_ptr->getDimension(); },
-          embedder_);
+      int dimension = embedder_.embedder().value().getDimension();
 
       if (use_quantization) {
         sq_quantizer = std::make_unique<utils::ScalarQuantizer>();
@@ -230,7 +223,7 @@ public:
   }
 
   std::vector<float> get_embedding(const std::string &text);
-  std::string get_embedder_info() const;
+  std::string get_embedder_info();
 
   static VectorFS *getInstance() {
     static VectorFS instance;
