@@ -26,7 +26,7 @@ add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
 
-add_subdirectory(core)
+add_subdirectory(lib)
 add_subdirectory(domain)
 
 include_directories(${JSONCPP_INCLUDE_DIRS})
@@ -41,7 +41,7 @@ target_include_directories(owl PRIVATE
     ${LZ4_INCLUDE_DIRS})
 
 target_link_libraries(owl domain)
-target_link_libraries(owl core)
+target_link_libraries(owl lib)
 target_link_libraries(owl ${FUSE3_LIBRARIES})
 target_link_libraries(owl faiss)
 target_link_libraries(owl sentencepiece)

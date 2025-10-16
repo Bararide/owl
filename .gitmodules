@@ -22,3 +22,12 @@
 [submodule "3dparty/iceoryx2"]
 	path = 3dparty/iceoryx2
 	url = https://github.com/eclipse-iceoryx/iceoryx2.git
+[submodule "lib/cppcore"]
+	path = lib/cppcore
+	url = https://github.com/Bararide/cppcore
+[submodule "lib/chunkees"]
+	path = lib/chunkees
+	url = https://github.com/Bararide/chunkees
+[submodule "lib/ossec"]
+	path = lib/ossec
+	url = https://github.com/Bararide/ossec
