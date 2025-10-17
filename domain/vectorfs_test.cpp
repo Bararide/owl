@@ -438,12 +438,12 @@ void VectorFS::test_container() {
     auto container_result =
         container_builder.with_owner("test_user")
             .with_container_id("test_container_1")
-            .with_data_path("/home/bararide/my_fuse_mount/test1")
+            .with_data_path("/tmp/vectorfs_containers/test1")
             .with_vectorfs_namespace("default")
-            .with_supported_formats({"txt", "json", "yaml"})
+            .with_supported_formats({"txt", "json", "yaml", "cpp", "py"})
             .with_vector_search(true)
-            .with_memory_limit(512)   // 512 MB
-            .with_storage_quota(1024) // 1 GB
+            .with_memory_limit(512)
+            .with_storage_quota(1024)
             .with_file_limit(1000)
             .with_label("environment", "development")
             .with_label("type", "knowledge_base")
@@ -456,20 +456,57 @@ void VectorFS::test_container() {
       auto pid_container =
           std::make_shared<ossec::PidContainer>(std::move(container));
 
-      if (container_manager_.register_ossec_container(pid_container)) {
-        spdlog::info(
-            "Successfully created and registered container: test_container_1");
+      auto start_result = pid_container->start();
+      if (start_result.is_ok()) {
+        auto adapter = std::make_shared<OssecContainerAdapter>(pid_container);
 
-        auto knowledge_container =
-            container_manager_.get_container("test_container_1");
-        if (knowledge_container) {
-          spdlog::info("Container is ready for file operations");
+        if (container_manager_.register_container(adapter)) {
+          spdlog::info("Successfully created and registered container: "
+                       "test_container_1");
+
+          adapter->add_file(
+              "/readme.txt",
+              "Welcome to test_container_1!\n\n"
+              "This container contains sample knowledge files.\n"
+              "You can browse and search through the files here.\n\n"
+              "Status: " +
+                  adapter->get_status() +
+                  "\n"
+                  "Size: " +
+                  std::to_string(adapter->get_size()) +
+                  " bytes\n"
+                  "Owner: " +
+                  adapter->get_owner());
+
+          adapter->add_file("/examples/hello.cpp", R"(#include <iostream>
+
+int main() {
+    std::cout << "Hello from VectorFS container!" << std::endl;
+    return 0;
+})");
+
+          adapter->add_file("/notes/programming.md",
+                            "# Programming Notes\n\n"
+                            "## C++ Tips\n"
+                            "- Use smart pointers\n"
+                            "- Prefer RAII\n"
+                            "- Learn move semantics\n\n"
+                            "## Python Tips\n"
+                            "- Use virtual environments\n"
+                            "- Write docstrings\n"
+                            "- Follow PEP8");
+
+          spdlog::info("Added sample files to container");
+        } else {
+          spdlog::error("Failed to register container adapter");
         }
       } else {
-        spdlog::error("Failed to register container");
+        spdlog::error("Failed to start container: {}",
+                      start_result.error().what());
       }
     } else {
-      spdlog::error("Failed to build container: {}", container_result.error().what());
+      spdlog::error("Failed to build container: {}",
+                    container_result.error().what());
     }
 
   } catch (const std::exception &e) {

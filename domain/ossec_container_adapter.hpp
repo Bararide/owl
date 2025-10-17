@@ -2,9 +2,9 @@
 #define VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
 
 #include "knowledge_container.hpp"
-#include <memory/pid_container.hpp>
 #include <filesystem>
 #include <fstream>
+#include <memory/pid_container.hpp>
 
 namespace owl::vectorfs {
 
@@ -48,7 +48,7 @@ public:
     return files;
   }
 
-  std::string read_file(const std::string &path) const override {
+  std::string get_file_content(const std::string &path) const override {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;
 
@@ -65,8 +65,7 @@ public:
     return "";
   }
 
-  bool write_file(const std::string &path,
-                  const std::string &content) override {
+  bool add_file(const std::string &path, const std::string &content) override {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;
 
@@ -83,6 +82,17 @@ public:
     return false;
   }
 
+  bool remove_file(const std::string &path) override {
+    auto data_path = container_->get_container().data_path;
+    auto full_path = data_path / path;
+
+    try {
+      return std::filesystem::remove(full_path);
+    } catch (const std::exception &e) {
+      return false;
+    }
+  }
+
   bool file_exists(const std::string &path) const override {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;
@@ -96,21 +106,53 @@ public:
 
   std::vector<std::string>
   search_files(const std::string &pattern) const override {
-    return {};
+    std::vector<std::string> results;
+    auto data_path = container_->get_container().data_path;
+
+    try {
+      for (const auto &entry :
+           std::filesystem::recursive_directory_iterator(data_path)) {
+        if (entry.is_regular_file()) {
+          std::string filename = entry.path().filename().string();
+          if (filename.find(pattern) != std::string::npos) {
+            // Возвращаем относительный путь
+            std::string relative_path =
+                std::filesystem::relative(entry.path(), data_path).string();
+            results.push_back(relative_path);
+          }
+        }
+      }
+    } catch (const std::exception &e) {
+    }
+
+    return results;
   }
 
-  bool is_available() const override { return container_->is_running(); }
+  bool is_available() const override {
+    return container_ && container_->is_running();
+  }
 
   size_t get_size() const override {
     try {
       auto data_path = container_->get_container().data_path;
-      return std::filesystem::file_size(data_path);
+      if (std::filesystem::exists(data_path)) {
+        size_t total_size = 0;
+        for (const auto &entry :
+             std::filesystem::recursive_directory_iterator(data_path)) {
+          if (entry.is_regular_file()) {
+            total_size += entry.file_size();
+          }
+        }
+        return total_size;
+      }
     } catch (...) {
-      return 0;
     }
+    return 0;
   }
 
   std::string get_status() const override {
+    if (!container_)
+      return "invalid";
     if (container_->is_running())
       return "running";
     else if (container_->is_owned())
