@@ -44,31 +44,31 @@ int main(int argc, char *argv[]) {
 
     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
 
-    core::measure::Measure::start();
-    vectorfs.test_semantic_search();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "Semantic search test completed in {} ms");
+    // core::measure::Measure::start();
+    // vectorfs.test_semantic_search();
+    // core::measure::Measure::end();
+    // core::measure::Measure::result<std::chrono::milliseconds>(
+    //     "Semantic search test completed in {} ms");
 
-    core::measure::Measure::start();
-    vectorfs.test_markov_model();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "Markov search test completed in {} ms");
+    // core::measure::Measure::start();
+    // vectorfs.test_markov_model();
+    // core::measure::Measure::end();
+    // core::measure::Measure::result<std::chrono::milliseconds>(
+    //     "Markov search test completed in {} ms");
 
-    try {
-      core::measure::Measure::start();
-      auto embedding = vectorfs.get_embedding("test sentence");
-      core::measure::Measure::end();
-      auto embed_duration =
-          core::measure::Measure::duration<std::chrono::microseconds>();
-      spdlog::info(
-          "Embedding generated successfully, dimension: {}, time: {} μs",
-          embedding.size(), embed_duration.count());
-    } catch (const std::exception &e) {
-      spdlog::warn("Embedding test failed: {}", e.what());
-      core::measure::Measure::cancel();
-    }
+    // try {
+    //   core::measure::Measure::start();
+    //   auto embedding = vectorfs.get_embedding("test sentence");
+    //   core::measure::Measure::end();
+    //   auto embed_duration =
+    //       core::measure::Measure::duration<std::chrono::microseconds>();
+    //   spdlog::info(
+    //       "Embedding generated successfully, dimension: {}, time: {} μs",
+    //       embedding.size(), embed_duration.count());
+    // } catch (const std::exception &e) {
+    //   spdlog::warn("Embedding test failed: {}", e.what());
+    //   core::measure::Measure::cancel();
+    // }
 
     auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
     if (!shm_manager.initialize()) {

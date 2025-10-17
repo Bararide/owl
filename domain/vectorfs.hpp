@@ -67,6 +67,14 @@ private:
 
   CompressorVariant compressor_;
 
+  void initialize_container_paths();
+  std::shared_ptr<IKnowledgeContainer>
+  get_container_for_path(const std::string &path);
+  std::string generate_container_listing();
+  std::string generate_container_content(const std::string &container_id);
+  std::string handle_container_search(const std::string &container_id,
+                                      const std::string &query);
+
   std::string normalize_text(const std::string &text);
   double calculate_cosine_similarity(const std::vector<float> &a,
                                      const std::vector<float> &b);
@@ -116,49 +124,6 @@ private:
     return {};
   }
 
-  void initialize_container_paths() {
-    virtual_dirs.insert("/.containers");
-    virtual_dirs.insert("/.containers/.all");
-    virtual_dirs.insert("/.containers/.search");
-  }
-
-  std::shared_ptr<IKnowledgeContainer>
-  get_container_for_path(const std::string &path) {
-    if (path.find("/.containers/") == 0) {
-      size_t start = strlen("/.containers/");
-      size_t end = path.find('/', start);
-      std::string container_id = path.substr(start, end - start);
-      return container_manager_.get_container(container_id);
-    }
-    return nullptr;
-  }
-
-  std::string generate_container_listing() {
-    std::stringstream ss;
-    ss << "=== Knowledge Containers ===\n\n";
-    auto containers = container_manager_.get_all_containers();
-    for (const auto &container : containers) {
-      ss << "Container: " << container->get_id() << "\n";
-      ss << "  Owner: " << container->get_owner() << "\n";
-      ss << "  Namespace: " << container->get_namespace() << "\n";
-      ss << "  Status: " << container->get_status() << "\n";
-      ss << "  Size: " << container->get_size() << " bytes\n";
-      ss << "  Available: " << (container->is_available() ? "yes" : "no")
-         << "\n";
-      auto labels = container->get_labels();
-      if (!labels.empty()) {
-        ss << "  Labels:\n";
-        for (const auto &[key, value] : labels)
-          ss << "    " << key << ": " << value << "\n";
-      }
-      ss << "\n";
-    }
-    ss << "Total: " << containers.size() << " containers\n";
-    ss << "Available: " << container_manager_.get_available_container_count()
-       << " containers\n";
-    return ss.str();
-  }
-
 public:
   VectorFS()
       : virtual_dirs({"/"}), index_needs_rebuild(true), use_quantization(false),
@@ -174,6 +139,7 @@ public:
     initialize_container_paths();
   }
 
+  // FUSE операции
   int getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi);
   int readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
               struct fuse_file_info *fi, enum fuse_readdir_flags flags);
@@ -259,6 +225,7 @@ public:
     return &instance;
   }
 
+  // Статические callback'и FUSE
   static inline int getattr_callback(const char *path, struct stat *stbuf,
                                      struct fuse_file_info *fi) {
     return getInstance()->getattr(path, stbuf, fi);

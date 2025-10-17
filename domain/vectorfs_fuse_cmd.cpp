@@ -2,6 +2,96 @@
 
 namespace owl::vectorfs {
 
+void VectorFS::initialize_container_paths() {
+  virtual_dirs.insert("/.containers");
+  virtual_dirs.insert("/.containers/.all");
+  virtual_dirs.insert("/.containers/.search");
+}
+
+std::shared_ptr<IKnowledgeContainer> VectorFS::get_container_for_path(const std::string &path) {
+  if (path.find("/.containers/") == 0) {
+    size_t start = strlen("/.containers/");
+    size_t end = path.find('/', start);
+    std::string container_id = path.substr(start, end - start);
+    return container_manager_.get_container(container_id);
+  }
+  return nullptr;
+}
+
+std::string VectorFS::generate_container_listing() {
+  std::stringstream ss;
+  ss << "=== Knowledge Containers ===\n\n";
+  auto containers = container_manager_.get_all_containers();
+  for (const auto &container : containers) {
+    ss << "Container: " << container->get_id() << "\n";
+    ss << "  Owner: " << container->get_owner() << "\n";
+    ss << "  Namespace: " << container->get_namespace() << "\n";
+    ss << "  Status: " << container->get_status() << "\n";
+    ss << "  Size: " << container->get_size() << " bytes\n";
+    ss << "  Available: " << (container->is_available() ? "yes" : "no") << "\n";
+    auto labels = container->get_labels();
+    if (!labels.empty()) {
+      ss << "  Labels:\n";
+      for (const auto &[key, value] : labels)
+        ss << "    " << key << ": " << value << "\n";
+    }
+    ss << "\n";
+  }
+  ss << "Total: " << containers.size() << " containers\n";
+  ss << "Available: " << container_manager_.get_available_container_count() << " containers\n";
+  return ss.str();
+}
+
+std::string VectorFS::generate_container_content(const std::string &container_id) {
+  auto container = container_manager_.get_container(container_id);
+  if (!container) {
+    return "Container not found: " + container_id;
+  }
+
+  std::stringstream ss;
+  ss << "=== Container: " << container_id << " ===\n\n";
+  ss << "Owner: " << container->get_owner() << "\n";
+  ss << "Namespace: " << container->get_namespace() << "\n";
+  ss << "Status: " << container->get_status() << "\n";
+  ss << "Size: " << container->get_size() << " bytes\n";
+  ss << "Available: " << (container->is_available() ? "yes" : "no") << "\n\n";
+
+  auto files = container->list_files("/");
+  if (files.empty()) {
+    ss << "No files in container\n";
+  } else {
+    ss << "Files:\n";
+    for (const auto &file : files) {
+      ss << "  - " << file << "\n";
+    }
+  }
+
+  return ss.str();
+}
+
+std::string VectorFS::handle_container_search(const std::string &container_id, const std::string &query) {
+  auto container = container_manager_.get_container(container_id);
+  if (!container) {
+    return "Container not found: " + container_id;
+  }
+
+  std::stringstream ss;
+  ss << "=== Search in Container: " << container_id << " ===\n\n";
+  ss << "Query: " << query << "\n\n";
+
+  // Здесь можно реализовать поиск внутри контейнера
+  // Пока возвращаем базовую информацию
+  ss << "Search functionality for containers is under development.\n";
+  ss << "Available files:\n";
+
+  auto files = container->list_files("/");
+  for (const auto &file : files) {
+    ss << "  - " << file << "\n";
+  }
+
+  return ss.str();
+}
+
 void VectorFS::updateFromSharedMemory() {
   if (!shm_manager || !shm_manager->initialize()) {
     spdlog::warn("Failed to initialize shared memory in FUSE");
@@ -52,10 +142,10 @@ void VectorFS::updateFromSharedMemory() {
   spdlog::info("Shared memory update with compression completed");
 }
 
-int VectorFS::getattr(const char *path, struct stat *stbuf,
-                      struct fuse_file_info *fi) {
+int VectorFS::getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi) {
   memset(stbuf, 0, sizeof(struct stat));
 
+  // Специальные виртуальные файлы и директории
   if (strcmp(path, "/.search") == 0) {
     stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 2;
@@ -109,6 +199,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     return 0;
   }
 
+  // Контейнеры
   if (strcmp(path, "/.containers") == 0) {
     stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 2;
@@ -120,31 +211,58 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
   if (strcmp(path, "/.containers/.all") == 0) {
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stbuf->st_size = 1024;
+    stbuf->st_size = 4096; // Увеличим размер для списка контейнеров
     stbuf->st_uid = getuid();
     stbuf->st_gid = getgid();
     return 0;
   }
 
-  auto container = get_container_for_path(path);
-  if (container) {
-    size_t container_prefix_len =
-        std::string("/.containers/").length() + container->get_id().length();
-    std::string container_path = path + container_prefix_len;
-
-    if (container_path.empty() || container_path == "/") {
-      stbuf->st_mode = S_IFDIR | 0555;
-      stbuf->st_nlink = 2;
-    } else if (container->file_exists(container_path)) {
-      stbuf->st_mode = S_IFREG | 0444;
-      stbuf->st_nlink = 1;
-      stbuf->st_size = 1024;
-    } else {
-      return -ENOENT;
-    }
+  if (strcmp(path, "/.containers/.search") == 0) {
+    stbuf->st_mode = S_IFDIR | 0555;
+    stbuf->st_nlink = 2;
+    stbuf->st_uid = getuid();
+    stbuf->st_gid = getgid();
     return 0;
   }
 
+  // Обработка путей контейнеров
+  if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+    
+    if (container_end == std::string::npos) {
+      // Это контейнер (/\.containers/container_id)
+      stbuf->st_mode = S_IFDIR | 0555;
+      stbuf->st_nlink = 2;
+      stbuf->st_uid = getuid();
+      stbuf->st_gid = getgid();
+      return 0;
+    } else {
+      // Это файл внутри контейнера (/\.containers/container_id/path)
+      std::string container_id = path_str.substr(container_start, container_end - container_start);
+      auto container = container_manager_.get_container(container_id);
+      if (container) {
+        std::string container_path = path_str.substr(container_end);
+        if (container_path.empty() || container_path == "/") {
+          stbuf->st_mode = S_IFDIR | 0555;
+          stbuf->st_nlink = 2;
+        } else if (container->file_exists(container_path)) {
+          stbuf->st_mode = S_IFREG | 0444;
+          stbuf->st_nlink = 1;
+          stbuf->st_size = 1024; // Базовый размер
+        } else {
+          return -ENOENT;
+        }
+        stbuf->st_uid = getuid();
+        stbuf->st_gid = getgid();
+        return 0;
+      }
+      return -ENOENT;
+    }
+  }
+
+  // Оригинальная логика для виртуальных файлов и директорий
   if (virtual_dirs.count(path)) {
     stbuf->st_mode = S_IFDIR | 0755;
     stbuf->st_nlink = 2;
@@ -168,15 +286,19 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     stbuf->st_ctime = fi.modification_time;
     return 0;
   }
+
   return -ENOENT;
 }
 
 int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                       off_t offset, struct fuse_file_info *fi,
                       enum fuse_readdir_flags flags) {
+  
+  filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
+  filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+
   if (strcmp(path, "/") == 0) {
-    filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    // Корневая директория
     filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".reindex", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".embeddings", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -185,7 +307,8 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".containers", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-    if (shm_manager->initialize()) {
+    // Файлы из shared memory
+    if (shm_manager && shm_manager->initialize()) {
       if (shm_manager->needsUpdate()) {
         updateFromSharedMemory();
         shm_manager->clearUpdateFlag();
@@ -202,26 +325,27 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
         }
       }
+    }
 
-      for (const auto &dir : virtual_dirs) {
-        if (dir != "/") {
-          const char *dir_name = dir.c_str();
-          if (dir_name[0] == '/')
-            dir_name++;
-          filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
-        }
-      }
-
-      for (const auto &file : virtual_files) {
-        const char *file_name = file.first.c_str();
-        if (file_name[0] == '/')
-          file_name++;
-        filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+    // Виртуальные директории и файлы
+    for (const auto &dir : virtual_dirs) {
+      if (dir != "/") {
+        const char *dir_name = dir.c_str();
+        if (dir_name[0] == '/')
+          dir_name++;
+        filler(buf, dir_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
       }
     }
+
+    for (const auto &file : virtual_files) {
+      const char *file_name = file.first.c_str();
+      if (file_name[0] == '/')
+        file_name++;
+      filler(buf, file_name, nullptr, 0, FUSE_FILL_DIR_PLUS);
+    }
+
   } else if (strcmp(path, "/.containers") == 0) {
-    filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    // Директория контейнеров
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
@@ -229,21 +353,153 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     for (const auto &container : containers) {
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
-  } else if (auto container = get_container_for_path(path)) {
-    size_t container_prefix_len =
-        std::string("/.containers/").length() + container->get_id().length();
-    std::string container_path = path + container_prefix_len;
 
-    filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
-    filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+  } else if (strcmp(path, "/.containers/.search") == 0) {
+    auto containers = container_manager_.get_all_containers();
+    for (const auto &container : containers) {
+      filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+    }
 
-    auto files = container->list_files(container_path);
-    for (const auto &file : files) {
-      filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+  } else if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+    
+    if (container_end == std::string::npos) {
+      std::string container_id = path_str.substr(container_start);
+      auto container = container_manager_.get_container(container_id);
+      if (container) {
+        auto files = container->list_files("/");
+        for (const auto &file : files) {
+          filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+        }
+      }
+    } else {
+      std::string container_id = path_str.substr(container_start, container_end - container_start);
+      std::string container_path = path_str.substr(container_end + 1);
+      auto container = container_manager_.get_container(container_id);
+      if (container) {
+        auto files = container->list_files(container_path);
+        for (const auto &file : files) {
+          filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+        }
+      }
+    }
+  } else if (virtual_dirs.count(path)) {
+    for (const auto &file : virtual_files) {
+      if (file.first.find(path) == 0) {
+        std::string relative_path = file.first.substr(strlen(path));
+        if (!relative_path.empty() && relative_path[0] == '/') {
+          relative_path = relative_path.substr(1);
+        }
+        size_t slash_pos = relative_path.find('/');
+        if (slash_pos == std::string::npos) {
+          filler(buf, relative_path.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+        }
+      }
     }
   }
 
   return 0;
+}
+
+int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
+                   struct fuse_file_info *fi) {
+  record_file_access(path, "read");
+
+  if (shm_manager && shm_manager->initialize() && shm_manager->needsUpdate()) {
+    updateFromSharedMemory();
+    shm_manager->clearUpdateFlag();
+  }
+
+  if (strcmp(path, "/.containers/.all") == 0) {
+    std::string content = generate_container_listing();
+    if (offset >= content.size()) return 0;
+    size_t len = std::min(content.size() - offset, size);
+    memcpy(buf, content.c_str() + offset, len);
+    return len;
+  }
+
+  if (strncmp(path, "/.containers/.search/", 21) == 0) {
+    std::string query = path + 21;
+    query = url_decode(query);
+    std::replace(query.begin(), query.end(), '_', ' ');
+    
+    std::stringstream ss;
+    ss << "=== Search across all containers ===\n\n";
+    ss << "Query: " << query << "\n\n";
+    
+    auto containers = container_manager_.get_all_containers();
+    for (const auto &container : containers) {
+      ss << "Container: " << container->get_id() << "\n";
+      ss << "  [Search in container implementation pending]\n\n";
+    }
+    
+    std::string content = ss.str();
+    if (offset >= content.size()) return 0;
+    size_t len = std::min(content.size() - offset, size);
+    memcpy(buf, content.c_str() + offset, len);
+    return len;
+  }
+
+  if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+    
+    if (container_end != std::string::npos) {
+      std::string container_id = path_str.substr(container_start, container_end - container_start);
+      std::string container_path = path_str.substr(container_end);
+      
+      if (container_path == "/") {
+        std::string content = generate_container_content(container_id);
+        if (offset >= content.size()) return 0;
+        size_t len = std::min(content.size() - offset, size);
+        memcpy(buf, content.c_str() + offset, len);
+        return len;
+      } else {
+        if (container_path.find("/.search/") == 0) {
+          std::string query = container_path.substr(9);
+          query = url_decode(query);
+          std::replace(query.begin(), query.end(), '_', ' ');
+          
+          std::string content = handle_container_search(container_id, query);
+          if (offset >= content.size()) return 0;
+          size_t len = std::min(content.size() - offset, size);
+          memcpy(buf, content.c_str() + offset, len);
+          return len;
+        }
+      }
+    }
+  }
+
+  if (strcmp(path, "/.debug") == 0) {
+    std::stringstream ss;
+    ss << "=== DEBUG INFO ===\n";
+    ss << "Total virtual_files: " << virtual_files.size() << "\n";
+    ss << "Total containers: " << container_manager_.get_container_count() << "\n";
+    ss << "Available containers: " << container_manager_.get_available_container_count() << "\n";
+    
+    std::string content = ss.str();
+    if (offset >= content.size()) return 0;
+    size_t len = std::min(content.size() - offset, size);
+    memcpy(buf, content.c_str() + offset, len);
+    return len;
+  }
+
+  auto it = virtual_files.find(path);
+  if (it == virtual_files.end()) {
+    return -ENOENT;
+  }
+
+  const std::string &content = it->second.content;
+  if (offset >= content.size()) {
+    return 0;
+  }
+
+  size_t len = std::min(content.size() - offset, size);
+  memcpy(buf, content.c_str() + offset, len);
+  return len;
 }
 
 int VectorFS::rmdir(const char *path) {
@@ -290,6 +546,11 @@ int VectorFS::mkdir(const char *path, mode_t mode) {
 }
 
 int VectorFS::open(const char *path, struct fuse_file_info *fi) {
+  if (strncmp(path, "/.containers", 12) == 0) {
+    fi->fh = 0;
+    return 0;
+  }
+
   if (strncmp(path, "/.search/", 9) == 0) {
     fi->fh = 0;
     return 0;
@@ -313,161 +574,6 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
 
   fi->fh = reinterpret_cast<uint64_t>(&it->second);
   return 0;
-}
-
-int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
-                   struct fuse_file_info *fi) {
-  record_file_access(path, "read");
-
-  if (shm_manager->initialize() && shm_manager->needsUpdate()) {
-    updateFromSharedMemory();
-    shm_manager->clearUpdateFlag();
-  }
-
-  if (strcmp(path, "/.debug") == 0) {
-    std::stringstream ss;
-    ss << "=== DEBUG INFO ===\n";
-    ss << "Total virtual_files: " << virtual_files.size() << "\n";
-    ss << "Files:\n";
-
-    ss << "Process PID: " << getpid() << "\n";
-    ss << "Parent PID: " << getppid() << "\n";
-
-    for (const auto &file : virtual_files) {
-      ss << file.first << " (" << file.second.size << " bytes)\n";
-      ss << "  Create: " << std::ctime(&file.second.create_time);
-      ss << "  Access: " << std::ctime(&file.second.access_time);
-      ss << "  Modify: " << std::ctime(&file.second.modification_time);
-    }
-
-    ss << "Total virtual_dirs: " << virtual_dirs.size() << "\n";
-    ss << "Dirs:\n";
-    for (const auto &dir : virtual_dirs) {
-      ss << "  - " << dir << "\n";
-    }
-
-    std::string content = ss.str();
-    if (offset >= content.size())
-      return 0;
-    size_t len = std::min(content.size() - offset, size);
-    memcpy(buf, content.c_str() + offset, len);
-    return len;
-  }
-
-  if (strncmp(path, "/.search/", 9) == 0) {
-    auto start = std::chrono::high_resolution_clock::now();
-    std::string query = path + 9;
-
-    query = url_decode(query);
-    std::replace(query.begin(), query.end(), '_', ' ');
-
-    std::string content = generate_enhanced_search_result(query);
-
-    if (offset >= content.size()) {
-      return 0;
-    }
-    size_t len = std::min(content.size() - offset, size);
-    memcpy(buf, content.c_str() + offset, len);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count();
-    spdlog::info("Enhanced search for '{}' took {} ms", query, duration);
-    return len;
-  }
-
-  if (strcmp(path, "/.reindex") == 0) {
-    std::stringstream ss;
-    ss << "Forcing reindex...\n";
-    index_needs_rebuild = true;
-    rebuild_index();
-    ss << "Reindex completed!\n";
-    ss << "Indexed files: " << index_to_path.size() << "\n";
-
-    std::string content = ss.str();
-    if (offset >= content.size()) {
-      return 0;
-    }
-    size_t len = std::min(content.size() - offset, size);
-    memcpy(buf, content.c_str() + offset, len);
-    return len;
-  }
-
-  if (strcmp(path, "/.markov") == 0) {
-    test_markov_chains();
-    std::string content = generate_markov_test_result();
-
-    if (offset >= content.size()) {
-      return 0;
-    }
-    size_t len = std::min(content.size() - offset, size);
-    memcpy(buf, content.c_str() + offset, len);
-    return len;
-  }
-  if (strcmp(path, "/.all") == 0) {
-    std::stringstream ss;
-    for (const auto &[file_path, _] : virtual_files) {
-      ss << "--- " << file_path << " ---\n";
-    }
-
-    std::string content = ss.str();
-    if (offset >= content.size()) {
-      return 0;
-    }
-    size_t len = std::min(content.size() - offset, size);
-    memcpy(buf, content.c_str() + offset, len);
-    return len;
-  }
-
-  if (strcmp(path, "/.embeddings") == 0) {
-    std::stringstream ss;
-    ss << "Embeddings report:\n";
-    ss << "Total files: " << virtual_files.size() << "\n";
-    ss << "Files with embeddings: ";
-
-    int count = 0;
-    for (const auto &[file_path, file_info] : virtual_files) {
-      if (file_info.embedding_updated && !file_info.embedding.empty()) {
-        count++;
-        ss << "\n--- " << file_path << " ---\n";
-        ss << "Content: "
-           << (file_info.content.size() > 50
-                   ? file_info.content.substr(0, 50) + "..."
-                   : file_info.content)
-           << "\n";
-        ss << "Embedding size: " << file_info.embedding.size() << "\n";
-        ss << "First 5 values: ";
-        for (int i = 0; i < std::min(5, (int)file_info.embedding.size()); ++i) {
-          ss << file_info.embedding[i] << " ";
-        }
-        ss << "\n";
-      }
-    }
-    ss << "Total with embeddings: " << count << "\n";
-
-    std::string content = ss.str();
-    if (offset >= content.size()) {
-      return 0;
-    }
-    size_t len = std::min(content.size() - offset, size);
-    memcpy(buf, content.c_str() + offset, len);
-    return len;
-  }
-
-  auto it = virtual_files.find(path);
-  if (it == virtual_files.end()) {
-    return -ENOENT;
-  }
-
-  const std::string &content = it->second.content;
-  if (offset >= content.size()) {
-    return 0;
-  }
-
-  size_t len = std::min(content.size() - offset, size);
-  memcpy(buf, content.c_str() + offset, len);
-  return len;
 }
 
 int VectorFS::create(const char *path, mode_t mode, struct fuse_file_info *fi) {
