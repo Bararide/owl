@@ -237,7 +237,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     const auto &fi = it->second;
     stbuf->st_mode = fi.mode;
     stbuf->st_nlink = 1;
-    stbuf->st_size = fi.size;
+    stbuf->st_size = fi.content.size();
     stbuf->st_uid = fi.uid;
     stbuf->st_gid = fi.gid;
     stbuf->st_atime = fi.access_time;
@@ -254,7 +254,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
       const auto &fi = file_info;
       stbuf->st_mode = fi.mode;
       stbuf->st_nlink = 1;
-      stbuf->st_size = fi.size;
+      stbuf->st_size = fi.content.size();
       stbuf->st_uid = fi.uid;
       stbuf->st_gid = fi.gid;
       stbuf->st_atime = fi.access_time;
