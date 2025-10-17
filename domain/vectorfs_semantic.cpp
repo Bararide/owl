@@ -68,25 +68,42 @@ std::string VectorFS::get_embedder_info() {
 std::vector<std::pair<std::string, float>>
 VectorFS::semantic_search(const std::string &query, int k) {
   std::vector<std::pair<std::string, float>> results;
-  if (!std::is_same_v<decltype(embedder_.embedder()), FastTextEmbedder> ||
-      (!faiss_index && !faiss_index_quantized)) {
-    spdlog::error("Embedder or index not initialized");
+
+  if (!embedder_.embedder().is_ok()) {
+    spdlog::error("Embedder not initialized");
     return results;
   }
+
+  if (!faiss_index && !faiss_index_quantized) {
+    spdlog::error("FAISS index not initialized");
+    return results;
+  }
+
   rebuild_index();
+
   if (index_to_path.empty()) {
     spdlog::warn("No files indexed for search");
     return results;
   }
+
   std::string normalized_query = normalize_text(query);
-  std::vector<float> query_embedding =
-      embedder_.embedder().value().getSentenceEmbedding(normalized_query).value();
+  auto embedding_result =
+      embedder_.embedder().value().getSentenceEmbedding(normalized_query);
+
+  if (!embedding_result.is_ok()) {
+    spdlog::error("Failed to get embedding for query: {}", query);
+    return results;
+  }
+
+  std::vector<float> query_embedding = embedding_result.value();
   std::vector<idx_t> I(k);
   std::vector<float> D(k);
+
   if (use_quantization && faiss_index_quantized) {
-    if (pq_quantizer->is_trained()) {
+    if (pq_quantizer && pq_quantizer->is_trained()) {
       std::vector<uint8_t> query_codes = pq_quantizer->encode(query_embedding);
       pq_quantizer->precompute_query_tables(query_embedding);
+
       std::vector<std::pair<float, std::string>> scored_results;
       for (const auto &[idx, path] : index_to_path) {
         const auto &file_info = virtual_files[path];
@@ -108,6 +125,9 @@ VectorFS::semantic_search(const std::string &query, int k) {
       }
     }
   }
+
+  spdlog::debug("Semantic search for '{}' returned {} results", query,
+                results.size());
   return results;
 }
 
