@@ -4,6 +4,7 @@
 #include "knowledge_container.hpp"
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <memory/pid_container.hpp>
 
 namespace owl::vectorfs {
@@ -37,12 +38,28 @@ public:
     try {
       if (std::filesystem::exists(full_path) &&
           std::filesystem::is_directory(full_path)) {
+
         for (const auto &entry :
              std::filesystem::directory_iterator(full_path)) {
-          files.push_back(entry.path().filename());
+          std::string filename = entry.path().filename().string();
+
+          static const std::set<std::string> system_dirs = {
+              "lost+found", "sys",      "proc",    "dev",  "boot",  "lib",
+              "lib64",      "usr",      "var",     "tmp",  "run",   "mnt",
+              "media",      "srv",      "opt",     "sbin", "bin",   "root",
+              "home",       "etc",      "cdrom",   "snap", "lib32", "libx32",
+              "srv",        "swapfile", "swap.img"};
+
+          if (system_dirs.count(filename) > 0) {
+            continue;
+          }
+
+          files.push_back(filename);
         }
       }
     } catch (const std::exception &e) {
+      spdlog::error("Error listing files in {}: {}", full_path.string(),
+                    e.what());
     }
 
     return files;

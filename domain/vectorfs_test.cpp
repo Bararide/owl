@@ -433,12 +433,17 @@ void VectorFS::test_markov_chains() {
 
 void VectorFS::test_container() {
   try {
+    std::string container_data_path = "/home/bararide/test_container_2";
+    std::filesystem::remove_all(container_data_path);
+    std::filesystem::create_directories(container_data_path);
+    spdlog::info("Created clean data directory: {}", container_data_path);
+
     auto container_builder = ossec::ContainerBuilder::create();
 
     auto container_result =
         container_builder.with_owner("test_user")
-            .with_container_id("test_container_1")
-            .with_data_path("/tmp/vectorfs_containers/test1")
+            .with_container_id("test_container_2")
+            .with_data_path(container_data_path)
             .with_vectorfs_namespace("default")
             .with_supported_formats({"txt", "json", "yaml", "cpp", "py"})
             .with_vector_search(true)
@@ -464,39 +469,78 @@ void VectorFS::test_container() {
           spdlog::info("Successfully created and registered container: "
                        "test_container_1");
 
-          adapter->add_file(
-              "/readme.txt",
-              "Welcome to test_container_1!\n\n"
-              "This container contains sample knowledge files.\n"
-              "You can browse and search through the files here.\n\n"
-              "Status: " +
-                  adapter->get_status() +
-                  "\n"
-                  "Size: " +
-                  std::to_string(adapter->get_size()) +
-                  " bytes\n"
-                  "Owner: " +
-                  adapter->get_owner());
+          std::vector<std::pair<std::string, std::string>> files_to_create = {
+              {"/readme.txt",
+               "Welcome to test_container_1!\n\n"
+               "This container contains sample knowledge files.\n"
+               "You can browse and search through the files here.\n\n"
+               "Status: " +
+                   adapter->get_status() +
+                   "\n"
+                   "Size: " +
+                   std::to_string(adapter->get_size()) +
+                   " bytes\n"
+                   "Owner: " +
+                   adapter->get_owner()},
 
-          adapter->add_file("/examples/hello.cpp", R"(#include <iostream>
+              {"/examples/hello.cpp", "#include <iostream>\n\n"
+                                      "int main() {\n"
+                                      "    std::cout << \"Hello from VectorFS "
+                                      "container!\" << std::endl;\n"
+                                      "    return 0;\n}"},
 
-int main() {
-    std::cout << "Hello from VectorFS container!" << std::endl;
-    return 0;
-})");
+              {"/examples/sort.cpp",
+               "#include <algorithm>\n#include <vector>\n\n"
+               "void bubble_sort(std::vector<int>& arr) {\n"
+               "    int n = arr.size();\n"
+               "    for (int i = 0; i < n-1; i++) {\n"
+               "        for (int j = 0; j < n-i-1; j++) {\n"
+               "            if (arr[j] > arr[j+1]) {\n"
+               "                std::swap(arr[j], arr[j+1]);\n"
+               "            }\n"
+               "        }\n"
+               "    }\n}"},
 
-          adapter->add_file("/notes/programming.md",
-                            "# Programming Notes\n\n"
-                            "## C++ Tips\n"
-                            "- Use smart pointers\n"
-                            "- Prefer RAII\n"
-                            "- Learn move semantics\n\n"
-                            "## Python Tips\n"
-                            "- Use virtual environments\n"
-                            "- Write docstrings\n"
-                            "- Follow PEP8");
+              {"/notes/programming.md", "# Programming Notes\n\n"
+                                        "## C++ Tips\n"
+                                        "- Use smart pointers\n"
+                                        "- Prefer RAII\n"
+                                        "- Learn move semantics\n\n"
+                                        "## Python Tips\n"
+                                        "- Use virtual environments\n"
+                                        "- Write docstrings\n"
+                                        "- Follow PEP8"},
 
-          spdlog::info("Added sample files to container");
+              {"/config/settings.json",
+               "{\n"
+               "  \"container_id\": \"test_container_1\",\n"
+               "  \"owner\": \"test_user\",\n"
+               "  \"created\": \"2024-10-17\",\n"
+               "  \"status\": \"active\"\n}"}};
+
+          for (const auto &[file_path, content] : files_to_create) {
+            bool success = adapter->add_file(file_path, content);
+            if (success) {
+              spdlog::info("Successfully created file: {}", file_path);
+            } else {
+              spdlog::error("Failed to create file: {}", file_path);
+            }
+          }
+
+          auto files = adapter->list_files("/");
+          spdlog::info("Container root now contains {} files:", files.size());
+          for (const auto &file : files) {
+            spdlog::info("  - {}", file);
+
+            if (file.find('.') ==
+                std::string::npos) {
+              auto sub_files = adapter->list_files("/" + file);
+              for (const auto &sub_file : sub_files) {
+                spdlog::info("    - {}/{}", file, sub_file);
+              }
+            }
+          }
+
         } else {
           spdlog::error("Failed to register container adapter");
         }

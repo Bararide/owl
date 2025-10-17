@@ -178,12 +178,49 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     return 0;
   }
 
-  if (strcmp(path, "/.containers") == 0) {
-    stbuf->st_mode = S_IFDIR | 0555;
-    stbuf->st_nlink = 2;
-    stbuf->st_uid = getuid();
-    stbuf->st_gid = getgid();
-    return 0;
+  if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+
+    if (container_end == std::string::npos) {
+      stbuf->st_mode = S_IFDIR | 0555;
+      stbuf->st_nlink = 2;
+      stbuf->st_uid = getuid();
+      stbuf->st_gid = getgid();
+      stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
+      return 0;
+    } else {
+      std::string container_id =
+          path_str.substr(container_start, container_end - container_start);
+      std::string container_path = path_str.substr(container_end);
+
+      auto container = container_manager_.get_container(container_id);
+      if (container) {
+        if (container_path == "/" || container_path.empty()) {
+          stbuf->st_mode = S_IFDIR | 0555;
+          stbuf->st_nlink = 2;
+        } else if (container->file_exists(container_path)) {
+          stbuf->st_mode = S_IFREG | 0444;
+          stbuf->st_nlink = 1;
+          std::string content = container->get_file_content(container_path);
+          stbuf->st_size = content.size();
+        } else {
+          auto files = container->list_files(container_path);
+          if (!files.empty()) {
+            stbuf->st_mode = S_IFDIR | 0555;
+            stbuf->st_nlink = 2;
+          } else {
+            return -ENOENT;
+          }
+        }
+        stbuf->st_uid = getuid();
+        stbuf->st_gid = getgid();
+        stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
+        return 0;
+      }
+    }
+    return -ENOENT;
   }
 
   if (strcmp(path, "/.containers/.all") == 0) {
@@ -310,7 +347,6 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         filler(buf, file_name.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
       }
     }
-
   } else if (strcmp(path, "/.containers") == 0) {
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -320,12 +356,37 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
 
+  } else if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+
+    if (container_end == std::string::npos) {
+      std::string container_id = path_str.substr(container_start);
+      auto container = container_manager_.get_container(container_id);
+      if (container) {
+        auto files = container->list_files("/");
+        for (const auto &file : files) {
+          filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+        }
+      }
+    } else {
+      std::string container_id =
+          path_str.substr(container_start, container_end - container_start);
+      std::string container_path = path_str.substr(container_end);
+      auto container = container_manager_.get_container(container_id);
+      if (container) {
+        auto files = container->list_files(container_path);
+        for (const auto &file : files) {
+          filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+        }
+      }
+    }
   } else if (strcmp(path, "/.containers/.search") == 0) {
     auto containers = container_manager_.get_all_containers();
     for (const auto &container : containers) {
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
-
   } else if (strncmp(path, "/.containers/", 13) == 0) {
     std::string path_str(path);
     size_t container_start = 13;
@@ -421,6 +482,33 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     size_t len = std::min(content.size() - offset, size);
     memcpy(buf, content.c_str() + offset, len);
     return len;
+  }
+
+  if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+
+    if (container_end != std::string::npos) {
+      std::string container_id =
+          path_str.substr(container_start, container_end - container_start);
+      std::string container_path = path_str.substr(container_end);
+
+      spdlog::debug("Reading from container: {}, path: {}", container_id,
+                    container_path);
+
+      auto container = container_manager_.get_container(container_id);
+      if (container && container->file_exists(container_path)) {
+        std::string content = container->get_file_content(container_path);
+        if (offset >= static_cast<off_t>(content.size())) {
+          return 0;
+        }
+        size_t len = std::min(content.size() - offset, size);
+        memcpy(buf, content.c_str() + offset, len);
+        return len;
+      }
+    }
+    return -ENOENT;
   }
 
   if (strcmp(path, "/.markov") == 0) {
