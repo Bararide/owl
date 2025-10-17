@@ -32,7 +32,6 @@ public:
   std::vector<std::string> list_files(const std::string &path) const override {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;
-
     std::vector<std::string> files;
 
     try {
@@ -44,7 +43,6 @@ public:
         }
       }
     } catch (const std::exception &e) {
-      // Логируем ошибку, но возвращаем пустой список
     }
 
     return files;
@@ -62,7 +60,6 @@ public:
                            std::istreambuf_iterator<char>());
       }
     } catch (const std::exception &e) {
-      // Логируем ошибку
     }
 
     return "";
@@ -75,14 +72,12 @@ public:
 
     try {
       std::filesystem::create_directories(full_path.parent_path());
-
       std::ofstream file(full_path);
       if (file) {
         file << content;
         return true;
       }
     } catch (const std::exception &e) {
-      // Логируем ошибку
     }
 
     return false;
@@ -96,13 +91,11 @@ public:
 
   std::vector<std::string> semantic_search(const std::string &query,
                                            int limit) const override {
-    // TODO: Интегрировать с семантическим поиском VectorFS
     return {};
   }
 
   std::vector<std::string>
   search_files(const std::string &pattern) const override {
-    // TODO: Реализовать поиск файлов по шаблону
     return {};
   }
 
@@ -118,13 +111,12 @@ public:
   }
 
   std::string get_status() const override {
-    if (container_->is_running()) {
+    if (container_->is_running())
       return "running";
-    } else if (container_->is_owned()) {
+    else if (container_->is_owned())
       return "stopped";
-    } else {
+    else
       return "unknown";
-    }
   }
 
   std::shared_ptr<ossec::PidContainer> get_native_container() const {
@@ -137,4 +129,4 @@ private:
 
 } // namespace owl::vectorfs
 
-#endif // VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
+#endif

@@ -12,7 +12,7 @@ target_link_libraries(domain PUBLIC
     faiss
     fasttext-shared
     spdlog
-    core
+    cppcore
     chunkees
     ossec
 )

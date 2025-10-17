@@ -38,10 +38,15 @@ target_include_directories(owl PRIVATE
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
     ${CMAKE_SOURCE_DIR}/3dparty/fastText/src
     ${JSONCPP_INCLUDE_DIRS}
-    ${LZ4_INCLUDE_DIRS})
+    ${LZ4_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/lib/cppcore
+    ${CMAKE_SOURCE_DIR}/lib/cppcore/infrastructure
+)
 
 target_link_libraries(owl domain)
-target_link_libraries(owl lib)
+target_link_libraries(owl ossec)
+target_link_libraries(owl chunkees)
+target_link_libraries(owl cppcore)
 target_link_libraries(owl ${FUSE3_LIBRARIES})
 target_link_libraries(owl faiss)
 target_link_libraries(owl sentencepiece)

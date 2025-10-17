@@ -21,6 +21,7 @@
 #include <faiss/IndexFlat.h>
 #include <fasttext.h>
 #include <infrastructure/measure.hpp>
+#include <infrastructure/result.hpp>
 #include <spdlog/spdlog.h>
 
 #include "algorithms/compressor/compressor.hpp"
@@ -36,7 +37,6 @@ namespace owl::vectorfs {
 
 using CompressorVariant =
     std::variant<std::unique_ptr<compression::Compressor>>;
-
 using idx_t = faiss::idx_t;
 
 class VectorFS {
@@ -53,7 +53,7 @@ private:
   std::map<idx_t, std::string> index_to_path;
   std::map<std::string, std::string> search_results_cache;
 
-  // owl::vectorfs::ContainerManager &container_manager_;
+  owl::vectorfs::ContainerManager &container_manager_;
 
   std::unique_ptr<markov::SemanticGraph> semantic_graph;
   std::unique_ptr<markov::HiddenMarkovModel> hmm_model;
@@ -68,7 +68,6 @@ private:
   CompressorVariant compressor_;
 
   std::string normalize_text(const std::string &text);
-
   double calculate_cosine_similarity(const std::vector<float> &a,
                                      const std::vector<float> &b);
   void update_models();
@@ -88,11 +87,7 @@ private:
     return std::visit(
         [&](const auto &compressor) -> std::vector<uint8_t> {
           auto result = compressor->compress_impl(data);
-          if (result.is_ok()) {
-            return result.unwrap();
-          } else {
-            return data;
-          }
+          return result.is_ok() ? result.unwrap() : data;
         },
         compressor_);
   }
@@ -102,20 +97,14 @@ private:
     return std::visit(
         [&](const auto &compressor) -> std::vector<uint8_t> {
           auto result = compressor->decompress_impl(compressed_data);
-          if (result.is_ok()) {
-            return result.unwrap();
-          } else {
-            return compressed_data;
-          }
+          return result.is_ok() ? result.unwrap() : compressed_data;
         },
         compressor_);
   }
 
   std::vector<uint8_t> get_compressed_data_from_shm(const std::string &path) {
-    if (!shm_manager || !shm_manager->initialize()) {
+    if (!shm_manager || !shm_manager->initialize())
       return {};
-    }
-
     for (int i = 0; i < shm_manager->getFileCount(); i++) {
       const auto *shared_info = shm_manager->getFile(i);
       if (shared_info && std::string(shared_info->path) == path) {
@@ -127,19 +116,62 @@ private:
     return {};
   }
 
+  void initialize_container_paths() {
+    virtual_dirs.insert("/.containers");
+    virtual_dirs.insert("/.containers/.all");
+    virtual_dirs.insert("/.containers/.search");
+  }
+
+  std::shared_ptr<IKnowledgeContainer>
+  get_container_for_path(const std::string &path) {
+    if (path.find("/.containers/") == 0) {
+      size_t start = strlen("/.containers/");
+      size_t end = path.find('/', start);
+      std::string container_id = path.substr(start, end - start);
+      return container_manager_.get_container(container_id);
+    }
+    return nullptr;
+  }
+
+  std::string generate_container_listing() {
+    std::stringstream ss;
+    ss << "=== Knowledge Containers ===\n\n";
+    auto containers = container_manager_.get_all_containers();
+    for (const auto &container : containers) {
+      ss << "Container: " << container->get_id() << "\n";
+      ss << "  Owner: " << container->get_owner() << "\n";
+      ss << "  Namespace: " << container->get_namespace() << "\n";
+      ss << "  Status: " << container->get_status() << "\n";
+      ss << "  Size: " << container->get_size() << " bytes\n";
+      ss << "  Available: " << (container->is_available() ? "yes" : "no")
+         << "\n";
+      auto labels = container->get_labels();
+      if (!labels.empty()) {
+        ss << "  Labels:\n";
+        for (const auto &[key, value] : labels)
+          ss << "    " << key << ": " << value << "\n";
+      }
+      ss << "\n";
+    }
+    ss << "Total: " << containers.size() << " containers\n";
+    ss << "Available: " << container_manager_.get_available_container_count()
+       << " containers\n";
+    return ss.str();
+  }
+
 public:
   VectorFS()
-      : virtual_dirs({"/"}), index_needs_rebuild(true),
-        use_quantization(false) {
+      : virtual_dirs({"/"}), index_needs_rebuild(true), use_quantization(false),
+        container_manager_(owl::vectorfs::ContainerManager::get_instance()) {
     semantic_graph = std::make_unique<markov::SemanticGraph>();
     hmm_model = std::make_unique<markov::HiddenMarkovModel>();
     last_ranking_update = std::chrono::steady_clock::now();
-
     hmm_model->add_state("code");
     hmm_model->add_state("document");
     hmm_model->add_state("config");
     hmm_model->add_state("test");
     hmm_model->add_state("misc");
+    initialize_container_paths();
   }
 
   int getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi);
@@ -180,9 +212,8 @@ public:
   bool initialize(const std::string model_path, bool use_quantization = false) {
     try {
       shm_manager = std::make_unique<owl::shared::SharedMemoryManager>();
-      if (!shm_manager->initialize()) {
+      if (!shm_manager->initialize())
         spdlog::warn("Failed to initialize shared memory");
-      }
 
       if constexpr (std::is_same_v<EmbeddedModel, embedded::FastTextEmbedder>) {
         embedder_.set(std::move(model_path));
@@ -195,7 +226,6 @@ public:
       }
 
       this->use_quantization = use_quantization;
-
       int dimension = embedder_.embedder().value().getDimension();
 
       if (use_quantization) {
@@ -215,7 +245,6 @@ public:
                        compressor_));
 
       return true;
-
     } catch (const std::exception &e) {
       spdlog::error("Failed to initialize VectorFS: {}", e.what());
       return false;
@@ -322,4 +351,4 @@ public:
 
 } // namespace owl::vectorfs
 
-#endif // VECTORFS_HPP
+#endif
