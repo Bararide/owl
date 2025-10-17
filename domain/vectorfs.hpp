@@ -32,6 +32,7 @@
 #include "utils/quantization.hpp"
 #include <embedded/embedded_base.hpp>
 #include <embedded/emdedded_manager.hpp>
+#include <memory/container_builder.hpp>
 
 namespace owl::vectorfs {
 
@@ -67,6 +68,7 @@ private:
 
   CompressorVariant compressor_;
 
+  void test_container();
   void initialize_container_paths();
   std::shared_ptr<IKnowledgeContainer>
   get_container_for_path(const std::string &path);
@@ -137,6 +139,7 @@ public:
     hmm_model->add_state("test");
     hmm_model->add_state("misc");
     initialize_container_paths();
+    test_container();
   }
 
   // FUSE операции

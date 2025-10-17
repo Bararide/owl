@@ -430,4 +430,51 @@ void VectorFS::test_markov_chains() {
 
   spdlog::info("Markov chains test completed");
 }
+
+void VectorFS::test_container() {
+  try {
+    auto container_builder = ossec::ContainerBuilder::create();
+
+    auto container_result =
+        container_builder.with_owner("test_user")
+            .with_container_id("test_container_1")
+            .with_data_path("/home/bararide/my_fuse_mount/test1")
+            .with_vectorfs_namespace("default")
+            .with_supported_formats({"txt", "json", "yaml"})
+            .with_vector_search(true)
+            .with_memory_limit(512)   // 512 MB
+            .with_storage_quota(1024) // 1 GB
+            .with_file_limit(1000)
+            .with_label("environment", "development")
+            .with_label("type", "knowledge_base")
+            .privileged(false)
+            .build();
+
+    if (container_result.is_ok()) {
+      auto container = container_result.value();
+
+      auto pid_container =
+          std::make_shared<ossec::PidContainer>(std::move(container));
+
+      if (container_manager_.register_ossec_container(pid_container)) {
+        spdlog::info(
+            "Successfully created and registered container: test_container_1");
+
+        auto knowledge_container =
+            container_manager_.get_container("test_container_1");
+        if (knowledge_container) {
+          spdlog::info("Container is ready for file operations");
+        }
+      } else {
+        spdlog::error("Failed to register container");
+      }
+    } else {
+      spdlog::error("Failed to build container: {}", container_result.error().what());
+    }
+
+  } catch (const std::exception &e) {
+    spdlog::error("Exception while creating container: {}", e.what());
+  }
+}
+
 } // namespace owl::vectorfs
