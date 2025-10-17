@@ -405,11 +405,14 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     return len;
   }
 
-  if (strcmp(path, "/.embeddings") == 0) {
+  if (strcmp(path, "/.reindex") == 0) {
+    index_needs_rebuild = true;
+    rebuild_index();
+
     std::stringstream ss;
-    ss << "=== Embeddings Report ===\n\n";
-    ss << "Files with embeddings: " << virtual_files.size() << "\n";
-    ss << "Embedder: " << get_embedder_info() << "\n";
+    ss << "Forcing reindex...\n";
+    ss << "Reindex completed!\n";
+    ss << "Indexed files: " << index_to_path.size() << "\n";
 
     std::string content = ss.str();
     if (offset >= static_cast<off_t>(content.size())) {
@@ -420,8 +423,10 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     return len;
   }
 
-  if (strcmp(path, "/.reindex") == 0) {
-    std::string content = "Reindexing...\nIndex rebuilt successfully!\n";
+  if (strcmp(path, "/.markov") == 0) {
+    test_markov_chains();
+    std::string content = generate_markov_test_result();
+
     if (offset >= static_cast<off_t>(content.size())) {
       return 0;
     }
@@ -430,9 +435,34 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     return len;
   }
 
-  if (strcmp(path, "/.markov") == 0) {
-    std::string content =
-        "=== Markov Chains ===\n\nTest completed successfully!\n";
+  if (strcmp(path, "/.embeddings") == 0) {
+    std::stringstream ss;
+    ss << "=== Embeddings Report ===\n\n";
+    ss << "Total files: " << virtual_files.size() << "\n";
+    ss << "Files with embeddings: ";
+
+    int count = 0;
+    for (const auto &[file_path, file_info] : virtual_files) {
+      if (file_info.embedding_updated && !file_info.embedding.empty()) {
+        count++;
+        ss << "\n--- " << file_path << " ---\n";
+        ss << "Content: "
+           << (file_info.content.size() > 50
+                   ? file_info.content.substr(0, 50) + "..."
+                   : file_info.content)
+           << "\n";
+        ss << "Embedding size: " << file_info.embedding.size() << "\n";
+        ss << "First 5 values: ";
+        for (int i = 0; i < std::min(5, (int)file_info.embedding.size()); ++i) {
+          ss << file_info.embedding[i] << " ";
+        }
+        ss << "\n";
+      }
+    }
+    ss << "Total with embeddings: " << count << "\n";
+    ss << "Embedder: " << get_embedder_info() << "\n";
+
+    std::string content = ss.str();
     if (offset >= static_cast<off_t>(content.size())) {
       return 0;
     }
@@ -446,12 +476,16 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     query = url_decode(query);
     std::replace(query.begin(), query.end(), '_', ' ');
 
-    std::stringstream ss;
-    ss << "=== Search Results ===\n\n";
-    ss << "Query: " << query << "\n\n";
-    ss << "Search functionality is working!\n";
+    std::string content;
 
-    std::string content = ss.str();
+    try {
+      content = generate_enhanced_search_result(query);
+    } catch (const std::exception &e) {
+      spdlog::error("Enhanced search failed: {}, falling back to basic search",
+                    e.what());
+      content = generate_search_result(query);
+    }
+
     if (offset >= static_cast<off_t>(content.size())) {
       return 0;
     }
