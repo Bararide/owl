@@ -179,10 +179,10 @@ template <typename EmbeddedModel> auto semantic_search_handler() {
         const std::string query = (*json)["query"].asString();
         int limit = json->get("limit", 5).asInt();
 
-        auto results = vfs.semantic_search(query, limit);
+        auto results = vfs.get_search().semanticSearchImpl(query, limit);
 
         Json::Value resultsJson(Json::arrayValue);
-        for (const auto &[path, score] : results) {
+        for (const auto &[path, score] : results.value()) {
           Json::Value resultJson;
           resultJson["path"] = path;
           resultJson["score"] = score;
@@ -191,7 +191,7 @@ template <typename EmbeddedModel> auto semantic_search_handler() {
 
         auto response = utils::create_success_response(
             {"query", "results", "count"}, query, resultsJson,
-            static_cast<int>(results.size()));
+            static_cast<int>(results.value().size()));
 
         return utils::success_result(response);
       });

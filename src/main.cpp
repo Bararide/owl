@@ -26,13 +26,12 @@ int main(int argc, char *argv[]) {
         "/home/bararide/code/models/crawl-300d-2M-subword/"
         "crawl-300d-2M-subword.bin";
 
-    owl::vectorfs::SearchManager search_manager_ =
-        owl::vectorfs::SearchManager(fasttext_model_path);
-
     core::measure::Measure::start();
+
     owl::instance::VFSInstance<embedded::FastTextEmbedder,
                                owl::compression::Compressor>::
         initialize(std::move(fasttext_model_path));
+
     core::measure::Measure::end();
     core::measure::Measure::result<std::chrono::milliseconds>(
         "VectorFS initialized with compression in {} ms");
@@ -88,8 +87,10 @@ int main(int argc, char *argv[]) {
                    getpid());
       try {
         auto http_start = std::chrono::high_resolution_clock::now();
+
         owl::network::VectorFSApi<embedded::FastTextEmbedder>::init();
         owl::network::VectorFSApi<embedded::FastTextEmbedder>::run();
+
         auto http_end = std::chrono::high_resolution_clock::now();
         auto http_duration = std::chrono::duration_cast<std::chrono::seconds>(
             http_end - http_start);

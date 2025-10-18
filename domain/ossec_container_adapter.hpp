@@ -2,7 +2,7 @@
 #define VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
 
 #include "knowledge_container.hpp"
-#include "search_manager.hpp"
+#include "search.hpp" // Новый заголовок
 #include <filesystem>
 #include <fstream>
 #include <memory/pid_container.hpp>
@@ -12,10 +12,11 @@ namespace owl::vectorfs {
 
 class OssecContainerAdapter : public IKnowledgeContainer {
 public:
-  OssecContainerAdapter(std::shared_ptr<ossec::PidContainer> container)
-      : container_(std::move(container)) {
-        initialize_search_manager();
-      }
+  OssecContainerAdapter(std::shared_ptr<ossec::PidContainer> container,
+                        chunkees::Search &search)
+      : container_(std::move(container)), search_(search) {
+    initialize_search();
+  }
 
   std::string get_id() const override {
     return container_->get_container().container_id;
@@ -99,8 +100,10 @@ public:
       if (file) {
         file << content;
 
-        if (search_manager_) {
-          search_manager_->add_file(path, content);
+        auto result = search_.addFile(path, content);
+        if (!result.is_ok()) {
+          spdlog::warn("Failed to add file to search index: {} - {}", path,
+                       result.error().what());
         }
 
         return true;
@@ -117,25 +120,38 @@ public:
     auto full_path = data_path / path;
 
     try {
-      return std::filesystem::remove(full_path);
+      bool removed = std::filesystem::remove(full_path);
+
+      if (removed) {
+        auto result = search_.removeFile(path);
+        if (!result.is_ok()) {
+          spdlog::warn("Failed to remove file from search index: {} - {}", path,
+                       result.error().what());
+        }
+      }
+
+      return removed;
     } catch (const std::exception &e) {
       return false;
     }
   }
 
-  void initialize_search_manager() {
-    search_manager_ = std::make_unique<SearchManager>("some text");
-
-    search_manager_->set_content_provider([this](const std::string &path) {
-      return this->get_file_content(path);
-    });
+  void initialize_search() {
     auto files = list_files("/");
     for (const auto &file : files) {
-      std::string content = get_file_content("/" + file);
+      std::string file_path = "/" + file;
+      std::string content = get_file_content(file_path);
       if (!content.empty()) {
-        search_manager_->add_file("/" + file, content);
+        auto result = search_.addFile(file_path, content);
+        if (!result.is_ok()) {
+          spdlog::warn("Failed to index file during initialization: {} - {}",
+                       file_path, result.error().what());
+        }
       }
     }
+
+    spdlog::info("Search initialized for container {} with {} files", get_id(),
+                 files.size());
   }
 
   bool file_exists(const std::string &path) const override {
@@ -146,10 +162,15 @@ public:
 
   std::vector<std::string> semantic_search(const std::string &query,
                                            int limit) override {
-    auto results = search_manager_->semantic_search(query, limit);
-    std::vector<std::string> file_paths;
+    auto result = search_.semanticSearch(query, limit);
 
-    for (const auto &[file_path, score] : results) {
+    if (!result.is_ok()) {
+      spdlog::error("Semantic search failed: {}", result.error().what());
+      return {};
+    }
+
+    std::vector<std::string> file_paths;
+    for (const auto &[file_path, score] : result.value()) {
       file_paths.push_back(file_path);
     }
 
@@ -174,9 +195,48 @@ public:
         }
       }
     } catch (const std::exception &e) {
+      spdlog::error("File search error: {}", e.what());
     }
 
     return results;
+  }
+
+  std::vector<std::string> enhanced_semantic_search(const std::string &query,
+                                                    int limit) {
+    auto result = search_.enhancedSemanticSearchImpl(query, limit);
+
+    if (!result.is_ok()) {
+      spdlog::warn("Enhanced search failed, falling back to basic search: {}",
+                   result.error().what());
+      return semantic_search(query, limit);
+    }
+
+    std::vector<std::string> file_paths;
+    for (const auto &[file_path, score] : result.value()) {
+      file_paths.push_back(file_path);
+    }
+
+    return file_paths;
+  }
+
+  std::vector<std::string>
+  get_recommendations(const std::string &current_file) {
+    auto result = search_.getRecommendationsImpl(current_file);
+
+    if (!result.is_ok()) {
+      spdlog::warn("Failed to get recommendations: {}", result.error().what());
+      return {};
+    }
+
+    return result.value();
+  }
+
+  void record_file_access(const std::string &file_path,
+                          const std::string &operation = "read") {
+    auto result = search_.recordFileAccessImpl(file_path, operation);
+    if (!result.is_ok()) {
+      spdlog::debug("Failed to record file access: {}", result.error().what());
+    }
   }
 
   bool is_available() const override {
@@ -218,7 +278,7 @@ public:
 
 private:
   std::shared_ptr<ossec::PidContainer> container_;
-  std::unique_ptr<SearchManager> search_manager_;
+  chunkees::Search &search_;
 };
 
 } // namespace owl::vectorfs

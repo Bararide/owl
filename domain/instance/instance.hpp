@@ -4,8 +4,11 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <infrastructure/measure.hpp>
 
+#include "algorithms/compressor/compressor.hpp"
 #include "vectorfs.hpp"
+#include <search.hpp>
 
 namespace owl::instance {
 
@@ -34,9 +37,18 @@ public:
 
   static void shutdown() { instance_.reset(); }
 
-  void test_semantic_search() noexcept { vector_fs_->test_semantic_search(); }
+  void test_semantic_search() noexcept {
+    auto result = search_.semanticSearch("test query", 5);
+    if (result.is_ok()) {
+      spdlog::info("Semantic search test completed successfully");
+    } else {
+      spdlog::warn("Semantic search test failed: {}", result.error().what());
+    }
+  }
+
   void test_markov_model() noexcept {
-    vector_fs_->generate_markov_test_result();
+    auto result = search_.enhancedSemanticSearchImpl("test", 3);
+    spdlog::info("Markov model test completed");
   }
 
   int initialize_fuse(int argc, char *argv[]) {
@@ -46,22 +58,52 @@ public:
   }
 
   vectorfs::VectorFS &get_vector_fs() const { return *vector_fs_; }
+  chunkees::Search &get_search() { return search_; }
 
   std::vector<float> get_embedding(const std::string &text) {
-    return vector_fs_->get_embedding(text);
+    auto embedder_result = embedder_manager_.embedder();
+    if (!embedder_result.is_ok()) {
+      throw std::runtime_error("Embedder not initialized");
+    }
+
+    auto embedding_result = embedder_result.value().getSentenceEmbedding(text);
+    if (!embedding_result.is_ok()) {
+      throw std::runtime_error("Failed to get embedding");
+    }
+
+    return embedding_result.value();
   }
 
-  std::string get_embedder_info() const {
-    return vector_fs_->get_embedder_info();
+  std::string get_embedder_info() {
+    auto embedder_result = embedder_manager_.embedder();
+    if (!embedder_result.is_ok()) {
+      return "Embedder not initialized";
+    }
+
+    auto &embedder = embedder_result.value();
+    return "Model: " + embedder.getModelName() +
+           ", Dimension: " + std::to_string(embedder.getDimension());
   }
 
 private:
   VFSInstance(const std::string &model_path)
-      : vector_fs_(vectorfs::VectorFS::getInstance()) {
-    vector_fs_->initialize<EmbeddedModel, CompressorType>(model_path);
+      : embedder_manager_(),
+        search_(embedder_manager_,
+                {"code", "document", "config", "test", "misc"}),
+        vector_fs_(std::make_unique<vectorfs::VectorFS>(search_)) {
+
+    auto init_result = embedder_manager_.set(model_path);
+    if (!init_result.is_ok()) {
+      throw std::runtime_error(init_result.error().what());
+    }
+
+    spdlog::info("VFSInstance initialized with model: {}", model_path);
   }
 
+  EmbedderManager<> embedder_manager_;
+  chunkees::Search search_;
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
+
   static std::unique_ptr<VFSInstance<EmbeddedModel, CompressorType>> instance_;
 };
 
