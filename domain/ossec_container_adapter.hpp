@@ -136,7 +136,6 @@ public:
         if (entry.is_regular_file()) {
           std::string filename = entry.path().filename().string();
           if (filename.find(pattern) != std::string::npos) {
-            // Возвращаем относительный путь
             std::string relative_path =
                 std::filesystem::relative(entry.path(), data_path).string();
             results.push_back(relative_path);

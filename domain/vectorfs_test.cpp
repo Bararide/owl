@@ -533,8 +533,7 @@ void VectorFS::test_container() {
           for (const auto &file : files) {
             spdlog::info("  - {}", file);
 
-            if (file.find('.') ==
-                std::string::npos) {
+            if (file.find('.') == std::string::npos) {
               auto sub_files = adapter->list_files("/" + file);
               for (const auto &sub_file : sub_files) {
                 spdlog::info("    - {}/{}", file, sub_file);
