@@ -26,7 +26,7 @@ public:
 
   virtual bool file_exists(const std::string &path) const = 0;
   virtual std::vector<std::string> semantic_search(const std::string &query,
-                                                   int limit = 10) const = 0;
+                                                   int limit = 10) = 0;
   virtual std::vector<std::string>
   search_files(const std::string &pattern) const = 0;
   virtual bool is_available() const = 0;

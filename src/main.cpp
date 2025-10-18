@@ -26,6 +26,9 @@ int main(int argc, char *argv[]) {
         "/home/bararide/code/models/crawl-300d-2M-subword/"
         "crawl-300d-2M-subword.bin";
 
+    owl::vectorfs::SearchManager search_manager_ =
+        owl::vectorfs::SearchManager(fasttext_model_path);
+
     core::measure::Measure::start();
     owl::instance::VFSInstance<embedded::FastTextEmbedder,
                                owl::compression::Compressor>::

@@ -2,6 +2,7 @@
 #define VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
 
 #include "knowledge_container.hpp"
+#include "search_manager.hpp"
 #include <filesystem>
 #include <fstream>
 #include <memory/pid_container.hpp>
@@ -12,7 +13,9 @@ namespace owl::vectorfs {
 class OssecContainerAdapter : public IKnowledgeContainer {
 public:
   OssecContainerAdapter(std::shared_ptr<ossec::PidContainer> container)
-      : container_(std::move(container)) {}
+      : container_(std::move(container)) {
+        initialize_search_manager();
+      }
 
   std::string get_id() const override {
     return container_->get_container().container_id;
@@ -95,9 +98,15 @@ public:
       std::ofstream file(full_path);
       if (file) {
         file << content;
+
+        if (search_manager_) {
+          search_manager_->add_file(path, content);
+        }
+
         return true;
       }
     } catch (const std::exception &e) {
+      spdlog::error("Failed to add file {}: {}", path, e.what());
     }
 
     return false;
@@ -114,6 +123,21 @@ public:
     }
   }
 
+  void initialize_search_manager() {
+    search_manager_ = std::make_unique<SearchManager>("some text");
+
+    search_manager_->set_content_provider([this](const std::string &path) {
+      return this->get_file_content(path);
+    });
+    auto files = list_files("/");
+    for (const auto &file : files) {
+      std::string content = get_file_content("/" + file);
+      if (!content.empty()) {
+        search_manager_->add_file("/" + file, content);
+      }
+    }
+  }
+
   bool file_exists(const std::string &path) const override {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;
@@ -121,8 +145,15 @@ public:
   }
 
   std::vector<std::string> semantic_search(const std::string &query,
-                                           int limit) const override {
-    return {};
+                                           int limit) override {
+    auto results = search_manager_->semantic_search(query, limit);
+    std::vector<std::string> file_paths;
+
+    for (const auto &[file_path, score] : results) {
+      file_paths.push_back(file_path);
+    }
+
+    return file_paths;
   }
 
   std::vector<std::string>
@@ -187,6 +218,7 @@ public:
 
 private:
   std::shared_ptr<ossec::PidContainer> container_;
+  std::unique_ptr<SearchManager> search_manager_;
 };
 
 } // namespace owl::vectorfs

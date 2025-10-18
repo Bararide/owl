@@ -1,7 +1,10 @@
 #ifndef VECTORFS_UTILS_QUANTIZATION_HPP
 #define VECTORFS_UTILS_QUANTIZATION_HPP
 
+#include <cfloat>
+
 namespace owl::utils {
+  
 class ScalarQuantizer {
 private:
   std::vector<float> min_vals;
