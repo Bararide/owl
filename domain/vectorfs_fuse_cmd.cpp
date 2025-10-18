@@ -184,7 +184,6 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     size_t container_end = path_str.find('/', container_start);
 
     if (container_end == std::string::npos) {
-      // Это директория контейнера
       stbuf->st_mode = S_IFDIR | 0555;
       stbuf->st_nlink = 2;
       stbuf->st_uid = getuid();
@@ -200,28 +199,30 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
       if (container) {
         if (container_path == "/.search" || container_path == "/.debug" ||
             container_path == "/.all") {
-          auto commands = container->get_commands();
-          std::string cmd = container_path.substr(2);
-          
-          bool command_allowed = false;
-          for (const auto& allowed_cmd : commands) {
-            if (allowed_cmd == cmd || allowed_cmd == "all") {
-              command_allowed = true;
-              break;
-            }
-          }
 
-          if (command_allowed) {
+          if (container_path == "/.search") {
+            stbuf->st_mode = S_IFDIR | 0555;
+            stbuf->st_nlink = 2;
+          } else {
             stbuf->st_mode = S_IFREG | 0444;
             stbuf->st_nlink = 1;
             stbuf->st_size = 4096;
-            stbuf->st_uid = getuid();
-            stbuf->st_gid = getgid();
-            stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
-            return 0;
-          } else {
-            return -ENOENT;
           }
+
+          stbuf->st_uid = getuid();
+          stbuf->st_gid = getgid();
+          stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
+          return 0;
+        }
+
+        if (strncmp(container_path.c_str(), "/.search/", 9) == 0) {
+          stbuf->st_mode = S_IFREG | 0444;
+          stbuf->st_nlink = 1;
+          stbuf->st_size = 4096;
+          stbuf->st_uid = getuid();
+          stbuf->st_gid = getgid();
+          stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
+          return 0;
         }
 
         if (container_path == "/" || container_path.empty()) {
@@ -265,25 +266,6 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     stbuf->st_nlink = 2;
     stbuf->st_uid = getuid();
     stbuf->st_gid = getgid();
-    return 0;
-  }
-
-  if (strncmp(path, "/.containers/", 13) == 0) {
-    std::string path_str(path);
-    size_t container_start = 13;
-    size_t container_end = path_str.find('/', container_start);
-
-    if (container_end == std::string::npos) {
-      stbuf->st_mode = S_IFDIR | 0555;
-      stbuf->st_nlink = 2;
-    } else {
-      stbuf->st_mode = S_IFREG | 0444;
-      stbuf->st_nlink = 1;
-      stbuf->st_size = 1024;
-    }
-    stbuf->st_uid = getuid();
-    stbuf->st_gid = getgid();
-    stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
     return 0;
   }
 
@@ -382,8 +364,8 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     for (const auto &container : containers) {
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
-  }
-  if (strncmp(path, "/.containers/", 13) == 0) {
+
+  } else if (strncmp(path, "/.containers/", 13) == 0) {
     std::string path_str(path);
     size_t container_start = 13;
     size_t container_end = path_str.find('/', container_start);
@@ -392,19 +374,9 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       std::string container_id = path_str.substr(container_start);
       auto container = container_manager_.get_container(container_id);
       if (container) {
-        auto commands = container->get_commands();
-        for (const auto &cmd : commands) {
-          if (cmd == "all") {
-            filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            break;
-          } else if (cmd == "search") {
-            filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
-          } else if (cmd == "debug") {
-            filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
-          }
-        }
+        filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
         auto files = container->list_files("/");
         for (const auto &file : files) {
@@ -416,34 +388,32 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
       auto container = container_manager_.get_container(container_id);
+
       if (container) {
-        auto files = container->list_files(container_path);
-        for (const auto &file : files) {
-          filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+        if (container_path == "/.search") {
+          filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
+          filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
+          filler(buf, "neural", nullptr, 0, FUSE_FILL_DIR_PLUS);
+          filler(buf, "python", nullptr, 0, FUSE_FILL_DIR_PLUS);
+          filler(buf, "cpp", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        } else {
+          auto files = container->list_files(container_path);
+          for (const auto &file : files) {
+            filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+          }
         }
       }
     }
-    return 0;
   } else if (strcmp(path, "/.containers/.search") == 0) {
     auto containers = container_manager_.get_all_containers();
     for (const auto &container : containers) {
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
-  } else if (strncmp(path, "/.containers/", 13) == 0) {
-    std::string path_str(path);
-    size_t container_start = 13;
-    size_t container_end = path_str.find('/', container_start);
-
-    if (container_end == std::string::npos) {
-      std::string container_id = path_str.substr(container_start);
-      auto container = container_manager_.get_container(container_id);
-      if (container) {
-        auto files = container->list_files("/");
-        for (const auto &file : files) {
-          filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-        }
-      }
-    }
+  } else if (strcmp(path, "/.search") == 0) {
+    filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    filler(buf, "neural", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    filler(buf, "python", nullptr, 0, FUSE_FILL_DIR_PLUS);
   }
 
   return 0;
@@ -541,15 +511,51 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         return -ENOENT;
       }
 
+      if (strncmp(container_path.c_str(), "/.search/", 9) == 0) {
+        std::string query = container_path.substr(9);
+        query = url_decode(query);
+        std::replace(query.begin(), query.end(), '_', ' ');
+
+        std::stringstream ss;
+        ss << "=== Search in Container: " << container_id << " ===\n\n";
+        ss << "Query: " << query << "\n\n";
+
+        auto search_results = container->search_files(query);
+        if (search_results.empty()) {
+          ss << "No results found in container.\n";
+        } else {
+          ss << "📊 Search Results:\n";
+          for (const auto &result : search_results) {
+            ss << "📄 " << result << "\n";
+            
+            std::string file_content = container->get_file_content(result);
+            if (!file_content.empty()) {
+              std::string preview = file_content.substr(0, 100);
+              if (file_content.size() > 100) preview += "...";
+              ss << "   Content: " << preview << "\n";
+            }
+            ss << "\n";
+          }
+        }
+
+        std::string content = ss.str();
+        if (offset >= static_cast<off_t>(content.size())) {
+          return 0;
+        }
+        size_t len = std::min(content.size() - offset, size);
+        memcpy(buf, content.c_str() + offset, len);
+        return len;
+      }
+
       if (container_path == "/.all") {
         std::stringstream ss;
         ss << "=== All Files in Container: " << container_id << " ===\n\n";
-        
+
         auto files = container->list_files("/");
         for (const auto &file : files) {
           ss << file << "\n";
         }
-        
+
         std::string content = ss.str();
         if (offset >= static_cast<off_t>(content.size())) {
           return 0;
@@ -566,44 +572,17 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         ss << "Namespace: " << container->get_namespace() << "\n";
         ss << "Status: " << container->get_status() << "\n";
         ss << "Size: " << container->get_size() << " bytes\n";
-        ss << "Available: " << (container->is_available() ? "yes" : "no") << "\n";
+        ss << "Available: " << (container->is_available() ? "yes" : "no")
+           << "\n";
         ss << "\nCommands:\n";
-        for (const auto& cmd : container->get_commands()) {
+        for (const auto &cmd : container->get_commands()) {
           ss << "  - " << cmd << "\n";
         }
         ss << "\nLabels:\n";
-        for (const auto& [key, value] : container->get_labels()) {
+        for (const auto &[key, value] : container->get_labels()) {
           ss << "  " << key << ": " << value << "\n";
         }
-        
-        std::string content = ss.str();
-        if (offset >= static_cast<off_t>(content.size())) {
-          return 0;
-        }
-        size_t len = std::min(content.size() - offset, size);
-        memcpy(buf, content.c_str() + offset, len);
-        return len;
-      }
 
-      if (strncmp(container_path.c_str(), "/.search/", 9) == 0) {
-        std::string query = container_path.substr(9);
-        query = url_decode(query);
-        std::replace(query.begin(), query.end(), '_', ' ');
-        
-        std::stringstream ss;
-        ss << "=== Search in Container: " << container_id << " ===\n\n";
-        ss << "Query: " << query << "\n\n";
-        
-        auto search_results = container->search_files(query);
-        if (search_results.empty()) {
-          ss << "No results found.\n";
-        } else {
-          ss << "Results:\n";
-          for (const auto& result : search_results) {
-            ss << "  - " << result << "\n";
-          }
-        }
-        
         std::string content = ss.str();
         if (offset >= static_cast<off_t>(content.size())) {
           return 0;
@@ -674,6 +653,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     return len;
   }
 
+  // Обработка глобального поиска
   if (strncmp(path, "/.search/", 9) == 0) {
     std::string query = path + 9;
     query = url_decode(query);
@@ -711,6 +691,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   return -ENOENT;
 }
 
+// Остальные методы остаются без изменений...
 int VectorFS::rmdir(const char *path) {
   if (virtual_dirs.count(path) == 0) {
     return -ENOENT;
