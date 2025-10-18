@@ -4,8 +4,8 @@
 #include "knowledge_container.hpp"
 #include <filesystem>
 #include <fstream>
-#include <set>
 #include <memory/pid_container.hpp>
+#include <set>
 
 namespace owl::vectorfs {
 
@@ -24,6 +24,10 @@ public:
 
   std::string get_namespace() const override {
     return container_->get_container().vectorfs_config.mount_namespace;
+  }
+
+  std::vector<std::string> get_commands() const override {
+    return container_->get_container().vectorfs_config.commands;
   }
 
   std::map<std::string, std::string> get_labels() const override {

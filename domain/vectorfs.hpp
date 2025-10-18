@@ -228,7 +228,6 @@ public:
     return &instance;
   }
 
-  // Статические callback'и FUSE
   static inline int getattr_callback(const char *path, struct stat *stbuf,
                                      struct fuse_file_info *fi) {
     return getInstance()->getattr(path, stbuf, fi);

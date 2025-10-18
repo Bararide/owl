@@ -452,6 +452,7 @@ void VectorFS::test_container() {
             .with_file_limit(1000)
             .with_label("environment", "development")
             .with_label("type", "knowledge_base")
+            .with_commands({"search", "debug", "all"})
             .privileged(false)
             .build();
 

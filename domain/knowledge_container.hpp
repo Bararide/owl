@@ -14,6 +14,7 @@ public:
   virtual std::string get_id() const = 0;
   virtual std::string get_owner() const = 0;
   virtual std::string get_namespace() const = 0;
+  virtual std::vector<std::string> get_commands() const = 0;
   virtual std::map<std::string, std::string> get_labels() const = 0;
   virtual std::vector<std::string>
   list_files(const std::string &path = "/") const = 0;

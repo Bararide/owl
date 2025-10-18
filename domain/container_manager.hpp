@@ -31,6 +31,7 @@ public:
   bool unregister_container(const std::string &container_id);
   std::shared_ptr<IKnowledgeContainer>
   get_container(const std::string &container_id);
+  std::vector<std::string> get_commands();
   std::vector<std::shared_ptr<IKnowledgeContainer>> get_all_containers();
   std::vector<std::shared_ptr<IKnowledgeContainer>>
   get_containers_by_owner(const std::string &owner);
