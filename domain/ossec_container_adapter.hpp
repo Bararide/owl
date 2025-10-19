@@ -2,7 +2,7 @@
 #define VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
 
 #include "knowledge_container.hpp"
-#include "search.hpp" // Новый заголовок
+#include "search.hpp"
 #include <filesystem>
 #include <fstream>
 #include <memory/pid_container.hpp>

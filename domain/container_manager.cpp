@@ -2,6 +2,9 @@
 
 namespace owl::vectorfs {
 
+ContainerManager *ContainerManager::instance_ = nullptr;
+std::mutex ContainerManager::mutex_;
+
 bool ContainerManager::register_container(
     std::shared_ptr<IKnowledgeContainer> container) {
   std::lock_guard<std::mutex> lock(containers_mutex_);
@@ -96,8 +99,5 @@ void ContainerManager::clear() {
   std::lock_guard<std::mutex> lock(containers_mutex_);
   containers_.clear();
 }
-
-ContainerManager *ContainerManager::instance_ = nullptr;
-std::mutex ContainerManager::mutex_;
 
 } // namespace owl::vectorfs

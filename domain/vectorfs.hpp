@@ -3,24 +3,17 @@
 
 #define FUSE_USE_VERSION 31
 
-#include <chrono>
-#include <cstring>
 #include <fuse3/fuse.h>
 #include <map>
 #include <memory>
-#include <search.hpp>
 #include <set>
 #include <string>
-#include <unistd.h>
-#include <vector>
 
-#include "container_manager.hpp"
 #include "file/fileinfo.hpp"
+#include "knowledge_container.hpp"
 #include "shared_memory/shared_memory.hpp"
-#include <memory/container_builder.hpp>
-#include <spdlog/spdlog.h>
-
 #include "state.hpp"
+#include <spdlog/spdlog.h>
 
 namespace owl::vectorfs {
 
@@ -32,6 +25,8 @@ private:
   std::unique_ptr<owl::shared::SharedMemoryManager> shm_manager;
 
   State &state_;
+
+  static VectorFS *instance_;
 
   void updateFromSharedMemory();
 
@@ -52,12 +47,8 @@ private:
   void test_markov_chains();
   void test_container();
 
-  static VectorFS *instance_;
-
 public:
-  VectorFS(const State &state)
-      : state_{state},
-        container_manager_(owl::vectorfs::ContainerManager::get_instance()) {
+  VectorFS(State &state) : state_{state} {
     virtual_dirs.insert("/");
     initialize_container_paths();
     initialize_shared_memory();
@@ -229,8 +220,6 @@ public:
     return ops;
   }
 };
-
-VectorFS *VectorFS::instance_ = nullptr;
 
 } // namespace owl::vectorfs
 

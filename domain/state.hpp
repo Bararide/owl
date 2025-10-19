@@ -3,7 +3,6 @@
 
 #include <chrono>
 #include <cstring>
-#include <fuse3/fuse.h>
 #include <map>
 #include <memory>
 #include <search.hpp>

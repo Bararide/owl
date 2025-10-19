@@ -14,16 +14,29 @@ class ContainerManager {
 private:
   static ContainerManager *instance_;
   static std::mutex mutex_;
+
   std::map<std::string, std::shared_ptr<IKnowledgeContainer>> containers_;
   std::mutex containers_mutex_;
   chunkees::Search *search_ = nullptr;
 
 public:
+  ContainerManager(const ContainerManager &) = delete;
+  ContainerManager &operator=(const ContainerManager &) = delete;
+
   static ContainerManager &get_instance() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!instance_)
+    if (!instance_) {
       instance_ = new ContainerManager();
+    }
     return *instance_;
+  }
+
+  ContainerManager() = default;
+
+  static void destroy_instance() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    delete instance_;
+    instance_ = nullptr;
   }
 
   void set_search(chunkees::Search &search) { search_ = &search; }
@@ -45,9 +58,6 @@ public:
   size_t get_container_count() const;
   size_t get_available_container_count();
   void clear();
-
-private:
-  ContainerManager() = default;
 };
 
 } // namespace owl::vectorfs

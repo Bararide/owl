@@ -97,6 +97,8 @@ private:
         state_(search_, container_manager_, embedder_manager_),
         vector_fs_(std::make_unique<vectorfs::VectorFS>(state_)) {
 
+    container_manager_.set_search(search_);
+
     auto init_result = embedder_manager_.set(model_path);
     if (!init_result.is_ok()) {
       throw std::runtime_error(init_result.error().what());
@@ -107,7 +109,7 @@ private:
 
   EmbedderManager<> embedder_manager_;
   chunkees::Search search_;
-  ContainerManager container_manager_;
+  vectorfs::ContainerManager container_manager_;
   vectorfs::State state_;
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
 
