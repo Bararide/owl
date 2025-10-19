@@ -164,13 +164,13 @@ public:
                                            int limit) override {
     auto result = search_.semanticSearch(query, limit);
 
-    if (!result.is_ok()) {
-      spdlog::error("Semantic search failed: {}", result.error().what());
+    if (result.empty()) {
+      spdlog::error("Semantic search failed");
       return {};
     }
 
     std::vector<std::string> file_paths;
-    for (const auto &[file_path, score] : result.value()) {
+    for (const auto &[file_path, score] : result) {
       file_paths.push_back(file_path);
     }
 

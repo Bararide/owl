@@ -58,6 +58,12 @@ int main(int argc, char *argv[]) {
     core::measure::Measure::result<std::chrono::milliseconds>(
         "Markov search test completed in {} ms");
 
+    core::measure::Measure::start();
+    vectorfs.test_container();
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "Container test completed in {} ms");
+
     try {
       core::measure::Measure::start();
       auto embedding = vectorfs.get_embedding("test sentence");

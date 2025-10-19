@@ -16,7 +16,7 @@ VectorFS::get_container_for_path(const std::string &path) {
     size_t start = strlen("/.containers/");
     size_t end = path.find('/', start);
     std::string container_id = path.substr(start, end - start);
-    return state_.container_manager_.get_container(container_id);
+    return state_.get_container_manager().get_container(container_id);
   }
   return nullptr;
 }
@@ -24,7 +24,7 @@ VectorFS::get_container_for_path(const std::string &path) {
 std::string VectorFS::generate_container_listing() {
   std::stringstream ss;
   ss << "=== Knowledge Containers ===\n\n";
-  auto containers = state_.container_manager_.get_all_containers();
+  auto containers = state_.get_container_manager().get_all_containers();
   for (const auto &container : containers) {
     ss << "Container: " << container->get_id() << "\n";
     ss << "  Owner: " << container->get_owner() << "\n";
@@ -42,14 +42,14 @@ std::string VectorFS::generate_container_listing() {
   }
   ss << "Total: " << containers.size() << " containers\n";
   ss << "Available: "
-     << state_.container_manager_.get_available_container_count()
+     << state_.get_container_manager().get_available_container_count()
      << " containers\n";
   return ss.str();
 }
 
 std::string
 VectorFS::generate_container_content(const std::string &container_id) {
-  auto container = state_.container_manager_.get_container(container_id);
+  auto container = state_.get_container_manager().get_container(container_id);
   if (!container) {
     return "Container not found: " + container_id;
   }
@@ -77,7 +77,7 @@ VectorFS::generate_container_content(const std::string &container_id) {
 
 std::string VectorFS::handle_container_search(const std::string &container_id,
                                               const std::string &query) {
-  auto container = state_.container_manager_.get_container(container_id);
+  auto container = state_.get_container_manager().get_container(container_id);
   if (!container) {
     return "Container not found: " + container_id;
   }
@@ -132,7 +132,7 @@ void VectorFS::updateFromSharedMemory() {
         spdlog::info("Added file from shared memory: {} ({} bytes)", path,
                      shared_info->size);
 
-        auto add_result = state_.search_.addFileImpl(path, fi.content);
+        auto add_result = state_.get_search().addFileImpl(path, fi.content);
         if (!add_result.is_ok()) {
           spdlog::warn("Failed to add file to search index: {} - {}", path,
                        add_result.error().what());
@@ -196,7 +196,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
 
-      auto container = state_.container_manager_.get_container(container_id);
+      auto container = state_.get_container_manager().get_container(container_id);
       if (container) {
         if (container_path == "/.search" || container_path == "/.debug" ||
             container_path == "/.all") {
@@ -361,7 +361,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-    auto containers = state_.container_manager_.get_all_containers();
+    auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
@@ -373,7 +373,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     if (container_end == std::string::npos) {
       std::string container_id = path_str.substr(container_start);
-      auto container = state_.container_manager_.get_container(container_id);
+      auto container = state_.get_container_manager().get_container(container_id);
       if (container) {
         filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -388,7 +388,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       std::string container_id =
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
-      auto container = state_.container_manager_.get_container(container_id);
+      auto container = state_.get_container_manager().get_container(container_id);
 
       if (container) {
         if (container_path == "/.search") {
@@ -406,7 +406,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       }
     }
   } else if (strcmp(path, "/.containers/.search") == 0) {
-    auto containers = state_.container_manager_.get_all_containers();
+    auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
@@ -438,9 +438,9 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     ss << "=== DEBUG INFO ===\n";
     ss << "Total virtual_files: " << virtual_files.size() << "\n";
     ss << "Total containers: "
-       << state_.container_manager_.get_container_count() << "\n";
+       << state_.get_container_manager().get_container_count() << "\n";
     ss << "Available containers: "
-       << state_.container_manager_.get_available_container_count() << "\n";
+       << state_.get_container_manager().get_available_container_count() << "\n";
 
     std::string content = ss.str();
     if (offset >= static_cast<off_t>(content.size())) {
@@ -506,7 +506,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
 
-      auto container = state_.container_manager_.get_container(container_id);
+      auto container = state_.get_container_manager().get_container(container_id);
       if (!container) {
         return -ENOENT;
       }
@@ -814,7 +814,7 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
     it->second.modification_time = time(nullptr);
     it->second.access_time = it->second.modification_time;
 
-    (void)state_.search_.updateEmbedding(path);
+    (void)state_.get_search().updateEmbedding(path);
     rebuild_index();
 
     return size;
@@ -835,7 +835,7 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
   file_info->modification_time = time(nullptr);
   file_info->access_time = file_info->modification_time;
 
-  (void)state_.search_.updateEmbedding(path);
+  (void)state_.get_search().updateEmbedding(path);
   rebuild_index();
 
   return size;

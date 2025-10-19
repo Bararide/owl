@@ -171,7 +171,7 @@ template <typename EmbeddedModel> auto semantic_search_handler() {
         auto results = vfs.get_search().semanticSearchImpl(query, limit);
 
         Json::Value resultsJson(Json::arrayValue);
-        for (const auto &[path, score] : results.value()) {
+        for (const auto &[path, score] : results) {
           Json::Value resultJson;
           resultJson["path"] = path;
           resultJson["score"] = score;
@@ -180,7 +180,7 @@ template <typename EmbeddedModel> auto semantic_search_handler() {
 
         auto response = utils::create_success_response(
             {"query", "results", "count"}, query, resultsJson,
-            static_cast<int>(results.value().size()));
+            static_cast<int>(results.size()));
 
         return utils::success_result(response);
       });

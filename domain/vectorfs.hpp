@@ -37,15 +37,11 @@ private:
   std::string generate_container_content(const std::string &container_id);
   std::string handle_container_search(const std::string &container_id,
                                       const std::string &query);
-  std::string url_decode(const std::string &str);
 
   std::string generate_enhanced_search_result(const std::string &query);
   std::string generate_search_result(const std::string &query);
 
   std::string generate_markov_test_result();
-  void test_semantic_search();
-  void test_markov_chains();
-  void test_container();
 
 public:
   VectorFS(State &state) : state_{state} {
@@ -55,8 +51,16 @@ public:
     instance_ = this;
   }
 
-  [[nodiscard]] const chunkees::Search &get_search() noexcept {
-    return state_.search_;
+  void test_semantic_search();
+  void test_markov_chains();
+  void test_container();
+
+  [[nodiscard]] chunkees::Search &get_search() noexcept {
+    return state_.get_search();
+  }
+
+  [[nodiscard]] const chunkees::Search &get_search() const noexcept {
+    return state_.get_search();
   }
 
   void initialize_shared_memory() {
@@ -73,19 +77,43 @@ public:
   }
 
   std::string get_embedder_info() const {
-    return state_.search_.getEmbedderInfoImpl();
+    return state_.get_search().getEmbedderInfoImpl();
   }
 
   void rebuild_index() {
-    auto result = state_.search_.rebuildIndexImpl();
+    auto result = state_.get_search().rebuildIndexImpl();
     if (!result.is_ok()) {
       spdlog::warn("Failed to rebuild index: {}", result.error().what());
     }
   }
 
   size_t get_indexed_files_count() const {
-    auto result = state_.search_.getIndexedFilesCountImpl();
+    auto result = state_.get_search().getIndexedFilesCountImpl();
     return result.is_ok() ? result.value() : 0;
+  }
+
+  std::string url_decode(const std::string &str) {
+    std::string result;
+    result.reserve(str.size());
+
+    for (size_t i = 0; i < str.size(); ++i) {
+      if (str[i] == '%' && i + 2 < str.size()) {
+        int value;
+        std::istringstream iss(str.substr(i + 1, 2));
+        if (iss >> std::hex >> value) {
+          result += static_cast<char>(value);
+          i += 2;
+        } else {
+          result += str[i];
+        }
+      } else if (str[i] == '+') {
+        result += ' ';
+      } else {
+        result += str[i];
+      }
+    }
+
+    return result;
   }
 
   int getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi);

@@ -4,7 +4,8 @@ namespace owl::vectorfs {
 
 std::string
 VectorFS::generate_enhanced_search_result(const std::string &query) {
-  auto result = state_.search_.recordFileAccessImpl("/.search/" + query, "search");
+  auto result =
+      state_.get_search().recordFileAccessImpl("/.search/" + query, "search");
 
   if (result.is_ok()) {
     spdlog::info("Success record file access");
@@ -12,10 +13,11 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
     spdlog::error("Record file access fault");
   }
 
-  auto search_results = state_.search_.enhancedSemanticSearchImpl(query, 5);
-  auto recommendations = state_.search_.getRecommendationsImpl(query);
-  auto predicted_next = state_.search_.predictNextFilesImpl();
-  auto hubs_result = state_.search_.getSemanticHubsImpl(3);
+  auto search_results =
+      state_.get_search().enhancedSemanticSearchImpl(query, 5);
+  auto recommendations = state_.get_search().getRecommendationsImpl(query);
+  auto predicted_next = state_.get_search().predictNextFilesImpl();
+  auto hubs_result = state_.get_search().getSemanticHubsImpl(3);
 
   std::stringstream ss;
   ss << "=== Enhanced Semantic Search Results ===\n";
@@ -35,7 +37,8 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
                    : it->second.content)
            << "\n";
 
-        std::string category = state_.search_.classifyFileCategoryImpl(file_path);
+        std::string category =
+            state_.get_search().classifyFileCategoryImpl(file_path);
         ss << "   Category: " << category << "\n";
       }
       ss << "\n";
@@ -68,7 +71,7 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
 
   ss << "=== Analytics ===\n";
 
-  auto indexed_count = state_.search_.getIndexedFilesCountImpl();
+  auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
   if (indexed_count.is_ok()) {
     ss << "Total indexed files: " << indexed_count.value() << "\n";
   } else {
@@ -82,16 +85,16 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
 std::string VectorFS::generate_search_result(const std::string &query) {
   spdlog::info("Processing search query: {}", query);
 
-  auto search_results = state_.search_.semanticSearchImpl(query, 5);
+  auto search_results = state_.get_search().semanticSearchImpl(query, 5);
 
   std::stringstream ss;
   ss << "=== Semantic Search Results ===\n";
   ss << "Query: " << query << "\n\n";
 
-  if (!search_results.is_ok() || search_results.value().empty()) {
+  if (search_results.empty()) {
     ss << "No results found\n";
 
-    auto indexed_count = state_.search_.getIndexedFilesCountImpl();
+    auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
     ss << "Indexed files: ";
     if (indexed_count.is_ok()) {
       ss << indexed_count.value();
@@ -104,8 +107,8 @@ std::string VectorFS::generate_search_result(const std::string &query) {
       ss << "Hint: Create some files with content first!\n";
     }
   } else {
-    ss << "Found " << search_results.value().size() << " results:\n\n";
-    for (const auto &[file_path, score] : search_results.value()) {
+    ss << "Found " << search_results.size() << " results:\n\n";
+    for (const auto &[file_path, score] : search_results) {
       auto it = virtual_files.find(file_path);
       ss << "📄 " << file_path << " (score: " << score << ")\n";
       if (it != virtual_files.end()) {
@@ -120,7 +123,7 @@ std::string VectorFS::generate_search_result(const std::string &query) {
 
   ss << "\n=== Search Info ===\n";
 
-  auto indexed_count = state_.search_.getIndexedFilesCountImpl();
+  auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
   ss << "Total indexed files: ";
   if (indexed_count.is_ok()) {
     ss << indexed_count.value();
@@ -129,7 +132,7 @@ std::string VectorFS::generate_search_result(const std::string &query) {
   }
   ss << "\n";
 
-  auto embedder_info = state_.search_.getEmbedderInfoImpl();
+  auto embedder_info = state_.get_search().getEmbedderInfoImpl();
   ss << "Embedder: " << embedder_info << "\n";
 
   return ss.str();

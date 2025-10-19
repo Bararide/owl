@@ -21,14 +21,34 @@ namespace owl::vectorfs {
 
 struct State {
 public:
-  State(chunkees::Search &search, ContainerManager &container_manager,
-        EmbedderManager<> &embedder_manager)
-      : search_(search), container_manager_(container_manager),
-        embedder_manager_(embedder_manager) {}
+  State(std::shared_ptr<chunkees::Search> search,
+        std::shared_ptr<ContainerManager> container_manager,
+        std::shared_ptr<EmbedderManager> embedder_manager)
+      : search_(std::move(search)),
+        container_manager_(std::move(container_manager)),
+        embedder_manager_(std::move(embedder_manager)) {}
 
-  chunkees::Search &search_;
-  ContainerManager &container_manager_;
-  EmbedderManager<> &embedder_manager_;
+  std::shared_ptr<chunkees::Search> search_;
+  std::shared_ptr<ContainerManager> container_manager_;
+  std::shared_ptr<EmbedderManager> embedder_manager_;
+
+  chunkees::Search &get_search() {
+    if (!search_)
+      throw std::runtime_error("Search not initialized");
+    return *search_;
+  }
+
+  ContainerManager &get_container_manager() {
+    if (!container_manager_)
+      throw std::runtime_error("ContainerManager not initialized");
+    return *container_manager_;
+  }
+
+  EmbedderManager &get_embedder_manager() {
+    if (!embedder_manager_)
+      throw std::runtime_error("EmbedderManager not initialized");
+    return *embedder_manager_;
+  }
 
 private:
 };
