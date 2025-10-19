@@ -556,6 +556,8 @@ void VectorFS::test_container() {
         auto adapter = std::make_shared<OssecContainerAdapter>(
             pid_container, state_.get_embedder_manager());
 
+        adapter->initialize_markov_chain();
+
         if (state_.get_container_manager().register_container(adapter)) {
           spdlog::info("Successfully created and registered container: "
                        "test_container_2");

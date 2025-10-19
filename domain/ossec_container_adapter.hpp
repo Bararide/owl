@@ -18,7 +18,6 @@ public:
       : container_(std::move(container)),
         search_(std::make_unique<chunkees::Search>(embedder_manager)) {
     initialize_search();
-    initialize_markov_chain();
   }
 
   std::string get_id() const override {
@@ -190,7 +189,52 @@ public:
   void initialize_markov_chain() {
     spdlog::info("Initializing Markov chain for container: {}", get_id());
 
+    auto semantic_graph = search_->getSemanticGraph();
     auto hmm_model = search_->getHiddenModel();
+
+    if (!semantic_graph || !hmm_model) {
+      spdlog::error("Markov models not available for initialization");
+      return;
+    }
+
+    semantic_graph->add_edge("code", "document", 0.7);
+    semantic_graph->add_edge("code", "config", 0.5);
+    semantic_graph->add_edge("code", "test", 0.8);
+    semantic_graph->add_edge("document", "code", 0.6);
+    semantic_graph->add_edge("config", "code", 0.9);
+    semantic_graph->add_edge("test", "code", 0.85);
+    semantic_graph->add_edge("document", "config", 0.3);
+    semantic_graph->add_edge("config", "document", 0.4);
+
+    hmm_model->add_state("code");
+    hmm_model->add_state("document");
+    hmm_model->add_state("config");
+    hmm_model->add_state("test");
+    hmm_model->add_state("misc");
+
+    std::vector<std::vector<std::string>> training_sequences = {
+        {"code", "document", "code", "test"},
+        {"document", "code", "config", "code"},
+        {"config", "code", "test", "code"},
+        {"test", "code", "document", "config"},
+        {"code", "test", "code", "misc"}};
+
+    for (const auto &sequence : training_sequences) {
+      hmm_model->add_sequence(sequence);
+    }
+
+    hmm_model->train();
+
+    auto hubs = semantic_graph->random_walk_ranking(1000);
+
+    spdlog::info("Markov chain initialized: {} states, {} edges",
+                 hmm_model->get_state_count(),
+                 semantic_graph->get_edge_count());
+
+    if (!hubs.empty()) {
+      spdlog::info("Top semantic hub: {} (score: {:.3f})", hubs[0].first,
+                   hubs[0].second);
+    }
   }
 
   bool file_exists(const std::string &path) const override {
