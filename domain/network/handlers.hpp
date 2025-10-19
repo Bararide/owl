@@ -12,12 +12,31 @@ namespace owl::network {
 namespace handler {
 
 auto create_root_handler() {
-  return utils::create_handler(
-      [](const drogon::HttpRequestPtr &,
-         const std::vector<std::string> &) -> utils::HttpResult {
-        return utils::success_result(
-            utils::create_success_response({"message"}, "Hello, World!"));
-      });
+  return [](const drogon::HttpRequestPtr &req,
+            std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+    spdlog::info("=== ROOT HANDLER CALLED ===");
+    spdlog::info("Method: {}", req->getMethodString());
+    spdlog::info("Path: {}", req->getPath());
+    spdlog::info("Client: {}", req->getPeerAddr().toIp());
+
+    try {
+      auto resp = drogon::HttpResponse::newHttpResponse();
+      resp->setBody("OK");
+      resp->setStatusCode(drogon::k200OK);
+
+      spdlog::info("Sending response...");
+      callback(resp);
+      spdlog::info("Response sent successfully");
+
+    } catch (const std::exception &e) {
+      spdlog::error("Exception in root handler: {}", e.what());
+      auto resp = drogon::HttpResponse::newHttpResponse();
+      resp->setStatusCode(drogon::k500InternalServerError);
+      callback(resp);
+    }
+
+    spdlog::info("=== ROOT HANDLER COMPLETED ===");
+  };
 }
 
 template <typename EmbeddedModel> auto create_file_handler() {
