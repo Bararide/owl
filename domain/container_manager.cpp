@@ -17,13 +17,9 @@ bool ContainerManager::register_container(
 
 bool ContainerManager::register_ossec_container(
     std::shared_ptr<ossec::PidContainer> ossec_container) {
-  if (!search_) {
-    spdlog::error("Search not initialized in ContainerManager");
-    return false;
-  }
 
   auto adapter =
-      std::make_shared<OssecContainerAdapter>(ossec_container, *search_);
+      std::make_shared<OssecContainerAdapter>(ossec_container, *embedder_);
   return register_container(adapter);
 }
 

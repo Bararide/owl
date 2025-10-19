@@ -134,7 +134,7 @@ private:
 
       vector_fs_ = std::make_unique<vectorfs::VectorFS>(*state_);
 
-      container_manager_->set_search(*search_);
+      container_manager_->set_embedder(*embedder_manager_);
 
       spdlog::info("VFSInstance initialized with model: {}", model_path);
     } catch (const std::exception &e) {

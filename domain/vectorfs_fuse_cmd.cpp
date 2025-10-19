@@ -196,7 +196,8 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
 
-      auto container = state_.get_container_manager().get_container(container_id);
+      auto container =
+          state_.get_container_manager().get_container(container_id);
       if (container) {
         if (container_path == "/.search" || container_path == "/.debug" ||
             container_path == "/.all") {
@@ -373,7 +374,8 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     if (container_end == std::string::npos) {
       std::string container_id = path_str.substr(container_start);
-      auto container = state_.get_container_manager().get_container(container_id);
+      auto container =
+          state_.get_container_manager().get_container(container_id);
       if (container) {
         filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -388,7 +390,8 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       std::string container_id =
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
-      auto container = state_.get_container_manager().get_container(container_id);
+      auto container =
+          state_.get_container_manager().get_container(container_id);
 
       if (container) {
         if (container_path == "/.search") {
@@ -440,7 +443,8 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     ss << "Total containers: "
        << state_.get_container_manager().get_container_count() << "\n";
     ss << "Available containers: "
-       << state_.get_container_manager().get_available_container_count() << "\n";
+       << state_.get_container_manager().get_available_container_count()
+       << "\n";
 
     std::string content = ss.str();
     if (offset >= static_cast<off_t>(content.size())) {
@@ -506,7 +510,8 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
 
-      auto container = state_.get_container_manager().get_container(container_id);
+      auto container =
+          state_.get_container_manager().get_container(container_id);
       if (!container) {
         return -ENOENT;
       }
@@ -517,14 +522,33 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         std::replace(query.begin(), query.end(), '_', ' ');
 
         std::stringstream ss;
-        ss << "=== Search in Container: " << container_id << " ===\n\n";
+        ss << "=== Semantic Search in Container: " << container_id
+           << " ===\n\n";
         ss << "Query: " << query << "\n\n";
 
-        auto search_results = container->search_files(query);
+        auto search_results = container->semantic_search(query, 10);
+
         if (search_results.empty()) {
-          ss << "No results found in container.\n";
+          auto pattern_results = container->search_files(query);
+          if (pattern_results.empty()) {
+            ss << "No results found in container.\n";
+          } else {
+            ss << "📊 Pattern Search Results:\n";
+            for (const auto &result : pattern_results) {
+              ss << "📄 " << result << "\n";
+
+              std::string file_content = container->get_file_content(result);
+              if (!file_content.empty()) {
+                std::string preview = file_content.substr(0, 100);
+                if (file_content.size() > 100)
+                  preview += "...";
+                ss << "   Content: " << preview << "\n";
+              }
+              ss << "\n";
+            }
+          }
         } else {
-          ss << "📊 Search Results:\n";
+          ss << "🎯 Semantic Search Results:\n";
           for (const auto &result : search_results) {
             ss << "📄 " << result << "\n";
 
@@ -535,7 +559,21 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
                 preview += "...";
               ss << "   Content: " << preview << "\n";
             }
-            ss << "\n";
+
+            std::string category = container->classify_file(result);
+            ss << "   Category: " << category << "\n\n";
+          }
+
+          if (!search_results.empty()) {
+            auto recommendations =
+                container->get_recommendations(search_results[0], 3);
+            if (!recommendations.empty()) {
+              ss << "💡 Recommended Files:\n";
+              for (const auto &rec : recommendations) {
+                ss << "   → " << rec << "\n";
+              }
+              ss << "\n";
+            }
           }
         }
 

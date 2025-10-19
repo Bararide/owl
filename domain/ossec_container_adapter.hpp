@@ -7,15 +7,18 @@
 #include <fstream>
 #include <memory/pid_container.hpp>
 #include <set>
+#include <spdlog/spdlog.h>
 
 namespace owl::vectorfs {
 
 class OssecContainerAdapter : public IKnowledgeContainer {
 public:
   OssecContainerAdapter(std::shared_ptr<ossec::PidContainer> container,
-                        chunkees::Search &search)
-      : container_(std::move(container)), search_(search) {
+                        EmbedderManager<> &embedder_manager)
+      : container_(std::move(container)),
+        search_(std::make_unique<chunkees::Search>(embedder_manager)) {
     initialize_search();
+    initialize_markov_chain();
   }
 
   std::string get_id() const override {
@@ -85,6 +88,7 @@ public:
                            std::istreambuf_iterator<char>());
       }
     } catch (const std::exception &e) {
+      spdlog::debug("Error reading file {}: {}", path, e.what());
     }
 
     return "";
@@ -99,13 +103,20 @@ public:
       std::ofstream file(full_path);
       if (file) {
         file << content;
+        file.close();
 
-        auto result = search_.addFile(path, content);
+        auto result = search_->addFileImpl(path, content);
         if (!result.is_ok()) {
           spdlog::warn("Failed to add file to search index: {} - {}", path,
                        result.error().what());
+          return false;
         }
 
+        search_->updateSemanticRelationships();
+
+        record_file_access(path, "write");
+
+        spdlog::info("File added successfully: {}", path);
         return true;
       }
     } catch (const std::exception &e) {
@@ -123,35 +134,63 @@ public:
       bool removed = std::filesystem::remove(full_path);
 
       if (removed) {
-        auto result = search_.removeFile(path);
+        auto result = search_->removeFileImpl(path);
         if (!result.is_ok()) {
           spdlog::warn("Failed to remove file from search index: {} - {}", path,
                        result.error().what());
         }
-      }
 
-      return removed;
+        search_->updateSemanticRelationships();
+
+        spdlog::info("File removed successfully: {}", path);
+        return true;
+      }
     } catch (const std::exception &e) {
-      return false;
+      spdlog::error("Failed to remove file {}: {}", path, e.what());
     }
+
+    return false;
   }
 
   void initialize_search() {
+    spdlog::info("Initializing search for container: {}", get_id());
+
     auto files = list_files("/");
+    size_t indexed_count = 0;
+
     for (const auto &file : files) {
       std::string file_path = "/" + file;
       std::string content = get_file_content(file_path);
+
       if (!content.empty()) {
-        auto result = search_.addFile(file_path, content);
-        if (!result.is_ok()) {
+        auto result = search_->addFileImpl(file_path, content);
+        if (result.is_ok()) {
+          indexed_count++;
+
+          record_file_access(file_path, "read");
+        } else {
           spdlog::warn("Failed to index file during initialization: {} - {}",
                        file_path, result.error().what());
         }
       }
     }
 
-    spdlog::info("Search initialized for container {} with {} files", get_id(),
-                 files.size());
+    search_->updateSemanticRelationships();
+
+    auto rebuild_result = search_->rebuildIndexImpl();
+    if (!rebuild_result.is_ok()) {
+      spdlog::warn("Failed to rebuild index after initialization: {}",
+                   rebuild_result.error().what());
+    }
+
+    spdlog::info("Search initialized for container {} with {}/{} files indexed",
+                 get_id(), indexed_count, files.size());
+  }
+
+  void initialize_markov_chain() {
+    spdlog::info("Initializing Markov chain for container: {}", get_id());
+
+    auto hmm_model = search_->getHiddenModel();
   }
 
   bool file_exists(const std::string &path) const override {
@@ -161,24 +200,33 @@ public:
   }
 
   std::vector<std::string> semantic_search(const std::string &query,
-                                           int limit) override {
-    auto result = search_.semanticSearch(query, limit);
+                                           int limit = 10) override {
+    spdlog::debug("Semantic search in container {}: '{}'", get_id(), query);
+
+    record_search_query(query);
+
+    auto result = search_->semanticSearchImpl(query, limit);
 
     if (result.empty()) {
-      spdlog::error("Semantic search failed");
+      spdlog::debug("No semantic search results for query: '{}'", query);
       return {};
     }
 
     std::vector<std::string> file_paths;
     for (const auto &[file_path, score] : result) {
       file_paths.push_back(file_path);
+
+      record_file_access(file_path, "semantic_search");
     }
 
+    spdlog::debug("Semantic search found {} results", file_paths.size());
     return file_paths;
   }
 
   std::vector<std::string>
   search_files(const std::string &pattern) const override {
+    spdlog::debug("Pattern search in container {}: '{}'", get_id(), pattern);
+
     std::vector<std::string> results;
     auto data_path = container_->get_container().data_path;
 
@@ -198,12 +246,18 @@ public:
       spdlog::error("File search error: {}", e.what());
     }
 
+    spdlog::debug("Pattern search found {} results", results.size());
     return results;
   }
 
   std::vector<std::string> enhanced_semantic_search(const std::string &query,
-                                                    int limit) {
-    auto result = search_.enhancedSemanticSearchImpl(query, limit);
+                                                    int limit) override {
+    spdlog::debug("Enhanced semantic search in container {}: '{}'", get_id(),
+                  query);
+
+    record_search_query(query);
+
+    auto result = search_->enhancedSemanticSearchImpl(query, limit);
 
     if (!result.is_ok()) {
       spdlog::warn("Enhanced search failed, falling back to basic search: {}",
@@ -214,29 +268,146 @@ public:
     std::vector<std::string> file_paths;
     for (const auto &[file_path, score] : result.value()) {
       file_paths.push_back(file_path);
+      record_file_access(file_path, "enhanced_search");
     }
 
+    spdlog::debug("Enhanced semantic search found {} results",
+                  file_paths.size());
     return file_paths;
   }
 
-  std::vector<std::string>
-  get_recommendations(const std::string &current_file) {
-    auto result = search_.getRecommendationsImpl(current_file);
+  std::vector<std::string> get_recommendations(const std::string &current_file,
+                                               int limit) override {
+    spdlog::debug("Getting recommendations for file: {}", current_file);
+
+    record_file_access(current_file, "recommendation_request");
+
+    auto result = search_->getRecommendationsImpl(current_file);
 
     if (!result.is_ok()) {
-      spdlog::warn("Failed to get recommendations: {}", result.error().what());
+      spdlog::debug("Failed to get recommendations: {}", result.error().what());
+
+      auto predictions = search_->predictNextFilesImpl();
+      if (predictions.is_ok()) {
+        return predictions.value();
+      }
+
       return {};
     }
 
-    return result.value();
+    auto recommendations = result.value();
+
+    if (recommendations.size() > limit) {
+      recommendations.resize(limit);
+    }
+
+    spdlog::debug("Found {} recommendations", recommendations.size());
+    return recommendations;
+  }
+
+  std::vector<std::string> predict_next_files(int limit) override {
+    auto result = search_->predictNextFilesImpl();
+
+    if (!result.is_ok()) {
+      spdlog::debug("Failed to predict next files: {}", result.error().what());
+      return {};
+    }
+
+    auto predictions = result.value();
+    spdlog::debug("Markov chain predicted {} next files", predictions.size());
+    return predictions;
+  }
+
+  std::vector<std::string> get_semantic_hubs(int count = 5) override {
+    auto result = search_->getSemanticHubsImpl(count);
+
+    if (!result.is_ok()) {
+      spdlog::debug("Failed to get semantic hubs: {}", result.error().what());
+      return {};
+    }
+
+    auto hubs = result.value();
+    spdlog::debug("Found {} semantic hubs", hubs.size());
+    return hubs;
+  }
+
+  std::string classify_file(const std::string &file_path) override {
+    std::string category = search_->classifyFileCategoryImpl(file_path);
+    spdlog::debug("File {} classified as: {}", file_path, category);
+    return category;
   }
 
   void record_file_access(const std::string &file_path,
                           const std::string &operation = "read") {
-    auto result = search_.recordFileAccessImpl(file_path, operation);
+    auto result = search_->recordFileAccessImpl(file_path, operation);
     if (!result.is_ok()) {
-      spdlog::debug("Failed to record file access: {}", result.error().what());
+      spdlog::debug("Failed to record file access: {} - {}", file_path,
+                    result.error().what());
+    } else {
+      spdlog::trace("Recorded {} access to: {}", operation, file_path);
     }
+  }
+
+  void record_search_query(const std::string &query) override {
+    auto recent_queries = search_->getRecentQueriesImpl();
+    if (recent_queries.is_ok()) {
+      spdlog::trace("Recorded search query: {}", query);
+    }
+  }
+
+  bool ensure_running() {
+    if (!container_->is_running()) {
+      auto result = container_->start();
+      return result.is_ok();
+    }
+    return true;
+  }
+
+  bool update_all_embeddings() override {
+    spdlog::info("Updating embeddings for all files in container: {}",
+                 get_id());
+
+    auto files = list_files("/");
+    size_t updated_count = 0;
+
+    for (const auto &file : files) {
+      std::string file_path = "/" + file;
+
+      auto result = search_->updateEmbedding(file_path);
+      if (result.is_ok()) {
+        updated_count++;
+      } else {
+        spdlog::warn("Failed to update embedding for {}: {}", file_path,
+                     result.error().what());
+      }
+    }
+
+    auto rebuild_result = search_->rebuildIndexImpl();
+    if (!rebuild_result.is_ok()) {
+      spdlog::warn("Failed to rebuild index after embedding update: {}",
+                   rebuild_result.error().what());
+    }
+
+    search_->updateSemanticRelationships();
+
+    spdlog::info("Updated embeddings for {}/{} files", updated_count,
+                 files.size());
+    return updated_count > 0;
+  }
+
+  std::string get_search_info() const override {
+    auto file_count = search_->getIndexedFilesCountImpl();
+    auto recent_queries = search_->getRecentQueriesCountImpl();
+
+    std::stringstream ss;
+    ss << "Search Info for Container " << get_id() << ":\n";
+    ss << "  Indexed Files: " << (file_count.is_ok() ? file_count.value() : 0)
+       << "\n";
+    ss << "  Recent Queries: "
+       << (recent_queries.is_ok() ? recent_queries.value() : 0) << "\n";
+    ss << "  Embedder: " << search_->getEmbedderInfoImpl() << "\n";
+
+    return ss.str();
   }
 
   bool is_available() const override {
@@ -256,7 +427,8 @@ public:
         }
         return total_size;
       }
-    } catch (...) {
+    } catch (const std::exception &e) {
+      spdlog::debug("Error calculating container size: {}", e.what());
     }
     return 0;
   }
@@ -278,7 +450,7 @@ public:
 
 private:
   std::shared_ptr<ossec::PidContainer> container_;
-  chunkees::Search &search_;
+  std::unique_ptr<chunkees::Search> search_;
 };
 
 } // namespace owl::vectorfs
