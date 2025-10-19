@@ -1,8 +1,8 @@
 #ifndef VECTORFS_NETWORK_HANDLERS_HPP
 #define VECTORFS_NETWORK_HANDLERS_HPP
 
-#include "utils/http_helpers.hpp"
 #include "shared_memory/shared_memory.hpp"
+#include "utils/http_helpers.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/url/parse.hpp>
@@ -113,8 +113,8 @@ template <typename EmbeddedModel> auto read_file_handler() {
   return [](const drogon::HttpRequestPtr &req,
             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
     auto process_request = [&]() -> utils::HttpResult {
-      auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
-                      .get_vector_fs();
+      auto &search =
+          owl::instance::VFSInstance<EmbeddedModel>::getInstance().get_search();
       auto path_param = req->getParameter("path");
 
       if (path_param.empty()) {
@@ -122,22 +122,11 @@ template <typename EmbeddedModel> auto read_file_handler() {
       }
 
       std::string file_path = path_param;
-      auto &virtual_files = vfs.get_virtual_files();
-      auto it = virtual_files.find(file_path);
 
-      if (it == virtual_files.end()) {
-        return utils::error_result("File not found: " + file_path);
-      }
-
-      const auto &file_info = it->second;
-
-      if (S_ISDIR(file_info.mode)) {
-        return utils::error_result("Path is a directory: " + file_path);
-      }
-
+      const std::string &content = search.getFileContentImpl(file_path);
       auto data = utils::create_success_response(
-          {"path", "content", "size"}, file_path, file_info.content,
-          static_cast<Json::UInt64>(file_info.content.size()));
+          {"path", "content", "size"}, file_path, content,
+          static_cast<Json::UInt64>(content.size()));
 
       return utils::success_result(data);
     };

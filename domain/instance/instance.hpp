@@ -1,12 +1,13 @@
 #ifndef INSTANCE_HPP
 #define INSTANCE_HPP
 
+#include <infrastructure/measure.hpp>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <infrastructure/measure.hpp>
 
 #include "algorithms/compressor/compressor.hpp"
+#include "state.hpp"
 #include "vectorfs.hpp"
 #include <search.hpp>
 
@@ -38,7 +39,7 @@ public:
   static void shutdown() { instance_.reset(); }
 
   void test_semantic_search() noexcept {
-    auto result = search_.semanticSearch("test query", 5);
+    auto result = state_.search_.semanticSearch("test query", 5);
     if (result.is_ok()) {
       spdlog::info("Semantic search test completed successfully");
     } else {
@@ -47,7 +48,7 @@ public:
   }
 
   void test_markov_model() noexcept {
-    auto result = search_.enhancedSemanticSearchImpl("test", 3);
+    auto result = state_.search_.enhancedSemanticSearchImpl("test", 3);
     spdlog::info("Markov model test completed");
   }
 
@@ -58,10 +59,10 @@ public:
   }
 
   vectorfs::VectorFS &get_vector_fs() const { return *vector_fs_; }
-  chunkees::Search &get_search() { return search_; }
+  chunkees::Search &get_search() { return state_.search_; }
 
   std::vector<float> get_embedding(const std::string &text) {
-    auto embedder_result = embedder_manager_.embedder();
+    auto embedder_result = state_.embedder_manager_.embedder();
     if (!embedder_result.is_ok()) {
       throw std::runtime_error("Embedder not initialized");
     }
@@ -75,7 +76,7 @@ public:
   }
 
   std::string get_embedder_info() {
-    auto embedder_result = embedder_manager_.embedder();
+    auto embedder_result = state_.embedder_manager_.embedder();
     if (!embedder_result.is_ok()) {
       return "Embedder not initialized";
     }
@@ -85,12 +86,16 @@ public:
            ", Dimension: " + std::to_string(embedder.getDimension());
   }
 
+  vectorfs::State &get_state() { return state_; }
+
 private:
   VFSInstance(const std::string &model_path)
       : embedder_manager_(),
         search_(embedder_manager_,
                 {"code", "document", "config", "test", "misc"}),
-        vector_fs_(std::make_unique<vectorfs::VectorFS>(search_)) {
+        container_manager_(),
+        state_(search_, container_manager_, embedder_manager_),
+        vector_fs_(std::make_unique<vectorfs::VectorFS>(state_)) {
 
     auto init_result = embedder_manager_.set(model_path);
     if (!init_result.is_ok()) {
@@ -102,6 +107,8 @@ private:
 
   EmbedderManager<> embedder_manager_;
   chunkees::Search search_;
+  ContainerManager container_manager_;
+  vectorfs::State state_;
   std::unique_ptr<vectorfs::VectorFS> vector_fs_;
 
   static std::unique_ptr<VFSInstance<EmbeddedModel, CompressorType>> instance_;

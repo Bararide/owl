@@ -104,7 +104,7 @@ void VectorFS::updateFromSharedMemory() {
     return;
   }
 
-  spdlog::info("Updating from shared memory with compression...");
+  spdlog::info("Updating from shared memory...");
 
   int file_count = shm_manager->getFileCount();
   for (int i = 0; i < file_count; i++) {
@@ -117,11 +117,7 @@ void VectorFS::updateFromSharedMemory() {
         fi.mode = shared_info->mode;
         fi.size = shared_info->size;
 
-        std::vector<uint8_t> compressed_content(
-            shared_info->content, shared_info->content + shared_info->size);
-        auto decompressed_content = decompress_data(compressed_content);
-        fi.content = std::string(decompressed_content.begin(),
-                                 decompressed_content.end());
+        fi.content = std::string(shared_info->content, shared_info->size);
 
         fi.uid = shared_info->uid;
         fi.gid = shared_info->gid;
@@ -130,18 +126,20 @@ void VectorFS::updateFromSharedMemory() {
         fi.create_time = shared_info->create_time;
 
         virtual_files[path] = fi;
-        spdlog::info(
-            "Added compressed file from shared memory: {} ({} -> {} bytes)",
-            path, shared_info->size, fi.content.size());
+        spdlog::info("Added file from shared memory: {} ({} bytes)", path,
+                     shared_info->size);
 
-        update_embedding(path.c_str());
-        index_needs_rebuild = true;
+        auto add_result = search_.addFileImpl(path, fi.content);
+        if (!add_result.is_ok()) {
+          spdlog::warn("Failed to add file to search index: {} - {}", path,
+                       add_result.error().what());
+        }
       }
     }
   }
 
   shm_manager->clearUpdateFlag();
-  spdlog::info("Shared memory update with compression completed");
+  spdlog::info("Shared memory update completed, added {} files", file_count);
 }
 
 int VectorFS::getattr(const char *path, struct stat *stbuf,
@@ -479,13 +477,12 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   }
 
   if (strcmp(path, "/.reindex") == 0) {
-    index_needs_rebuild = true;
     rebuild_index();
 
     std::stringstream ss;
     ss << "Forcing reindex...\n";
     ss << "Reindex completed!\n";
-    ss << "Indexed files: " << index_to_path.size() << "\n";
+    ss << "Indexed files: " << get_indexed_files_count() << "\n";
 
     std::string content = ss.str();
     if (offset >= static_cast<off_t>(content.size())) {
@@ -527,11 +524,12 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           ss << "📊 Search Results:\n";
           for (const auto &result : search_results) {
             ss << "📄 " << result << "\n";
-            
+
             std::string file_content = container->get_file_content(result);
             if (!file_content.empty()) {
               std::string preview = file_content.substr(0, 100);
-              if (file_content.size() > 100) preview += "...";
+              if (file_content.size() > 100)
+                preview += "...";
               ss << "   Content: " << preview << "\n";
             }
             ss << "\n";
@@ -653,7 +651,6 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     return len;
   }
 
-  // Обработка глобального поиска
   if (strncmp(path, "/.search/", 9) == 0) {
     std::string query = path + 9;
     query = url_decode(query);
@@ -691,7 +688,6 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   return -ENOENT;
 }
 
-// Остальные методы остаются без изменений...
 int VectorFS::rmdir(const char *path) {
   if (virtual_dirs.count(path) == 0) {
     return -ENOENT;
@@ -704,7 +700,7 @@ int VectorFS::rmdir(const char *path) {
   for (auto it = virtual_files.begin(); it != virtual_files.end();) {
     if (it->first.find(dir) == 0) {
       it = virtual_files.erase(it);
-      index_needs_rebuild = true;
+      rebuild_index();
     } else {
       ++it;
     }
@@ -815,8 +811,8 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
     it->second.modification_time = time(nullptr);
     it->second.access_time = it->second.modification_time;
 
-    update_embedding(path);
-    index_needs_rebuild = true;
+    (void)search_.updateEmbedding(path);
+    rebuild_index();
 
     return size;
   }
@@ -836,8 +832,8 @@ int VectorFS::write(const char *path, const char *buf, size_t size,
   file_info->modification_time = time(nullptr);
   file_info->access_time = file_info->modification_time;
 
-  update_embedding(path);
-  index_needs_rebuild = true;
+  (void)search_.updateEmbedding(path);
+  rebuild_index();
 
   return size;
 }
@@ -846,7 +842,7 @@ int VectorFS::unlink(const char *path) {
   if (virtual_files.erase(path) == 0) {
     return -ENOENT;
   }
-  index_needs_rebuild = true;
+  rebuild_index();
   return 0;
 }
 

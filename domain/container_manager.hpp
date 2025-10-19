@@ -16,6 +16,7 @@ private:
   static std::mutex mutex_;
   std::map<std::string, std::shared_ptr<IKnowledgeContainer>> containers_;
   std::mutex containers_mutex_;
+  chunkees::Search *search_ = nullptr;
 
 public:
   static ContainerManager &get_instance() {
@@ -24,6 +25,8 @@ public:
       instance_ = new ContainerManager();
     return *instance_;
   }
+
+  void set_search(chunkees::Search &search) { search_ = &search; }
 
   bool register_container(std::shared_ptr<IKnowledgeContainer> container);
   bool register_ossec_container(
