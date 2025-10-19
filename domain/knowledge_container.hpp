@@ -32,6 +32,24 @@ public:
   virtual bool is_available() const = 0;
   virtual size_t get_size() const = 0;
   virtual std::string get_status() const = 0;
+
+  virtual std::vector<std::string>
+  enhanced_semantic_search(const std::string &query, int limit = 10) = 0;
+
+  virtual std::vector<std::string>
+  get_recommendations(const std::string &current_file, int limit = 5) = 0;
+
+  virtual std::vector<std::string> predict_next_files(int limit = 3) = 0;
+
+  virtual std::vector<std::string> get_semantic_hubs(int count = 5) = 0;
+
+  virtual std::string classify_file(const std::string &file_path) = 0;
+
+  virtual bool update_all_embeddings() = 0;
+
+  virtual std::string get_search_info() const = 0;
+
+  virtual void record_search_query(const std::string &query) = 0;
 };
 
 } // namespace owl::vectorfs

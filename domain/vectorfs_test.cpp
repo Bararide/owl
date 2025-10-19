@@ -519,7 +519,6 @@ void VectorFS::test_markov_chains() {
 
   spdlog::info("Markov chains test completed");
 }
-
 void VectorFS::test_container() {
   try {
     std::string container_data_path = "/home/bararide/test_container_2";
@@ -531,7 +530,8 @@ void VectorFS::test_container() {
 
     auto container_result =
         container_builder.with_owner("test_user")
-            .with_container_id("test_container_2")
+            .with_container_id(
+                "test_container_2")
             .with_data_path(container_data_path)
             .with_vectorfs_namespace("default")
             .with_supported_formats({"txt", "json", "yaml", "cpp", "py"})
@@ -554,15 +554,17 @@ void VectorFS::test_container() {
       auto start_result = pid_container->start();
       if (start_result.is_ok()) {
         auto adapter = std::make_shared<OssecContainerAdapter>(
-            pid_container, state_.get_search());
+            pid_container, state_.get_embedder_manager());
+
+        adapter->initialize_markov_chain();
 
         if (state_.get_container_manager().register_container(adapter)) {
           spdlog::info("Successfully created and registered container: "
-                       "test_container_1");
+                       "test_container_2");
 
           std::vector<std::pair<std::string, std::string>> files_to_create = {
               {"/readme.txt",
-               "Welcome to test_container_1!\n\n"
+               "Welcome to test_container_2!\n\n"
                "This container contains sample knowledge files.\n"
                "You can browse and search through the files here.\n\n"
                "Status: " +
@@ -574,37 +576,46 @@ void VectorFS::test_container() {
                    "Owner: " +
                    adapter->get_owner()},
 
-              {"/examples/hello.cpp", "#include <iostream>\n\n"
-                                      "int main() {\n"
-                                      "    std::cout << \"Hello from VectorFS "
-                                      "container!\" << std::endl;\n"
-                                      "    return 0;\n}"},
+              {"/hello.cpp", "#include <iostream>\n\n"
+                             "int main() {\n"
+                             "    std::cout << \"Hello from VectorFS "
+                             "container!\" << std::endl;\n"
+                             "    return 0;\n}"},
 
-              {"/examples/sort.cpp",
-               "#include <algorithm>\n#include <vector>\n\n"
-               "void bubble_sort(std::vector<int>& arr) {\n"
-               "    int n = arr.size();\n"
-               "    for (int i = 0; i < n-1; i++) {\n"
-               "        for (int j = 0; j < n-i-1; j++) {\n"
-               "            if (arr[j] > arr[j+1]) {\n"
-               "                std::swap(arr[j], arr[j+1]);\n"
-               "            }\n"
-               "        }\n"
-               "    }\n}"},
+              {"/sort.cpp", "#include <algorithm>\n#include <vector>\n\n"
+                            "void bubble_sort(std::vector<int>& arr) {\n"
+                            "    int n = arr.size();\n"
+                            "    for (int i = 0; i < n-1; i++) {\n"
+                            "        for (int j = 0; j < n-i-1; j++) {\n"
+                            "            if (arr[j] > arr[j+1]) {\n"
+                            "                std::swap(arr[j], arr[j+1]);\n"
+                            "            }\n"
+                            "        }\n"
+                            "    }\n}"},
+              {"/sort2.cpp", "#include <algorithm>\n#include <vector>\n\n"
+                             "void bubble_sort(std::vector<int>& arr) {\n"
+                             "    int n = arr.size();\n"
+                             "    for (int i = 0; i < n-1; i++) {\n"
+                             "        for (int j = 0; j < n-i-1; j++) {\n"
+                             "            if (arr[j] > arr[j+1]) {\n"
+                             "                std::swap(arr[j], arr[j+1]);\n"
+                             "            }\n"
+                             "        }\n"
+                             "    }\n}"},
 
-              {"/notes/programming.md", "# Programming Notes\n\n"
-                                        "## C++ Tips\n"
-                                        "- Use smart pointers\n"
-                                        "- Prefer RAII\n"
-                                        "- Learn move semantics\n\n"
-                                        "## Python Tips\n"
-                                        "- Use virtual environments\n"
-                                        "- Write docstrings\n"
-                                        "- Follow PEP8"},
+              {"/programming.md", "# Programming Notes\n\n"
+                                  "## C++ Tips\n"
+                                  "- Use smart pointers\n"
+                                  "- Prefer RAII\n"
+                                  "- Learn move semantics\n\n"
+                                  "## Python Tips\n"
+                                  "- Use virtual environments\n"
+                                  "- Write docstrings\n"
+                                  "- Follow PEP8"},
 
-              {"/config/settings.json",
+              {"/settings.json",
                "{\n"
-               "  \"container_id\": \"test_container_1\",\n"
+               "  \"container_id\": \"test_container_2\",\n"
                "  \"owner\": \"test_user\",\n"
                "  \"created\": \"2024-10-17\",\n"
                "  \"status\": \"active\"\n}"}};
@@ -618,18 +629,22 @@ void VectorFS::test_container() {
             }
           }
 
+          adapter->update_all_embeddings();
+
           auto files = adapter->list_files("/");
           spdlog::info("Container root now contains {} files:", files.size());
           for (const auto &file : files) {
             spdlog::info("  - {}", file);
-
-            if (file.find('.') == std::string::npos) {
-              auto sub_files = adapter->list_files("/" + file);
-              for (const auto &sub_file : sub_files) {
-                spdlog::info("    - {}/{}", file, sub_file);
-              }
-            }
           }
+
+          spdlog::info("Testing container search functionality...");
+          auto search_results = adapter->semantic_search("sort", 5);
+          spdlog::info("Semantic search found {} results",
+                       search_results.size());
+
+          auto enhanced_results = adapter->enhanced_semantic_search("sort", 5);
+          spdlog::info("Enhanced search found {} results",
+                       enhanced_results.size());
 
         } else {
           spdlog::error("Failed to register container adapter");

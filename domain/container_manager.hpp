@@ -17,7 +17,7 @@ private:
 
   std::map<std::string, std::shared_ptr<IKnowledgeContainer>> containers_;
   std::mutex containers_mutex_;
-  chunkees::Search *search_ = nullptr;
+  EmbedderManager<> *embedder_ = nullptr;
 
 public:
   ContainerManager(const ContainerManager &) = delete;
@@ -39,7 +39,7 @@ public:
     instance_ = nullptr;
   }
 
-  void set_search(chunkees::Search &search) { search_ = &search; }
+  void set_embedder(EmbedderManager<> &embedder) { embedder_ = &embedder; }
 
   bool register_container(std::shared_ptr<IKnowledgeContainer> container);
   bool register_ossec_container(
