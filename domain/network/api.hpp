@@ -91,7 +91,7 @@ public:
         .setDocumentRoot("./www")
         .setClientMaxBodySize(20 * 1024 * 1024)
         .setClientMaxMemoryBodySize(4 * 1024 * 1024)
-        .addListener("0.0.0.0", 9999)
+        .addListener("127.0.0.1", 9999)
         .setThreadNum(std::thread::hardware_concurrency())
         .setIdleConnectionTimeout(60s)
         .run();

@@ -299,8 +299,6 @@ void VectorFS::test_semantic_search() {
       if (!result_file_add.is_ok()) {
         spdlog::critical("Failed to add file {}: {}", path,
                          result_file_add.error().what());
-      } else {
-        spdlog::critical("Successfully added file: {}", path);
       }
 
       auto result = state_.get_search().updateEmbedding(path);
@@ -326,8 +324,6 @@ void VectorFS::test_semantic_search() {
         {"/system/file_io_cpp.cpp", "/concurrency/threads_cpp.cpp",
          "/cpp/functions_advanced.cpp", "/algorithms/sort_cpp.cpp",
          "/data_structures/linked_list_cpp.cpp"}};
-
-    spdlog::critical("3");
 
     for (const auto &pattern : access_patterns) {
       for (const auto &file : pattern) {

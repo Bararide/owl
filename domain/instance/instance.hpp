@@ -69,7 +69,7 @@ public:
 
   std::vector<float> get_embedding(const std::string &text) {
     if (!embedder_manager_) {
-      throw std::runtime_error("EmbedderManager not initialized");
+      throw std::runtime_error("EmbedderManager<> not initialized");
     }
 
     auto embedder_result = embedder_manager_->embedder();
@@ -87,7 +87,7 @@ public:
 
   std::string get_embedder_info() {
     if (!embedder_manager_) {
-      return "EmbedderManager not initialized";
+      return "EmbedderManager<> not initialized";
     }
 
     auto embedder_result = embedder_manager_->embedder();
@@ -116,7 +116,13 @@ public:
 private:
   VFSInstance(const std::string &model_path) {
     try {
-      embedder_manager_ = std::make_shared<EmbedderManager>();
+      embedder_manager_ = std::make_shared<EmbedderManager<>>();
+
+      auto init_result = embedder_manager_->set(model_path);
+      if (!init_result.is_ok()) {
+        throw std::runtime_error(init_result.error().what());
+      }
+
       container_manager_ = std::make_shared<vectorfs::ContainerManager>();
       search_ = std::make_shared<chunkees::Search>(
           *embedder_manager_,
@@ -129,11 +135,6 @@ private:
       vector_fs_ = std::make_unique<vectorfs::VectorFS>(*state_);
 
       container_manager_->set_search(*search_);
-
-      auto init_result = embedder_manager_->set(model_path);
-      if (!init_result.is_ok()) {
-        throw std::runtime_error(init_result.error().what());
-      }
 
       spdlog::info("VFSInstance initialized with model: {}", model_path);
     } catch (const std::exception &e) {
@@ -150,7 +151,7 @@ private:
     embedder_manager_.reset();
   }
 
-  std::shared_ptr<EmbedderManager> embedder_manager_;
+  std::shared_ptr<EmbedderManager<>> embedder_manager_;
   std::shared_ptr<chunkees::Search> search_;
   std::shared_ptr<vectorfs::ContainerManager> container_manager_;
   std::unique_ptr<vectorfs::State> state_;
