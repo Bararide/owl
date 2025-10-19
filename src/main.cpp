@@ -91,15 +91,9 @@ int main(int argc, char *argv[]) {
 
       spdlog::info("Starting HTTP server in child process (PID: {})...",
                    getpid());
-
       try {
-        auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-        if (!shm_manager.initialize()) {
-          spdlog::error("Failed to initialize shared memory in HTTP process");
-          exit(EXIT_FAILURE);
-        }
-
         auto http_start = std::chrono::high_resolution_clock::now();
+
         owl::network::VectorFSApi<embedded::FastTextEmbedder>::init();
         owl::network::VectorFSApi<embedded::FastTextEmbedder>::run();
 
