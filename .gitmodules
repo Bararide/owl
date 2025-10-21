@@ -16,9 +16,6 @@
 [submodule "faiss"]
 	path = faiss
 	url = https://github.com/facebookresearch/faiss
-[submodule "3dparty/drogon"]
-	path = 3dparty/drogon
-	url = https://github.com/drogonframework/drogon.git
 [submodule "3dparty/iceoryx2"]
 	path = 3dparty/iceoryx2
 	url = https://github.com/eclipse-iceoryx/iceoryx2.git
@@ -31,3 +28,9 @@
 [submodule "lib/ossec"]
 	path = lib/ossec
 	url = https://github.com/Bararide/ossec
+[submodule "3dparty/crow"]
+	path = 3dparty/crow
+	url = https://github.com/CrowCpp/Crow
+[submodule "3dparty/pistache"]
+	path = 3dparty/pistache
+	url = https://github.com/pistacheio/pistache.git

@@ -1,26 +1,90 @@
-#ifndef VECTORFS_UTILS_HTTP_HALPERS_HPP
-#define VECTORFS_UTILS_HTTP_HALPERS_HPP
+#ifndef VECTORFS_UTILS_HTTP_HELPERS_HPP
+#define VECTORFS_UTILS_HTTP_HELPERS_HPP
 
 #include "vectorfs.hpp"
 #include <functional>
+#include <infrastructure/notification.hpp>
 #include <map>
 #include <string>
 #include <vector>
-#include <infrastructure/notification.hpp>
+
+#include <pistache/endpoint.h>
+#include <pistache/http.h>
+#include <pistache/net.h>
+#include <pistache/router.h>
+#include <json/json.h>
 
 namespace owl::utils {
+
+namespace http {
+enum StatusCode {
+  OK = 200,
+  BadRequest = 400,
+  NotFound = 404,
+  InternalServerError = 500
+};
+}
+
 using HttpSuccess = core::utils::Success<Json::Value>;
 using HttpError = core::utils::Error;
 using HttpResult = core::Result<Json::Value, std::runtime_error>;
-using HttpHandler = std::function<void(
-    const drogon::HttpRequestPtr &,
-    std::function<void(const drogon::HttpResponsePtr &)> &&)>;
+
+struct HttpRequest {
+  std::string method;
+  std::string path;
+  std::string body;
+  std::map<std::string, std::string> headers;
+  std::map<std::string, std::string> query_params;
+
+  std::string getMethodString() const { return method; }
+  std::string getPath() const { return path; }
+  std::string getBody() const { return body; }
+
+  template <typename T> T getParameter(const std::string &key) const {
+    auto it = query_params.find(key);
+    if (it != query_params.end()) {
+      return it->second;
+    }
+    return T{};
+  }
+};
+
+struct HttpResponse {
+  Json::Value data;
+  int status_code = http::OK;
+  std::map<std::string, std::string> headers;
+
+  static std::shared_ptr<HttpResponse> newHttpResponse() {
+    return std::make_shared<HttpResponse>();
+  }
+
+  static std::shared_ptr<HttpResponse>
+  newHttpJsonResponse(const Json::Value &json) {
+    auto resp = std::make_shared<HttpResponse>();
+    resp->data = json;
+    resp->headers["Content-Type"] = "application/json";
+    return resp;
+  }
+
+  void setStatusCode(int code) { status_code = code; }
+  void setBody(const std::string &body) {
+    data["_body"] = body;
+  }
+  void addHeader(const std::string &key, const std::string &value) {
+    headers[key] = value;
+  }
+};
+
+using Callback = std::function<void(const std::shared_ptr<HttpResponse> &)>;
+using HttpHandler =
+    std::function<void(const std::shared_ptr<HttpRequest> &, Callback &&)>;
 
 template <typename Handler>
-concept ReturnsResult = requires(Handler h, const drogon::HttpRequestPtr &req,
-                                 const std::vector<std::string> &path) {
-  { h(req, path) } -> std::same_as<HttpResult>;
-};
+concept ReturnsResult =
+    requires(Handler h, const std::shared_ptr<HttpRequest> &req,
+             const std::vector<std::string> &path) {
+      { h(req, path) } -> std::same_as<HttpResult>;
+    };
 
 inline auto &get_success_notification() {
   static auto notif =
@@ -48,14 +112,13 @@ inline void notify_error(const std::string &message) {
 
 auto create_handler(ReturnsResult auto handler_logic) {
   return [handler_logic = std::move(handler_logic)](
-             const drogon::HttpRequestPtr &req,
-             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+             const std::shared_ptr<HttpRequest> &req, Callback &&callback) {
     auto result = handler_logic(req, {});
 
     result.match(
         [&callback](const Json::Value &data) {
           notify_success(data);
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(data);
+          auto resp = HttpResponse::newHttpJsonResponse(data);
           callback(resp);
         },
         [&callback](const std::runtime_error &error) {
@@ -63,10 +126,10 @@ auto create_handler(ReturnsResult auto handler_logic) {
           Json::Value errorJson;
           errorJson["status"] = "error";
           errorJson["error"] = error.what();
-          errorJson["code"] = static_cast<int>(drogon::k500InternalServerError);
+          errorJson["code"] = http::InternalServerError;
 
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(errorJson);
-          resp->setStatusCode(drogon::k500InternalServerError);
+          auto resp = HttpResponse::newHttpJsonResponse(errorJson);
+          resp->setStatusCode(http::InternalServerError);
           callback(resp);
         });
   };
@@ -116,13 +179,12 @@ Json::Value create_success_response(std::initializer_list<T> names,
   return response;
 }
 
-Json::Value create_error_response(
-    const std::string &error_message,
-    drogon::HttpStatusCode status = drogon::k500InternalServerError) {
+Json::Value create_error_response(const std::string &error_message,
+                                  int status = http::InternalServerError) {
   Json::Value response;
   response["status"] = "error";
   response["error"] = error_message;
-  response["code"] = static_cast<int>(status);
+  response["code"] = status;
   return response;
 }
 
@@ -141,6 +203,7 @@ auto validate_json_member(const Json::Value &json,
   }
   return success_result(Json::Value{});
 }
+
 } // namespace owl::utils
 
-#endif // VECTORFS_UTILS_HTTP_HALPERS_HPP
+#endif // VECTORFS_UTILS_HTTP_HELPERS_HPP

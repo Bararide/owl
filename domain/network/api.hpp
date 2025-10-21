@@ -1,122 +1,273 @@
-#ifndef VECTORFS_NETWORK_APP_HPP
-#define VECTORFS_NETWORK_APP_HPP
+#ifndef VECTORFS_PISTACHE_API_HPP
+#define VECTORFS_PISTACHE_API_HPP
 
-#include "handlers.hpp"
-#include <boost/regex.hpp>
-#include <drogon/HttpAppFramework.h>
+#include "instance/instance.hpp"
+#include "shared_memory/shared_memory.hpp"
+#include "utils/http_helpers.hpp"
+
+#include <pistache/endpoint.h>
+#include <pistache/http.h>
+#include <pistache/net.h>
+#include <pistache/router.h>
+
+#include <atomic>
 #include <memory>
+#include <thread>
 
 namespace owl::network {
 
 template <typename EmbeddedModel> class VectorFSApi {
 public:
-  static void init() {
-    using namespace std::chrono_literals;
+  VectorFSApi()
+      : httpEndpoint(std::make_unique<Pistache::Http::Endpoint>(
+            Pistache::Address("0.0.0.0", 9999))) {}
 
-    std::set_terminate([]() {
-        spdlog::error("Terminate called due to uncaught exception");
-        std::abort();
-    });
+  void init() {
+    spdlog::info("Initializing Pistache API...");
 
-    handlers = init_handlers();
+    auto opts = Pistache::Http::Endpoint::options()
+                    .threads(std::thread::hardware_concurrency())
+                    .flags(Pistache::Tcp::Options::ReuseAddr);
 
-    drogon::app().registerPostHandlingAdvice(
-        [](const drogon::HttpRequestPtr &,
-           const drogon::HttpResponsePtr &resp) {
-          resp->addHeader("Access-Control-Allow-Origin", "*");
-          resp->addHeader("Access-Control-Allow-Methods",
-                          "GET, POST, PUT, DELETE, OPTIONS");
-          resp->addHeader("Access-Control-Allow-Headers",
-                          "Content-Type, Authorization");
-        });
+    httpEndpoint->init(opts);
+    setupRoutes();
 
-    auto addCorsOptions = [](const std::string &path) {
-      drogon::app().registerHandler(
-          path,
-          [](const drogon::HttpRequestPtr &req,
-             std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
-            if (req->method() == drogon::Options) {
-              auto resp = drogon::HttpResponse::newHttpResponse();
-              resp->addHeader("Access-Control-Allow-Origin", "*");
-              resp->addHeader("Access-Control-Allow-Methods",
-                              "GET, POST, PUT, DELETE, OPTIONS");
-              resp->addHeader("Access-Control-Allow-Headers",
-                              "Content-Type, Authorization");
-              resp->setStatusCode(drogon::k200OK);
-              callback(resp);
-            }
-          },
-          {drogon::Options});
-    };
-
-    addCorsOptions("/");
-    addCorsOptions("/semantic");
-    addCorsOptions("/rebuild");
-    addCorsOptions("/files/.*");
-    addCorsOptions("/files/create");
-    addCorsOptions("/files/read");
-
-    drogon::app().setCustomErrorHandler(
-        [](drogon::HttpStatusCode code, const drogon::HttpRequestPtr &req) {
-          Json::Value json;
-          json["error"] = "Request failed";
-          json["code"] = static_cast<int>(code);
-          json["path"] = req->path();
-
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(json);
-          resp->addHeader("Access-Control-Allow-Origin", "*");
-          resp->addHeader("Access-Control-Allow-Methods",
-                          "GET, POST, PUT, DELETE, OPTIONS");
-          resp->addHeader("Access-Control-Allow-Headers",
-                          "Content-Type, Authorization");
-          resp->setStatusCode(code);
-          return resp;
-        });
-
-    drogon::app().setLogLevel(trantor::Logger::kInfo);
-
-    drogon::app().registerHandler("/", handlers.at("/"), {drogon::Get});
-    drogon::app().registerHandler("/semantic", handlers.at("/semantic"),
-                                  {drogon::Post});
-    drogon::app().registerHandler("/rebuild", handlers.at("/rebuild"),
-                                  {drogon::Post});
-
-    drogon::app().registerHandler("/files/create", handlers.at("/files/create"),
-                                  {drogon::Post});
-    drogon::app().registerHandler("/files/read", handlers.at("/files/read"),
-                                  {drogon::Get});
-
-    spdlog::info("VectorFS API initialized with CORS support");
+    spdlog::info("Pistache API initialized successfully");
   }
 
-  static void run() {
-    using namespace std::chrono_literals;
-
-    drogon::app()
-        .setDocumentRoot("./www")
-        .setClientMaxBodySize(20 * 1024 * 1024)
-        .setClientMaxMemoryBodySize(4 * 1024 * 1024)
-        .addListener("0.0.0.0", 9999)
-        .setThreadNum(std::thread::hardware_concurrency())
-        .setIdleConnectionTimeout(60s)
-        .run();
+  void run() {
+    spdlog::info("Starting Pistache server on port 9999");
+    httpEndpoint->setHandler(router.handler());
+    httpEndpoint->serve();
   }
 
-  static std::map<std::string, utils::HttpHandler> init_handlers() {
-    return {{"/", handler::create_root_handler()},
-            {"/files/create", handler::create_file_handler<EmbeddedModel>()},
-            {"/files/read", handler::read_file_handler<EmbeddedModel>()},
-            {"/semantic", handler::semantic_search_handler<EmbeddedModel>()},
-            {"/rebuild", handler::rebuild_handler()}};
+  void shutdown() {
+    spdlog::info("Shutting down Pistache server");
+    httpEndpoint->shutdown();
   }
 
 private:
-  static std::map<std::string, utils::HttpHandler> handlers;
-};
+  void setupRoutes() {
+    using namespace Pistache::Rest;
 
-template <typename EmbeddedModel>
-std::map<std::string, utils::HttpHandler> VectorFSApi<EmbeddedModel>::handlers;
+    Routes::Options(router, "/*", Routes::bind(&VectorFSApi::handleCors, this));
+
+    Routes::Get(router, "/", Routes::bind(&VectorFSApi::handleRoot, this));
+    Routes::Post(router, "/files/create",
+                 Routes::bind(&VectorFSApi::handleFileCreate, this));
+    Routes::Get(router, "/files/read",
+                Routes::bind(&VectorFSApi::handleFileRead, this));
+    Routes::Post(router, "/semantic",
+                 Routes::bind(&VectorFSApi::handleSemanticSearch, this));
+    Routes::Post(router, "/rebuild",
+                 Routes::bind(&VectorFSApi::handleRebuild, this));
+
+    spdlog::info("Routes registered");
+  }
+
+  void addCorsHeaders(Pistache::Http::ResponseWriter &response) {
+    response.headers().add<Pistache::Http::Header::AccessControlAllowOrigin>(
+        "*");
+    response.headers().add<Pistache::Http::Header::AccessControlAllowMethods>(
+        "GET, POST, PUT, DELETE, OPTIONS");
+    response.headers().add<Pistache::Http::Header::AccessControlAllowHeaders>(
+        "Content-Type, Authorization");
+  }
+
+  void handleCors(const Pistache::Rest::Request &request,
+                  Pistache::Http::ResponseWriter response) {
+    addCorsHeaders(response);
+    response.send(Pistache::Http::Code::Ok);
+  }
+
+  void handleRoot(const Pistache::Rest::Request &request,
+                  Pistache::Http::ResponseWriter response) {
+    spdlog::info("=== ROOT HANDLER CALLED ===");
+    spdlog::info("Path: {}", request.resource());
+    spdlog::info("Client: {}", request.address().host());
+
+    addCorsHeaders(response);
+    response.send(Pistache::Http::Code::Ok, "OK");
+
+    spdlog::info("=== ROOT HANDLER COMPLETED ===");
+  }
+
+  void handleFileCreate(const Pistache::Rest::Request &request,
+                        Pistache::Http::ResponseWriter response) {
+    spdlog::info("=== File Creation Request ===");
+    spdlog::info("Client IP: {}", request.address().host());
+    spdlog::info("URL: {}", request.resource());
+
+    addCorsHeaders(response);
+
+    try {
+      auto body = request.body();
+      spdlog::info("Received body: {}", body);
+
+      Json::Value json;
+      Json::Reader reader;
+      if (!reader.parse(body, json)) {
+        spdlog::warn("Invalid JSON received");
+        auto error_response = utils::create_error_response("Invalid JSON");
+        response.send(Pistache::Http::Code::Bad_Request,
+                      error_response.toStyledString());
+        return;
+      }
+
+      if (!json.isMember("path") || !json.isMember("content")) {
+        spdlog::warn("Missing required fields");
+        auto error_response =
+            utils::create_error_response("Missing 'path' or 'content'");
+        response.send(Pistache::Http::Code::Bad_Request,
+                      error_response.toStyledString());
+        return;
+      }
+
+      std::string path = json["path"].asString();
+      std::string content = json["content"].asString();
+
+      if (!path.empty() && path[0] != '/') {
+        path = "/" + path;
+        spdlog::info("Normalized path to: {}", path);
+      }
+
+      spdlog::info("File path: {}", path);
+      spdlog::info("Content length: {} bytes", content.size());
+
+      auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
+      if (!shm_manager.initialize()) {
+        spdlog::error("Failed to initialize shared memory");
+        auto error_response =
+            utils::create_error_response("Internal server error");
+        response.send(Pistache::Http::Code::Internal_Server_Error,
+                      error_response.toStyledString());
+        return;
+      }
+
+      if (!shm_manager.addFile(path, content)) {
+        spdlog::error("Failed to add file to shared memory: {}", path);
+        auto error_response =
+            utils::create_error_response("Failed to create file");
+        response.send(Pistache::Http::Code::Internal_Server_Error,
+                      error_response.toStyledString());
+        return;
+      }
+
+      spdlog::info("Successfully added file to shared memory: {}", path);
+
+      auto data = utils::create_success_response(
+          {"path", "size", "created"}, path,
+          static_cast<Json::UInt64>(content.size()), true);
+
+      response.send(Pistache::Http::Code::Ok, data.toStyledString());
+
+    } catch (const std::exception &e) {
+      spdlog::error("Exception in file creation: {}", e.what());
+      auto error_response =
+          utils::create_error_response("Internal server error");
+      response.send(Pistache::Http::Code::Internal_Server_Error,
+                    error_response.toStyledString());
+    }
+  }
+
+  void handleFileRead(const Pistache::Rest::Request &request,
+                      Pistache::Http::ResponseWriter response) {
+    addCorsHeaders(response);
+
+    try {
+      auto path_param = request.query().get("path").value();
+      if (path_param.empty()) {
+        auto error_response =
+            utils::create_error_response("Path parameter is required");
+        response.send(Pistache::Http::Code::Bad_Request,
+                      error_response.toStyledString());
+        return;
+      }
+
+      auto &search =
+          owl::instance::VFSInstance<EmbeddedModel>::getInstance().get_search();
+      const std::string &content = search.getFileContentImpl(path_param);
+
+      auto data = utils::create_success_response(
+          {"path", "content", "size"}, path_param, content,
+          static_cast<Json::UInt64>(content.size()));
+
+      response.send(Pistache::Http::Code::Ok, data.toStyledString());
+
+    } catch (const std::exception &e) {
+      spdlog::error("Exception in file read: {}", e.what());
+      auto error_response = utils::create_error_response("File not found");
+      response.send(Pistache::Http::Code::Not_Found,
+                    error_response.toStyledString());
+    }
+  }
+
+  void handleSemanticSearch(const Pistache::Rest::Request &request,
+                            Pistache::Http::ResponseWriter response) {
+    addCorsHeaders(response);
+
+    try {
+      auto body = request.body();
+      Json::Value json;
+      Json::Reader reader;
+      if (!reader.parse(body, json)) {
+        auto error_response = utils::create_error_response("Invalid JSON");
+        response.send(Pistache::Http::Code::Bad_Request,
+                      error_response.toStyledString());
+        return;
+      }
+
+      if (!json.isMember("query")) {
+        auto error_response = utils::create_error_response("Missing 'query'");
+        response.send(Pistache::Http::Code::Bad_Request,
+                      error_response.toStyledString());
+        return;
+      }
+
+      const std::string query = json["query"].asString();
+      int limit = json.get("limit", 5).asInt();
+
+      auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance()
+                      .get_vector_fs();
+      auto results = vfs.get_search().semanticSearchImpl(query, limit);
+
+      Json::Value resultsJson(Json::arrayValue);
+      for (const auto &[path, score] : results) {
+        Json::Value resultJson;
+        resultJson["path"] = path;
+        resultJson["score"] = score;
+        resultsJson.append(resultJson);
+      }
+
+      auto response_data = utils::create_success_response(
+          {"query", "results", "count"}, query, resultsJson,
+          static_cast<int>(results.size()));
+
+      response.send(Pistache::Http::Code::Ok, response_data.toStyledString());
+
+    } catch (const std::exception &e) {
+      spdlog::error("Exception in semantic search: {}", e.what());
+      auto error_response =
+          utils::create_error_response("Internal server error");
+      response.send(Pistache::Http::Code::Internal_Server_Error,
+                    error_response.toStyledString());
+    }
+  }
+
+  void handleRebuild(const Pistache::Rest::Request &request,
+                     Pistache::Http::ResponseWriter response) {
+    addCorsHeaders(response);
+
+    auto response_data =
+        utils::create_success_response({"message"}, "Rebuild completed");
+    response.send(Pistache::Http::Code::Ok, response_data.toStyledString());
+  }
+
+private:
+  std::unique_ptr<Pistache::Http::Endpoint> httpEndpoint;
+  Pistache::Rest::Router router;
+};
 
 } // namespace owl::network
 
-#endif
+#endif // VECTORFS_PISTACHE_API_HPP
