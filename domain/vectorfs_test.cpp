@@ -332,6 +332,8 @@ void VectorFS::test_semantic_search() {
       hmm_model->add_sequence(pattern);
     }
 
+    hmm_model->train();
+
     (void)state_.get_search().rebuildIndex();
 
     auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
