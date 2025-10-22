@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
           _exit(1);
         });
 
-        owl::network::VectorFSApi<embedded::FastTextEmbedder> api;
+        owl::api::VectorFSApi<embedded::FastTextEmbedder> api;
         api.init();
         spdlog::info("Pistache initialized successfully");
 
