@@ -44,18 +44,21 @@ public:
   }
 
   void test_semantic_search() noexcept {
-    if (vector_fs_)
+    if (vector_fs_) {
       vector_fs_->test_semantic_search();
+    }
   }
 
   void test_markov_model() noexcept {
-    if (vector_fs_)
+    if (vector_fs_) {
       vector_fs_->test_markov_chains();
+    }
   }
 
   void test_container() noexcept {
-    if (vector_fs_)
+    if (vector_fs_) {
       vector_fs_->test_container();
+    }
   }
 
   int initialize_fuse(int argc, char *argv[]) {
@@ -87,7 +90,7 @@ public:
 
   std::string get_embedder_info() {
     if (!embedder_manager_) {
-      return "EmbedderManager<> not initialized";
+      return "EmbedderManager not initialized";
     }
 
     auto embedder_result = embedder_manager_->embedder();
@@ -102,14 +105,16 @@ public:
 
   vectorfs::VectorFS &get_vector_fs() const { return *vector_fs_; }
   chunkees::Search &get_search() {
-    if (!search_)
+    if (!search_) {
       throw std::runtime_error("Search not initialized");
+    }
     return *search_;
   }
 
   vectorfs::State &get_state() {
-    if (!state_)
+    if (!state_) {
       throw std::runtime_error("State not initialized");
+    }
     return *state_;
   }
 
