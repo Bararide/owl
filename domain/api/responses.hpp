@@ -122,25 +122,6 @@ validateFileCreateParams(const Json::Value &json) {
       std::make_pair(std::move(path), std::move(content)));
 }
 
-inline core::Result<std::pair<std::string, int>, std::string>
-validateSemanticSearchParams(const Json::Value &json) {
-  if (!json.isMember("query")) {
-    return core::Result<std::pair<std::string, int>, std::string>::Error(
-        "Missing 'query'");
-  }
-
-  const std::string query = json["query"].asString();
-  int limit = json.get("limit", 5).asInt();
-
-  if (query.empty()) {
-    return core::Result<std::pair<std::string, int>, std::string>::Error(
-        "Query cannot be empty");
-  }
-
-  return core::Result<std::pair<std::string, int>, std::string>::Ok(
-      std::make_pair(query, limit));
-}
-
 inline core::Result<bool, std::string> initializeSharedMemory() {
   auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
   if (!shm_manager.initialize()) {

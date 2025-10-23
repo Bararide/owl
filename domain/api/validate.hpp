@@ -19,12 +19,14 @@ public:
       return (validateField(body, accessor, obj) && ...);
     });
 
-    if (success) {
-      return core::Result<std::pair<std::string, int>, std::string>::Ok(
-          std::make_pair(obj.query, obj.limit));
-    } else {
-      return core::Result<std::pair<std::string, int>, std::string>::Error(
-          "Validation failed");
+    if (std::is_same_v<decltype(obj), SemanticSearch>) {
+      if (success) {
+        return core::Result<std::pair<std::string, int>, std::string>::Ok(
+            std::make_pair(obj.query, obj.limit));
+      } else {
+        return core::Result<std::pair<std::string, int>, std::string>::Error(
+            "Validation failed");
+      }
     }
   }
 
