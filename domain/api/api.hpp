@@ -2,11 +2,7 @@
 #define VECTORFS_PISTACHE_API_HPP
 
 #include "responses.hpp"
-#include <memory>
-#include <pistache/endpoint.h>
-#include <pistache/net.h>
-#include <pistache/router.h>
-#include <thread>
+#include "validate.hpp"
 
 namespace owl::api {
 
@@ -50,6 +46,8 @@ private:
                  Routes::bind(&VectorFSApi::handleFileCreate, this));
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::handleFileRead, this));
+    // Routes::Post(router, "/containers/create",
+    //              Routes::bind(&VecotFSApi::handleContainerCreate, this));
     Routes::Post(router, "/semantic",
                  Routes::bind(&VectorFSApi::handleSemanticSearch, this));
     Routes::Post(router, "/rebuild",
@@ -139,12 +137,21 @@ private:
     responses::handleJsonResult(result, response);
   }
 
+  // void handleContainerCreate(const Pistache::Rest::Reauest &request,
+  //                            Pistache::Http::ResponseWriter response) {
+  //   auto reuslt = responses::parseJsonBody(request.body()).and_then([
+  //   ](Json::Value json)) {
+  //     return responses::validate
+  //   }
+  // }
+
   void handleSemanticSearch(const Pistache::Rest::Request &request,
                             Pistache::Http::ResponseWriter response) {
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
-              return responses::validateSemanticSearchParams(json);
+              return validate::Validator::validate<validate::SemanticSearch>(
+                  json);
             })
             .map([this](std::pair<std::string, int> params) -> Json::Value {
               auto [query, limit] = params;
