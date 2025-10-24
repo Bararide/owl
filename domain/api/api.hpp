@@ -47,7 +47,7 @@ private:
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::handleFileRead, this));
     Routes::Post(router, "/containers/create",
-                Routes::bind(&VectorFSApi::handleContainerCreate, this));
+                 Routes::bind(&VectorFSApi::handleContainerCreate, this));
     Routes::Post(router, "/semantic",
                  Routes::bind(&VectorFSApi::handleSemanticSearch, this));
     Routes::Post(router, "/rebuild",
@@ -83,29 +83,29 @@ private:
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
-              return responses::validateFileCreateParams(json);
+              return validate::Validator::validate<validate::CreateFile>(json);
             })
-            .and_then([](std::pair<std::string, std::string> params) {
-              auto [path, content] = params;
+            .and_then([](validate::CreateFile params) {
+              auto [path, content, user_id, container_id] = params;
 
               spdlog::info("File path: {}", path);
               spdlog::info("Content length: {} bytes", content.size());
+              spdlog::info("Target container: {}", container_id);
+              spdlog::info("User: {}", user_id);
 
-              return responses::initializeSharedMemory()
-                  .and_then([path, content]() {
-                    return responses::addFileToSharedMemory(path, content);
-                  })
+              return responses::addFileToContainer<EmbeddedModel>(
+                         path, content, container_id, user_id)
                   .map([path, content]() -> std::pair<std::string, size_t> {
                     return {path, content.size()};
                   });
             })
             .map([](std::pair<std::string, size_t> result) -> Json::Value {
               auto [path, size] = result;
-              spdlog::info("Successfully added file to shared memory: {}",
-                           path);
+              spdlog::info("Successfully added file to container: {}", path);
               return utils::create_success_response(
-                  {"path", "size", "created"}, path,
-                  static_cast<Json::UInt64>(size), true);
+                  {"path", "size", "created", "container_id"}, path,
+                  static_cast<Json::UInt64>(size), true,
+                  "container_id_placeholder");
             });
 
     responses::handleJsonResult(result, response);

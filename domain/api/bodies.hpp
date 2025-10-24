@@ -15,6 +15,13 @@ struct SemanticSearch {
   int limit;
 };
 
+struct CreateFile {
+  std::string path;
+  std::string content;
+  std::string user_id;
+  std::string container_id;
+};
+
 struct CreateContainer {
   std::string user_id;
   std::string container_id;
@@ -30,6 +37,8 @@ struct CreateContainer {
 } // namespace owl::api::validate
 
 BOOST_HANA_ADAPT_STRUCT(owl::api::validate::SemanticSearch, query, limit);
+BOOST_HANA_ADAPT_STRUCT(owl::api::validate::CreateFile, path, content, user_id,
+                        container_id);
 BOOST_HANA_ADAPT_STRUCT(owl::api::validate::CreateContainer, user_id,
                         container_id, memory_limit, storage_quota, file_limit,
                         env_label, type_label, commands, privileged);
