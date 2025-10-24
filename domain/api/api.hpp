@@ -150,7 +150,7 @@ private:
             })
             .map([this](validate::CreateContainer params) -> Json::Value {
               std::string container_data_path =
-                  "my_fuse_mount/.containers" + params.container_id;
+                  "~/my_fuse_mount/.containers" + params.container_id;
 
               std::error_code ec;
               std::filesystem::remove_all(container_data_path, ec);
