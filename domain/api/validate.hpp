@@ -6,28 +6,25 @@
 #include <infrastructure/result.hpp>
 #include <json/value.h>
 #include <spdlog/spdlog.h>
+#include <utility>
+#include <vector>
 
 namespace owl::api::validate {
 
 class Validator {
 public:
   template <typename S>
-  static inline core::Result<std::pair<std::string, int>, std::string>
-  validate(const Json::Value &body) {
+  static inline core::Result<S, std::string> validate(const Json::Value &body) {
     S obj;
     bool success = hana::unpack(hana::accessors<S>(), [&](auto &&...accessor) {
       return (validateField(body, accessor, obj) && ...);
     });
 
-    if (std::is_same_v<decltype(obj), SemanticSearch>) {
-      if (success) {
-        return core::Result<std::pair<std::string, int>, std::string>::Ok(
-            std::make_pair(obj.query, obj.limit));
-      } else {
-        return core::Result<std::pair<std::string, int>, std::string>::Error(
-            "Validation failed");
-      }
+    if (success) {
+      return obj;
     }
+
+    return core::Result<S, std::string>::Error("Validation failed");
   }
 
 private:
@@ -66,6 +63,31 @@ private:
     } else if constexpr (std::is_same_v<U, double>) {
       if (json_value.isDouble()) {
         member_ref = json_value.asDouble();
+        return true;
+      }
+    } else if constexpr (std::is_same_v<U, size_t>) {
+      if (json_value.isUInt()) {
+        member_ref = json_value.asUInt();
+        return true;
+      }
+    } else if constexpr (std::is_same_v<U, std::vector<std::string>>) {
+      if (json_value.isArray()) {
+        member_ref.clear();
+        for (const auto &item : json_value) {
+          if (item.isString()) {
+            member_ref.push_back(item.asString());
+          } else {
+            return false;
+          }
+        }
+        return true;
+      }
+    } else if constexpr (std::is_same_v<U,
+                                        std::pair<std::string, std::string>>) {
+      if (json_value.isObject() && json_value.isMember("key") &&
+          json_value.isMember("value")) {
+        member_ref.first = json_value["key"].asString();
+        member_ref.second = json_value["value"].asString();
         return true;
       }
     }

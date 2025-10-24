@@ -46,8 +46,8 @@ private:
                  Routes::bind(&VectorFSApi::handleFileCreate, this));
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::handleFileRead, this));
-    // Routes::Post(router, "/containers/create",
-    //              Routes::bind(&VecotFSApi::handleContainerCreate, this));
+    Routes::Post(router, "/containers/create",
+                Routes::bind(&VectorFSApi::handleContainerCreate, this));
     Routes::Post(router, "/semantic",
                  Routes::bind(&VectorFSApi::handleSemanticSearch, this));
     Routes::Post(router, "/rebuild",
@@ -137,13 +137,96 @@ private:
     responses::handleJsonResult(result, response);
   }
 
-  // void handleContainerCreate(const Pistache::Rest::Reauest &request,
-  //                            Pistache::Http::ResponseWriter response) {
-  //   auto reuslt = responses::parseJsonBody(request.body()).and_then([
-  //   ](Json::Value json)) {
-  //     return responses::validate
-  //   }
-  // }
+  void handleContainerCreate(const Pistache::Rest::Request &request,
+                             Pistache::Http::ResponseWriter response) {
+    spdlog::info("=== Container Creation Request ===");
+    spdlog::info("Client IP: {}", request.address().host());
+
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<validate::CreateContainer>(
+                  json);
+            })
+            .map([this](validate::CreateContainer params) -> Json::Value {
+              std::string container_data_path =
+                  "/tmp/vectorfs_containers/" + params.container_id;
+
+              std::error_code ec;
+              std::filesystem::remove_all(container_data_path, ec);
+              if (ec) {
+                throw std::runtime_error(
+                    "Failed to remove existing directory: " + ec.message());
+              }
+
+              if (!std::filesystem::create_directories(container_data_path,
+                                                       ec)) {
+                throw std::runtime_error("Failed to create directory: " +
+                                         ec.message());
+              }
+
+              spdlog::info("Created clean data directory: {}",
+                           container_data_path);
+
+              auto &vfs_instance =
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+              auto &state = vfs_instance.get_state();
+
+              auto container_builder = ossec::ContainerBuilder::create();
+              auto container_result =
+                  container_builder.with_owner(params.user_id)
+                      .with_container_id(params.container_id)
+                      .with_data_path(container_data_path)
+                      .with_vectorfs_namespace("default")
+                      .with_supported_formats(
+                          {"txt", "json", "yaml", "cpp", "py"})
+                      .with_vector_search(true)
+                      .with_memory_limit(params.memory_limit)
+                      .with_storage_quota(params.storage_quota)
+                      .with_file_limit(params.file_limit)
+                      .with_label("environment", params.env_label.second)
+                      .with_label("type", params.type_label.second)
+                      .with_commands(params.commands)
+                      .privileged(params.privileged)
+                      .build();
+
+              if (!container_result.is_ok()) {
+                container_result.error().what();
+              }
+
+              auto container = container_result.value();
+              auto pid_container =
+                  std::make_shared<ossec::PidContainer>(std::move(container));
+
+              auto start_result = pid_container->start();
+              if (!start_result.is_ok()) {
+                start_result.error().what();
+              }
+
+              auto adapter = std::make_shared<vectorfs::OssecContainerAdapter>(
+                  pid_container, state.get_embedder_manager());
+
+              adapter->initialize_markov_chain();
+
+              if (!state.get_container_manager().register_container(adapter)) {
+                throw std::runtime_error(
+                    "Failed to register container in container manager");
+              }
+
+              spdlog::info("Successfully created and registered container: {}",
+                           params.container_id);
+
+              return utils::create_success_response(
+                  {"container_id", "status", "memory_limit", "storage_quota",
+                   "file_limit"},
+                  params.container_id, "running",
+                  static_cast<Json::UInt64>(params.memory_limit),
+                  static_cast<Json::UInt64>(params.storage_quota),
+                  static_cast<Json::UInt64>(params.file_limit));
+            });
+
+    responses::handleJsonResult(result, response);
+  }
 
   void handleSemanticSearch(const Pistache::Rest::Request &request,
                             Pistache::Http::ResponseWriter response) {
@@ -153,13 +236,16 @@ private:
               return validate::Validator::validate<validate::SemanticSearch>(
                   json);
             })
-            .map([this](std::pair<std::string, int> params) -> Json::Value {
+            .map([this](validate::SemanticSearch params) -> Json::Value {
               auto [query, limit] = params;
 
               auto &vfs =
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance()
                       .get_vector_fs();
               auto results = vfs.get_search().semanticSearchImpl(query, limit);
+
+              // auto createResult<Json::arrayValue>({"path", "score"},
+              // results);
 
               Json::Value resultsJson(Json::arrayValue);
               for (const auto &[path, score] : results) {

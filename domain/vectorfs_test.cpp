@@ -521,6 +521,7 @@ void VectorFS::test_markov_chains() {
 
   spdlog::info("Markov chains test completed");
 }
+
 void VectorFS::test_container() {
   try {
     std::string container_data_path = "/home/bararide/test_container_2";
