@@ -149,34 +149,29 @@ private:
                   json);
             })
             .map([this](validate::CreateContainer params) -> Json::Value {
-              std::string container_data_path =
-                  "~/my_fuse_mount/.containers" + params.container_id;
-
-              std::error_code ec;
-              std::filesystem::remove_all(container_data_path, ec);
-              if (ec) {
-                throw std::runtime_error(
-                    "Failed to remove existing directory: " + ec.message());
-              }
-
-              if (!std::filesystem::create_directories(container_data_path,
-                                                       ec)) {
-                throw std::runtime_error("Failed to create directory: " +
-                                         ec.message());
-              }
-
-              spdlog::info("Created clean data directory: {}",
-                           container_data_path);
-
+              // Используем VFSInstance для создания контейнера через FUSE
               auto &vfs_instance =
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance();
               auto &state = vfs_instance.get_state();
+              auto &container_manager = state.get_container_manager();
+
+              spdlog::info("Creating container via FUSE: {}",
+                           params.container_id);
+
+              auto existing_container =
+                  container_manager.get_container(params.container_id);
+              if (existing_container) {
+                throw std::runtime_error("Container already exists: " +
+                                         params.container_id);
+              }
 
               auto container_builder = ossec::ContainerBuilder::create();
               auto container_result =
                   container_builder.with_owner(params.user_id)
                       .with_container_id(params.container_id)
-                      .with_data_path(container_data_path)
+                      .with_data_path(
+                          "/home/bararide/my_fuse_mount/.containers/" +
+                          params.container_id)
                       .with_vectorfs_namespace("default")
                       .with_supported_formats(
                           {"txt", "json", "yaml", "cpp", "py"})
@@ -194,21 +189,27 @@ private:
                 container_result.error().what();
               }
 
+              spdlog::info(
+                  "Container built successfully, creating PID container...");
               auto container = container_result.value();
               auto pid_container =
                   std::make_shared<ossec::PidContainer>(std::move(container));
 
+              spdlog::info("Starting container...");
               auto start_result = pid_container->start();
               if (!start_result.is_ok()) {
                 start_result.error().what();
               }
 
+              spdlog::info("Creating container adapter...");
               auto adapter = std::make_shared<vectorfs::OssecContainerAdapter>(
                   pid_container, state.get_embedder_manager());
 
+              spdlog::info("Initializing Markov chain...");
               adapter->initialize_markov_chain();
 
-              if (!state.get_container_manager().register_container(adapter)) {
+              spdlog::info("Registering container in container manager...");
+              if (!container_manager.register_container(adapter)) {
                 throw std::runtime_error(
                     "Failed to register container in container manager");
               }
@@ -216,13 +217,21 @@ private:
               spdlog::info("Successfully created and registered container: {}",
                            params.container_id);
 
+              auto registered_container =
+                  container_manager.get_container(params.container_id);
+              if (!registered_container) {
+                throw std::runtime_error(
+                    "Container registration verification failed");
+              }
+
               return utils::create_success_response(
                   {"container_id", "status", "memory_limit", "storage_quota",
-                   "file_limit"},
+                   "file_limit", "fuse_path"},
                   params.container_id, "running",
                   static_cast<Json::UInt64>(params.memory_limit),
                   static_cast<Json::UInt64>(params.storage_quota),
-                  static_cast<Json::UInt64>(params.file_limit));
+                  static_cast<Json::UInt64>(params.file_limit),
+                  "/.containers/" + params.container_id);
             });
 
     responses::handleJsonResult(result, response);
@@ -243,9 +252,6 @@ private:
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance()
                       .get_vector_fs();
               auto results = vfs.get_search().semanticSearchImpl(query, limit);
-
-              // auto createResult<Json::arrayValue>({"path", "score"},
-              // results);
 
               Json::Value resultsJson(Json::arrayValue);
               for (const auto &[path, score] : results) {
