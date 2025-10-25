@@ -34,3 +34,6 @@
 [submodule "3dparty/pistache"]
 	path = 3dparty/pistache
 	url = https://github.com/pistacheio/pistache.git
+[submodule "3dparty/nanomsg"]
+	path = 3dparty/nanomsg
+	url = https://github.com/nanomsg/cppnanomsg.git

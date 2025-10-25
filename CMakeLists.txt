@@ -4,9 +4,6 @@ project(owl)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Убрать статическую линковку, она может вызывать проблемы
-# set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
-
 set(FAISS_ENABLE_GPU OFF CACHE BOOL "Disable GPU support" FORCE)
 set(FAISS_ENABLE_PYTHON OFF CACHE BOOL "Disable Python bindings" FORCE)
 set(FAISS_ENABLE_C_API OFF CACHE BOOL "Disable C API" FORCE)
@@ -17,14 +14,12 @@ pkg_check_modules(JSONCPP REQUIRED jsoncpp)
 pkg_check_modules(FUSE3 REQUIRED fuse3)
 pkg_check_modules(LZ4 REQUIRED liblz4)
 
-# Найти OpenSSL
 find_package(OpenSSL REQUIRED)
 
 find_package(fmt REQUIRED)
 
 add_subdirectory(3dparty/faiss EXCLUDE_FROM_ALL)
 
-# Отключить SSL в Pistache
 set(PISTACHE_USE_SSL OFF CACHE BOOL "Disable SSL support" FORCE)
 add_subdirectory(3dparty/pistache EXCLUDE_FROM_ALL)
 

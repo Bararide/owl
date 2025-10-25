@@ -38,16 +38,23 @@ struct SharedContainerInfo {
   char owner[256];
   char namespace_[256];
   char status[64];
-  size_t size;
+  char data_path[1024];
+  size_t memory_limit;
+  size_t storage_quota;
+  size_t file_limit;
   bool available;
+  bool privileged;
   char labels[1024];
   char commands[1024];
 
-  SharedContainerInfo() : size(0), available(false) {
+  SharedContainerInfo()
+      : memory_limit(0), storage_quota(0), file_limit(0), available(false),
+        privileged(false) {
     container_id[0] = '\0';
     owner[0] = '\0';
     namespace_[0] = '\0';
     status[0] = '\0';
+    data_path[0] = '\0';
     labels[0] = '\0';
     commands[0] = '\0';
   }
@@ -139,7 +146,9 @@ public:
 
   bool addContainer(const std::string &container_id, const std::string &owner,
                     const std::string &namespace_, const std::string &status,
-                    size_t size, bool available, const std::string &labels_json,
+                    const std::string &data_path, size_t memory_limit,
+                    size_t storage_quota, size_t file_limit, bool available,
+                    bool privileged, const std::string &labels_json,
                     const std::string &commands_json) {
     std::lock_guard<std::mutex> lock(data->mutex);
 
@@ -157,6 +166,7 @@ public:
     }
 
     SharedContainerInfo container_info;
+
     strncpy(container_info.container_id, container_id.c_str(),
             sizeof(container_info.container_id) - 1);
     container_info.container_id[sizeof(container_info.container_id) - 1] = '\0';
@@ -173,8 +183,15 @@ public:
             sizeof(container_info.status) - 1);
     container_info.status[sizeof(container_info.status) - 1] = '\0';
 
-    container_info.size = size;
+    strncpy(container_info.data_path, data_path.c_str(),
+            sizeof(container_info.data_path) - 1);
+    container_info.data_path[sizeof(container_info.data_path) - 1] = '\0';
+
+    container_info.memory_limit = memory_limit;
+    container_info.storage_quota = storage_quota;
+    container_info.file_limit = file_limit;
     container_info.available = available;
+    container_info.privileged = privileged;
 
     strncpy(container_info.labels, labels_json.c_str(),
             sizeof(container_info.labels) - 1);
@@ -189,8 +206,9 @@ public:
     data->containers_updated = true;
     data->needs_update = true;
 
-    spdlog::info("Added container to shared memory: {} (owner: {}, status: {})",
-                 container_id, owner, status);
+    spdlog::info(
+        "Added container to shared memory: {} (owner: {}, data_path: {})",
+        container_id, owner, data_path);
     return true;
   }
 

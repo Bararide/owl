@@ -29,7 +29,6 @@ private:
   static VectorFS *instance_;
 
   void updateFromSharedMemory();
-  void syncContainersFromSharedMemory();
 
   void initialize_container_paths();
   std::shared_ptr<IKnowledgeContainer>

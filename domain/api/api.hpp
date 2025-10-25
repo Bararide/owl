@@ -213,35 +213,35 @@ private:
                     "Failed to register container in container manager");
               }
               
-              spdlog::info("Adding container to shared memory...");
-              auto &shm_manager =
-                  owl::shared::SharedMemoryManager::getInstance();
-              if (shm_manager.initialize()) {
-                std::string labels_json =
-                    "{\"environment\":\"" + params.env_label.second +
-                    "\",\"type\":\"" + params.type_label.second + "\"}";
+              // spdlog::info("Adding container to shared memory...");
+              // auto &shm_manager =
+              //     owl::shared::SharedMemoryManager::getInstance();
+              // if (shm_manager.initialize()) {
+              //   std::string labels_json =
+              //       "{\"environment\":\"" + params.env_label.second +
+              //       "\",\"type\":\"" + params.type_label.second + "\"}";
 
-                std::string commands_json = "[";
-                for (size_t i = 0; i < params.commands.size(); ++i) {
-                  commands_json += "\"" + params.commands[i] + "\"";
-                  if (i < params.commands.size() - 1) {
-                    commands_json += ",";
-                  }
-                }
-                commands_json += "]";
+              //   std::string commands_json = "[";
+              //   for (size_t i = 0; i < params.commands.size(); ++i) {
+              //     commands_json += "\"" + params.commands[i] + "\"";
+              //     if (i < params.commands.size() - 1) {
+              //       commands_json += ",";
+              //     }
+              //   }
+              //   commands_json += "]";
 
-                shm_manager.addContainer(params.container_id, params.user_id,
-                                         "default", // namespace
-                                         "running", // status
-                                         0,         // size
-                                         true,      // available
-                                         labels_json, commands_json);
-                spdlog::info("Container {} successfully added to shared memory",
-                             params.container_id);
-              } else {
-                spdlog::warn(
-                    "Failed to initialize shared memory for container sync");
-              }
+              //   shm_manager.addContainer(params.container_id, params.user_id,
+              //                            "default",
+              //                            "running",
+              //                            0,
+              //                            true,
+              //                            labels_json, commands_json);
+              //   spdlog::info("Container {} successfully added to shared memory",
+              //                params.container_id);
+              // } else {
+              //   spdlog::warn(
+              //       "Failed to initialize shared memory for container sync");
+              // }
 
               spdlog::info("Successfully created and registered container: {}",
                            params.container_id);

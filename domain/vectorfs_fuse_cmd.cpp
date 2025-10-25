@@ -97,60 +97,6 @@ std::string VectorFS::handle_container_search(const std::string &container_id,
   return ss.str();
 }
 
-void VectorFS::syncContainersFromSharedMemory() {
-  if (!shm_manager || !shm_manager->initialize()) {
-    spdlog::warn("Failed to initialize shared memory for container sync");
-    return;
-  }
-
-  if (!shm_manager->containersNeedUpdate()) {
-    return;
-  }
-
-  spdlog::info("Syncing containers from shared memory...");
-
-  int container_count = shm_manager->getContainerCount();
-  for (int i = 0; i < container_count; i++) {
-    const auto *shared_container = shm_manager->getContainer(i);
-    if (shared_container) {
-      std::string container_id(shared_container->container_id);
-      std::string container_path = "/.containers/" + container_id;
-
-      virtual_dirs.insert(container_path);
-
-      std::string all_path = container_path + "/.all";
-      std::string debug_path = container_path + "/.debug";
-      std::string search_path = container_path + "/.search";
-
-      virtual_dirs.insert(search_path);
-
-      if (virtual_files.count(all_path) == 0) {
-        fileinfo::FileInfo fi;
-        fi.mode = S_IFREG | 0444;
-        fi.size = 0;
-        fi.content = "Container listing for " + container_id + "\n";
-        virtual_files[all_path] = fi;
-        spdlog::info("Created .all file for container: {}", container_id);
-      }
-
-      if (virtual_files.count(debug_path) == 0) {
-        fileinfo::FileInfo fi;
-        fi.mode = S_IFREG | 0444;
-        fi.size = 0;
-        fi.content = "Debug info for container: " + container_id + "\n";
-        virtual_files[debug_path] = fi;
-        spdlog::info("Created .debug file for container: {}", container_id);
-      }
-
-      spdlog::info("Synced container from shared memory: {}", container_id);
-    }
-  }
-
-  shm_manager->clearUpdateFlag();
-  spdlog::info("Container sync completed, added {} containers",
-               container_count);
-}
-
 void VectorFS::updateFromSharedMemory() {
   if (!shm_manager || !shm_manager->initialize()) {
     spdlog::warn("Failed to initialize shared memory in FUSE");
@@ -231,10 +177,6 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     stbuf->st_gid = getgid();
     stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
     return 0;
-  }
-
-  if (strncmp(path, "/.containers", 12) == 0) {
-    syncContainersFromSharedMemory();
   }
 
   if (strncmp(path, "/.containers/", 13) == 0) {
@@ -417,7 +359,6 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       }
     }
   } else if (strcmp(path, "/.containers") == 0) {
-    syncContainersFromSharedMemory();
 
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -464,8 +405,6 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       std::string container_id = path_str.substr(container_start);
       auto container =
           state_.get_container_manager().get_container(container_id);
-
-      syncContainersFromSharedMemory();
 
       if (container) {
         filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -524,10 +463,6 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, "neural", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, "python", nullptr, 0, FUSE_FILL_DIR_PLUS);
-  }
-
-  if (strcmp(path, "/") == 0 || strncmp(path, "/.containers", 12) == 0) {
-    syncContainersFromSharedMemory();
   }
 
   return 0;
