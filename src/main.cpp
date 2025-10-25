@@ -85,23 +85,24 @@ int main(int argc, char *argv[]) {
 
     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
 
-    // core::measure::Measure::start();
-    // vectorfs.test_semantic_search();
-    // core::measure::Measure::end();
-    // core::measure::Measure::result<std::chrono::milliseconds>(
-    //     "Semantic search test completed in {} ms");
 
-    // core::measure::Measure::start();
-    // vectorfs.test_markov_model();
-    // core::measure::Measure::end();
-    // core::measure::Measure::result<std::chrono::milliseconds>(
-    //     "Markov search test completed in {} ms");
+    core::measure::Measure::start();
+    vectorfs.test_semantic_search();
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "Semantic search test completed in {} ms");
 
-    // core::measure::Measure::start();
-    // vectorfs.test_container();
-    // core::measure::Measure::end();
-    // core::measure::Measure::result<std::chrono::milliseconds>(
-    //     "Container test completed in {} ms");
+    core::measure::Measure::start();
+    vectorfs.test_markov_model();
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "Markov search test completed in {} ms");
+
+    core::measure::Measure::start();
+    vectorfs.test_container();
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "Container test completed in {} ms");
 
     core::measure::Measure::start();
 
@@ -143,8 +144,9 @@ int main(int argc, char *argv[]) {
                    getpid(), http_pid);
 
       std::thread monitor_thread([http_pid]() {
+        spdlog::info("HTTP monitor thread started");
         int status;
-        while (true) {
+        while (running) {
           pid_t result = waitpid(http_pid, &status, WNOHANG);
           if (result == http_pid) {
             if (WIFEXITED(status)) {
@@ -154,20 +156,27 @@ int main(int argc, char *argv[]) {
               spdlog::error("HTTP process KILLED by signal: {}",
                             WTERMSIG(status));
             }
+            running = false;
             break;
           } else if (result == -1) {
             spdlog::error("waitpid error on HTTP process");
+            running = false;
             break;
           }
-          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          std::this_thread::sleep_for(std::chrono::seconds(1));
         }
+        spdlog::info("HTTP monitor thread exiting");
       });
       monitor_thread.detach();
 
-      std::this_thread::sleep_for(std::chrono::seconds(3));
+      std::this_thread::sleep_for(std::chrono::seconds(2));
+
+      spdlog::info("Mounting FUSE filesystem...");
 
       auto fuse_start = std::chrono::high_resolution_clock::now();
+
       int result = vectorfs.initialize_fuse(argc, argv);
+
       auto fuse_end = std::chrono::high_resolution_clock::now();
 
       core::measure::Measure::end();
@@ -176,6 +185,10 @@ int main(int argc, char *argv[]) {
 
       spdlog::info("FUSE exited with code: {}, total runtime: {} seconds",
                    result, total_duration.count());
+
+      running = false;
+
+      std::this_thread::sleep_for(std::chrono::seconds(1));
 
       spdlog::info("Stopping HTTP server...");
       if (kill(http_pid, SIGTERM) == 0) {

@@ -3,20 +3,20 @@
 namespace owl::vectorfs {
 
 void VectorFS::initialize_zeromq() {
-    try {
-        zmq_subscriber_ = std::make_unique<zmq::socket_t>(zmq_context_, ZMQ_SUB);
-        zmq_subscriber_->bind("tcp://*:5555");
-        zmq_subscriber_->set(zmq::sockopt::subscribe, "");
-        
-        zmq_subscriber_->set(zmq::sockopt::rcvtimeo, 0);
-        
-        running_ = true;
-        message_thread_ = std::thread(&VectorFS::process_messages, this);
-        
-        spdlog::info("ZeroMQ subscriber started on tcp://*:5555");
-    } catch (const zmq::error_t &e) {
-        spdlog::error("Failed to initialize ZeroMQ: {}", e.what());
-    }
+  try {
+    zmq_subscriber_ = std::make_unique<zmq::socket_t>(zmq_context_, ZMQ_SUB);
+    zmq_subscriber_->bind("tcp://*:5555");
+    zmq_subscriber_->set(zmq::sockopt::subscribe, "");
+
+    zmq_subscriber_->set(zmq::sockopt::rcvtimeo, 0);
+
+    running_ = true;
+    message_thread_ = std::thread(&VectorFS::process_messages, this);
+
+    spdlog::info("ZeroMQ subscriber started on tcp://*:5555");
+  } catch (const zmq::error_t &e) {
+    spdlog::error("Failed to initialize ZeroMQ: {}", e.what());
+  }
 }
 
 void VectorFS::process_messages() {
@@ -186,6 +186,11 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
 
     containers_[container_id] = container_info;
     container_adapters_[container_id] = adapter;
+
+    std::string container_path = "/containers/" + container_id;
+    virtual_dirs.insert(container_path);
+
+    virtual_dirs.insert("/containers");
 
     spdlog::info("Successfully created and registered container: {}",
                  container_id);

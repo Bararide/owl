@@ -284,26 +284,6 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".containers", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-    // if (shm_manager && shm_manager->initialize()) {
-    //   if (shm_manager->needsUpdate()) {
-    //     updateFromSharedMemory();
-    //     shm_manager->clearUpdateFlag();
-    //   }
-
-    //   int file_count = shm_manager->getFileCount();
-    //   for (int i = 0; i < file_count; i++) {
-    //     const auto *shared_info = shm_manager->getFile(i);
-    //     if (shared_info) {
-    //       std::string file_path(shared_info->path);
-    //       std::string file_name =
-    //           std::filesystem::path(file_path).filename().string();
-    //       if (!file_name.empty()) {
-    //         filler(buf, file_name.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-    //       }
-    //     }
-    //   }
-    // }
-
     for (const auto &file : virtual_files) {
       std::string file_name =
           std::filesystem::path(file.first).filename().string();
@@ -318,37 +298,20 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     spdlog::info("Reading /containers directory, found containers:");
 
-    auto containers = state_.get_container_manager().get_all_containers();
-    for (const auto &container : containers) {
-      spdlog::info("  - Container from manager: {}", container->get_id());
-      filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+    for (const auto &[container_id, container_info] : containers_) {
+      spdlog::info("  - Container from ZeroMQ: {} (status: {})", container_id,
+                   container_info.status);
+      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
 
-    // if (shm_manager && shm_manager->initialize()) {
-    //   int container_count = shm_manager->getContainerCount();
-    //   spdlog::info("Containers in shared memory: {}", container_count);
-
-    //   for (int i = 0; i < container_count; i++) {
-    //     const auto *shared_container = shm_manager->getContainer(i);
-    //     if (shared_container) {
-    //       std::string container_id(shared_container->container_id);
-    //       spdlog::info("  - Container from shared memory: {}", container_id);
-
-    //       bool exists = false;
-    //       for (const auto &container : containers) {
-    //         if (container->get_id() == container_id) {
-    //           exists = true;
-    //           break;
-    //         }
-    //       }
-
-    //       if (!exists) {
-    //         spdlog::info("  -> Adding missing container: {}", container_id);
-    //         filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-    //       }
-    //     }
-    //   }
-    // }
+    auto containers = state_.get_container_manager().get_all_containers();
+    for (const auto &container : containers) {
+      std::string container_id = container->get_id();
+      if (containers_.find(container_id) == containers_.end()) {
+        spdlog::info("  - Container from manager: {}", container_id);
+        filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+      }
+    }
   } else if (strncmp(path, "/.containers/", 13) == 0) {
     std::string path_str(path);
     size_t container_start = 13;
@@ -356,10 +319,11 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     if (container_end == std::string::npos) {
       std::string container_id = path_str.substr(container_start);
-      auto container =
-          state_.get_container_manager().get_container(container_id);
 
-      if (container) {
+      auto container_it = container_adapters_.find(container_id);
+      if (container_it != container_adapters_.end()) {
+        auto container = container_it->second;
+
         filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -373,25 +337,28 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             "Container {} directory listing: special files + {} real files",
             container_id, files.size());
       } else {
-        auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-        if (shm_manager.initialize() &&
-            shm_manager.findContainer(container_id)) {
+        auto container =
+            state_.get_container_manager().get_container(container_id);
+        if (container) {
           filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
-          spdlog::info(
-              "Container {} found only in shared memory, showing special files",
-              container_id);
+
+          auto files = container->list_files("/");
+          for (const auto &file : files) {
+            filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+          }
         }
       }
     } else {
       std::string container_id =
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
-      auto container =
-          state_.get_container_manager().get_container(container_id);
 
-      if (container) {
+      auto container_it = container_adapters_.find(container_id);
+      if (container_it != container_adapters_.end()) {
+        auto container = container_it->second;
+
         if (container_path == "/.search") {
           filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -404,12 +371,35 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
           }
         }
+      } else {
+        auto container =
+            state_.get_container_manager().get_container(container_id);
+        if (container) {
+          if (container_path == "/.search") {
+            filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
+            filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
+            filler(buf, "neural", nullptr, 0, FUSE_FILL_DIR_PLUS);
+            filler(buf, "python", nullptr, 0, FUSE_FILL_DIR_PLUS);
+            filler(buf, "cpp", nullptr, 0, FUSE_FILL_DIR_PLUS);
+          } else {
+            auto files = container->list_files(container_path);
+            for (const auto &file : files) {
+              filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+            }
+          }
+        }
       }
     }
   } else if (strcmp(path, "/.containers/.search") == 0) {
+    for (const auto &[container_id, container_info] : containers_) {
+      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+    }
     auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
-      filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+      std::string container_id = container->get_id();
+      if (containers_.find(container_id) == containers_.end()) {
+        filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+      }
     }
   } else if (strcmp(path, "/.search") == 0) {
     filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -456,17 +446,6 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   if (strcmp(path, "/.all") == 0) {
     std::stringstream ss;
     ss << "=== All Files ===\n\n";
-
-    // if (shm_manager && shm_manager->initialize()) {
-    //   int file_count = shm_manager->getFileCount();
-    //   for (int i = 0; i < file_count; i++) {
-    //     const auto *shared_info = shm_manager->getFile(i);
-    //     if (shared_info) {
-    //       ss << "SHM: " << shared_info->path << " (" << shared_info->size
-    //          << " bytes)\n";
-    //     }
-    //   }
-    // }
 
     for (const auto &[file_path, file_info] : virtual_files) {
       ss << "VIRT: " << file_path << " (" << file_info.size << " bytes)\n";
