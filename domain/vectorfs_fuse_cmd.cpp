@@ -1,3 +1,4 @@
+
 #include "vectorfs.hpp"
 
 namespace owl::vectorfs {
@@ -95,54 +96,6 @@ std::string VectorFS::handle_container_search(const std::string &container_id,
   }
 
   return ss.str();
-}
-
-void VectorFS::updateFromSharedMemory() {
-  if (!shm_manager || !shm_manager->initialize()) {
-    spdlog::warn("Failed to initialize shared memory in FUSE");
-    return;
-  }
-
-  if (!shm_manager->needsUpdate()) {
-    return;
-  }
-
-  spdlog::info("Updating from shared memory...");
-
-  int file_count = shm_manager->getFileCount();
-  for (int i = 0; i < file_count; i++) {
-    const auto *shared_info = shm_manager->getFile(i);
-    if (shared_info) {
-      std::string path(shared_info->path);
-
-      if (virtual_files.count(path) == 0) {
-        fileinfo::FileInfo fi;
-        fi.mode = shared_info->mode;
-        fi.size = shared_info->size;
-
-        fi.content = std::string(shared_info->content, shared_info->size);
-
-        fi.uid = shared_info->uid;
-        fi.gid = shared_info->gid;
-        fi.access_time = shared_info->access_time;
-        fi.modification_time = shared_info->modification_time;
-        fi.create_time = shared_info->create_time;
-
-        virtual_files[path] = fi;
-        spdlog::info("Added file from shared memory: {} ({} bytes)", path,
-                     shared_info->size);
-
-        auto add_result = state_.get_search().addFileImpl(path, fi.content);
-        if (!add_result.is_ok()) {
-          spdlog::warn("Failed to add file to search index: {} - {}", path,
-                       add_result.error().what());
-        }
-      }
-    }
-  }
-
-  shm_manager->clearUpdateFlag();
-  spdlog::info("Shared memory update completed, added {} files", file_count);
 }
 
 int VectorFS::getattr(const char *path, struct stat *stbuf,
@@ -331,25 +284,25 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".containers", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-    if (shm_manager && shm_manager->initialize()) {
-      if (shm_manager->needsUpdate()) {
-        updateFromSharedMemory();
-        shm_manager->clearUpdateFlag();
-      }
+    // if (shm_manager && shm_manager->initialize()) {
+    //   if (shm_manager->needsUpdate()) {
+    //     updateFromSharedMemory();
+    //     shm_manager->clearUpdateFlag();
+    //   }
 
-      int file_count = shm_manager->getFileCount();
-      for (int i = 0; i < file_count; i++) {
-        const auto *shared_info = shm_manager->getFile(i);
-        if (shared_info) {
-          std::string file_path(shared_info->path);
-          std::string file_name =
-              std::filesystem::path(file_path).filename().string();
-          if (!file_name.empty()) {
-            filler(buf, file_name.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-          }
-        }
-      }
-    }
+    //   int file_count = shm_manager->getFileCount();
+    //   for (int i = 0; i < file_count; i++) {
+    //     const auto *shared_info = shm_manager->getFile(i);
+    //     if (shared_info) {
+    //       std::string file_path(shared_info->path);
+    //       std::string file_name =
+    //           std::filesystem::path(file_path).filename().string();
+    //       if (!file_name.empty()) {
+    //         filler(buf, file_name.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+    //       }
+    //     }
+    //   }
+    // }
 
     for (const auto &file : virtual_files) {
       std::string file_name =
@@ -371,31 +324,31 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       filler(buf, container->get_id().c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
 
-    if (shm_manager && shm_manager->initialize()) {
-      int container_count = shm_manager->getContainerCount();
-      spdlog::info("Containers in shared memory: {}", container_count);
+    // if (shm_manager && shm_manager->initialize()) {
+    //   int container_count = shm_manager->getContainerCount();
+    //   spdlog::info("Containers in shared memory: {}", container_count);
 
-      for (int i = 0; i < container_count; i++) {
-        const auto *shared_container = shm_manager->getContainer(i);
-        if (shared_container) {
-          std::string container_id(shared_container->container_id);
-          spdlog::info("  - Container from shared memory: {}", container_id);
+    //   for (int i = 0; i < container_count; i++) {
+    //     const auto *shared_container = shm_manager->getContainer(i);
+    //     if (shared_container) {
+    //       std::string container_id(shared_container->container_id);
+    //       spdlog::info("  - Container from shared memory: {}", container_id);
 
-          bool exists = false;
-          for (const auto &container : containers) {
-            if (container->get_id() == container_id) {
-              exists = true;
-              break;
-            }
-          }
+    //       bool exists = false;
+    //       for (const auto &container : containers) {
+    //         if (container->get_id() == container_id) {
+    //           exists = true;
+    //           break;
+    //         }
+    //       }
 
-          if (!exists) {
-            spdlog::info("  -> Adding missing container: {}", container_id);
-            filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-          }
-        }
-      }
-    }
+    //       if (!exists) {
+    //         spdlog::info("  -> Adding missing container: {}", container_id);
+    //         filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+    //       }
+    //     }
+    //   }
+    // }
   } else if (strncmp(path, "/.containers/", 13) == 0) {
     std::string path_str(path);
     size_t container_start = 13;
@@ -504,16 +457,16 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     std::stringstream ss;
     ss << "=== All Files ===\n\n";
 
-    if (shm_manager && shm_manager->initialize()) {
-      int file_count = shm_manager->getFileCount();
-      for (int i = 0; i < file_count; i++) {
-        const auto *shared_info = shm_manager->getFile(i);
-        if (shared_info) {
-          ss << "SHM: " << shared_info->path << " (" << shared_info->size
-             << " bytes)\n";
-        }
-      }
-    }
+    // if (shm_manager && shm_manager->initialize()) {
+    //   int file_count = shm_manager->getFileCount();
+    //   for (int i = 0; i < file_count; i++) {
+    //     const auto *shared_info = shm_manager->getFile(i);
+    //     if (shared_info) {
+    //       ss << "SHM: " << shared_info->path << " (" << shared_info->size
+    //          << " bytes)\n";
+    //     }
+    //   }
+    // }
 
     for (const auto &[file_path, file_info] : virtual_files) {
       ss << "VIRT: " << file_path << " (" << file_info.size << " bytes)\n";

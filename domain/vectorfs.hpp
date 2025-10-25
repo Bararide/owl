@@ -13,10 +13,10 @@
 
 #include "file/fileinfo.hpp"
 #include "knowledge_container.hpp"
-#include "shared_memory/shared_memory.hpp"
 #include "state.hpp"
 #include <spdlog/spdlog.h>
 
+// ZeroMQ
 #include <nlohmann/json.hpp>
 #include <zmq.hpp>
 
@@ -27,10 +27,7 @@ private:
   std::map<std::string, fileinfo::FileInfo> virtual_files;
   std::set<std::string> virtual_dirs;
 
-  std::unique_ptr<owl::shared::SharedMemoryManager> shm_manager;
-
   State &state_;
-
   static VectorFS *instance_;
 
   zmq::context_t zmq_context_;
@@ -38,7 +35,21 @@ private:
   std::thread message_thread_;
   std::atomic<bool> running_{false};
 
-  void updateFromSharedMemory();
+  struct ContainerInfo {
+    std::string container_id;
+    std::string user_id;
+    std::string status;
+    std::string namespace_;
+    size_t size;
+    bool available;
+    std::map<std::string, std::string> labels;
+    std::vector<std::string> commands;
+  };
+
+  std::map<std::string, ContainerInfo> containers_;
+  std::map<std::string, std::shared_ptr<IKnowledgeContainer>>
+      container_adapters_;
+
   void initialize_container_paths();
   std::shared_ptr<IKnowledgeContainer>
   get_container_for_path(const std::string &path);
@@ -49,22 +60,21 @@ private:
 
   std::string generate_enhanced_search_result(const std::string &query);
   std::string generate_search_result(const std::string &query);
-
   std::string generate_markov_test_result();
 
-  // Новые методы для обработки ZeroMQ сообщений
   void initialize_zeromq();
   void process_messages();
   void handle_container_create(const nlohmann::json &message);
   void handle_file_create(const nlohmann::json &message);
+  void handle_container_stop(const nlohmann::json &message);
   bool create_container_from_message(const nlohmann::json &message);
   bool create_file_from_message(const nlohmann::json &message);
+  bool stop_container_from_message(const nlohmann::json &message);
 
 public:
   VectorFS(State &state) : state_{state}, zmq_context_(1) {
     virtual_dirs.insert("/");
     initialize_container_paths();
-    initialize_shared_memory();
     initialize_zeromq();
     instance_ = this;
   }
@@ -87,19 +97,6 @@ public:
 
   [[nodiscard]] const chunkees::Search &get_search() const noexcept {
     return state_.get_search();
-  }
-
-  void initialize_shared_memory() {
-    try {
-      shm_manager = std::make_unique<owl::shared::SharedMemoryManager>();
-      if (!shm_manager->initialize()) {
-        spdlog::warn("Failed to initialize shared memory");
-      } else {
-        spdlog::info("Shared memory initialized successfully");
-      }
-    } catch (const std::exception &e) {
-      spdlog::error("Failed to create shared memory manager: {}", e.what());
-    }
   }
 
   std::string get_embedder_info() const {
@@ -142,7 +139,6 @@ public:
     return result;
   }
 
-  // FUSE операции
   int getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi);
   int readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
               struct fuse_file_info *fi, enum fuse_readdir_flags flags);
@@ -162,7 +158,6 @@ public:
   int listxattr(const char *path, char *list, size_t size);
   int open(const char *path, struct fuse_file_info *fi);
 
-  // Статические callback'и для FUSE
   static inline int getattr_callback(const char *path, struct stat *stbuf,
                                      struct fuse_file_info *fi) {
     if (!instance_)

@@ -1,5 +1,5 @@
-#include "instance/instance.hpp"
 #include "api/api.hpp"
+#include "instance/instance.hpp"
 #include <atomic>
 #include <chrono>
 #include <clocale>
@@ -85,28 +85,23 @@ int main(int argc, char *argv[]) {
 
     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
 
-    auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-    if (!shm_manager.initialize()) {
-      spdlog::warn("Failed to initialize shared memory in main process");
-    }
+    // core::measure::Measure::start();
+    // vectorfs.test_semantic_search();
+    // core::measure::Measure::end();
+    // core::measure::Measure::result<std::chrono::milliseconds>(
+    //     "Semantic search test completed in {} ms");
 
-    core::measure::Measure::start();
-    vectorfs.test_semantic_search();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "Semantic search test completed in {} ms");
+    // core::measure::Measure::start();
+    // vectorfs.test_markov_model();
+    // core::measure::Measure::end();
+    // core::measure::Measure::result<std::chrono::milliseconds>(
+    //     "Markov search test completed in {} ms");
 
-    core::measure::Measure::start();
-    vectorfs.test_markov_model();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "Markov search test completed in {} ms");
-
-    core::measure::Measure::start();
-    vectorfs.test_container();
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "Container test completed in {} ms");
+    // core::measure::Measure::start();
+    // vectorfs.test_container();
+    // core::measure::Measure::end();
+    // core::measure::Measure::result<std::chrono::milliseconds>(
+    //     "Container test completed in {} ms");
 
     core::measure::Measure::start();
 
@@ -189,7 +184,8 @@ int main(int argc, char *argv[]) {
         spdlog::info("HTTP server terminated");
       }
 
-      owl::instance::VFSInstance<embedded::FastTextEmbedder>::shutdown();
+      owl::instance::VFSInstance<embedded::FastTextEmbedder,
+                                 owl::compression::Compressor>::shutdown();
       spdlog::info("VectorFS shutdown complete");
       return result;
     } else {
