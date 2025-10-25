@@ -125,18 +125,35 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
 
     spdlog::info("Creating container: {}", container_id);
 
-    if (containers_.find(container_id) != containers_.end()) {
-      spdlog::warn("Container already exists: {}", container_id);
+    auto existing_container =
+        state_.get_container_manager().get_container(container_id);
+    if (existing_container) {
+      spdlog::warn("Container already exists in main storage: {}",
+                   container_id);
       return false;
     }
+
+    std::string container_data_path =
+        "/home/bararide/my_fuse_mount/.containers/" + container_id;
+
+    if (std::filesystem::exists(container_data_path)) {
+      spdlog::warn("Container data directory already exists, cleaning: {}",
+                   container_data_path);
+      std::filesystem::remove_all(container_data_path);
+    }
+
+    std::filesystem::create_directories(container_data_path);
+    spdlog::info("Created clean container data directory: {}",
+                 container_data_path);
+
+    std::string unique_namespace = "container_" + container_id;
 
     auto container_builder = ossec::ContainerBuilder::create();
     auto container_result =
         container_builder.with_owner(user_id)
             .with_container_id(container_id)
-            .with_data_path("/home/bararide/my_fuse_mount/.containers/" +
-                            container_id)
-            .with_vectorfs_namespace("default")
+            .with_data_path(container_data_path)
+            .with_vectorfs_namespace(unique_namespace)
             .with_supported_formats({"txt", "json", "yaml", "cpp", "py"})
             .with_vector_search(true)
             .with_memory_limit(memory_limit)
@@ -154,7 +171,6 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
       return false;
     }
 
-    spdlog::info("Container built successfully, creating PID container...");
     auto container = container_result.value();
     auto pid_container =
         std::make_shared<ossec::PidContainer>(std::move(container));
@@ -174,11 +190,24 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     spdlog::info("Initializing Markov chain...");
     adapter->initialize_markov_chain();
 
+    if (!state_.get_container_manager().register_container(adapter)) {
+      spdlog::error("Failed to register container in main storage: {}",
+                    container_id);
+
+      auto stop_result = pid_container->stop();
+      if (!stop_result.is_ok()) {
+        spdlog::warn("Failed to stop container after registration failure: {}",
+                     stop_result.error().what());
+      }
+      return false;
+    }
+
     ContainerInfo container_info;
     container_info.container_id = container_id;
     container_info.user_id = user_id;
     container_info.status = "running";
-    container_info.namespace_ = "default";
+    container_info.namespace_ =
+        unique_namespace;
     container_info.size = 0;
     container_info.available = true;
     container_info.labels = {{"environment", env_label}, {"type", type_label}};
@@ -187,13 +216,23 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     containers_[container_id] = container_info;
     container_adapters_[container_id] = adapter;
 
-    std::string container_path = "/containers/" + container_id;
+    std::string container_path = "/.containers/" + container_id;
     virtual_dirs.insert(container_path);
+    virtual_dirs.insert("/.containers");
 
-    virtual_dirs.insert("/containers");
+    spdlog::info(
+        "Successfully created and registered container: {} with namespace: {}",
+        container_id, unique_namespace);
 
-    spdlog::info("Successfully created and registered container: {}",
-                 container_id);
+    auto files = adapter->list_files(container_data_path);
+    spdlog::info("Container initially contains {} files", files.size());
+    if (!files.empty()) {
+      spdlog::warn("Unexpected files in new container:");
+      for (const auto &file : files) {
+        spdlog::warn("  - {}", file);
+      }
+    }
+
     return true;
 
   } catch (const std::exception &e) {
@@ -212,16 +251,14 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
     spdlog::info("Creating file: {} in container: {}", path, container_id);
 
     if (!container_id.empty()) {
-      auto it = container_adapters_.find(container_id);
-      if (it == container_adapters_.end()) {
-        spdlog::error("Container not found: {}", container_id);
+      auto container =
+          state_.get_container_manager().get_container(container_id);
+      if (!container) {
+        spdlog::error("Container not found in main storage: {}", container_id);
         return false;
       }
 
-      auto &container = it->second;
-      auto container_info_it = containers_.find(container_id);
-      if (container_info_it == containers_.end() ||
-          container_info_it->second.user_id != user_id) {
+      if (container->get_owner() != user_id) {
         spdlog::error("User {} does not have access to container {}", user_id,
                       container_id);
         return false;
@@ -232,8 +269,6 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
         spdlog::error("Failed to create file in container");
         return false;
       }
-
-      containers_[container_id].size += content.size();
 
       spdlog::info("File {} successfully created in container {}", path,
                    container_id);
@@ -274,18 +309,27 @@ bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
 
     spdlog::info("Stopping container: {}", container_id);
 
-    auto it = container_adapters_.find(container_id);
-    if (it == container_adapters_.end()) {
-      spdlog::warn("Container not found: {}", container_id);
+    auto container = state_.get_container_manager().get_container(container_id);
+    if (!container) {
+      spdlog::warn("Container not found in main storage: {}", container_id);
       return false;
     }
 
-    auto &container_adapter = it->second;
+    if (!state_.get_container_manager().unregister_container(container_id)) {
+      spdlog::warn("Failed to unregister container from main storage: {}",
+                   container_id);
+    }
 
-    containers_[container_id].status = "stopped";
-    containers_[container_id].available = false;
+    auto it = containers_.find(container_id);
+    if (it != containers_.end()) {
+      it->second.status = "stopped";
+      it->second.available = false;
+    }
 
-    spdlog::info("Container {} stopped successfully", container_id);
+    container_adapters_.erase(container_id);
+
+    spdlog::info("Container {} stopped and unregistered successfully",
+                 container_id);
     return true;
 
   } catch (const std::exception &e) {

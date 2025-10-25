@@ -32,6 +32,10 @@ public:
     return container_->get_container().vectorfs_config.mount_namespace;
   }
 
+  std::string get_data_path() const override {
+    return container_->get_container().data_path.string();
+  }
+
   std::vector<std::string> get_commands() const override {
     return container_->get_container().vectorfs_config.commands;
   }
@@ -43,6 +47,10 @@ public:
   std::vector<std::string> list_files(const std::string &path) const override {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;
+
+    spdlog::debug("Listing files in: '{}' (full path: {})", path,
+                  full_path.string());
+
     std::vector<std::string> files;
 
     try {
@@ -53,25 +61,18 @@ public:
              std::filesystem::directory_iterator(full_path)) {
           std::string filename = entry.path().filename().string();
 
-          static const std::set<std::string> system_dirs = {
-              "lost+found", "sys",      "proc",    "dev",  "boot",  "lib",
-              "lib64",      "usr",      "var",     "tmp",  "run",   "mnt",
-              "media",      "srv",      "opt",     "sbin", "bin",   "root",
-              "home",       "etc",      "cdrom",   "snap", "lib32", "libx32",
-              "srv",        "swapfile", "swap.img"};
-
-          if (system_dirs.count(filename) > 0) {
-            continue;
-          }
-
           files.push_back(filename);
         }
+      } else {
+        spdlog::warn("Directory does not exist or is not a directory: {}",
+                     full_path.string());
       }
     } catch (const std::exception &e) {
       spdlog::error("Error listing files in {}: {}", full_path.string(),
                     e.what());
     }
 
+    spdlog::debug("Found {} files in '{}'", files.size(), path);
     return files;
   }
 
@@ -154,18 +155,18 @@ public:
   void initialize_search() {
     spdlog::info("Initializing search for container: {}", get_id());
 
-    auto files = list_files("/");
+    auto files = list_files(container_->get_container().data_path.string());
+
     size_t indexed_count = 0;
 
     for (const auto &file : files) {
-      std::string file_path = "/" + file;
+      std::string file_path = file;
       std::string content = get_file_content(file_path);
 
       if (!content.empty()) {
         auto result = search_->addFileImpl(file_path, content);
         if (result.is_ok()) {
           indexed_count++;
-
           record_file_access(file_path, "read");
         } else {
           spdlog::warn("Failed to index file during initialization: {} - {}",
@@ -411,7 +412,7 @@ public:
     spdlog::info("Updating embeddings for all files in container: {}",
                  get_id());
 
-    auto files = list_files("/");
+    auto files = list_files(container_->get_container().data_path.string());
     size_t updated_count = 0;
 
     for (const auto &file : files) {
