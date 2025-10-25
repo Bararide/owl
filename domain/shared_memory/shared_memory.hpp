@@ -33,13 +33,38 @@ struct SharedFileInfo {
   }
 };
 
+struct SharedContainerInfo {
+  char container_id[256];
+  char owner[256];
+  char namespace_[256];
+  char status[64];
+  size_t size;
+  bool available;
+  char labels[1024];
+  char commands[1024];
+
+  SharedContainerInfo() : size(0), available(false) {
+    container_id[0] = '\0';
+    owner[0] = '\0';
+    namespace_[0] = '\0';
+    status[0] = '\0';
+    labels[0] = '\0';
+    commands[0] = '\0';
+  }
+};
+
 struct SharedMemoryData {
   std::mutex mutex;
   int file_count;
   SharedFileInfo files[100];
+  int container_count;
+  SharedContainerInfo containers[50];
   bool needs_update;
+  bool containers_updated;
 
-  SharedMemoryData() : file_count(0), needs_update(false) {}
+  SharedMemoryData()
+      : file_count(0), container_count(0), needs_update(false),
+        containers_updated(false) {}
 };
 
 class SharedMemoryManager {
@@ -78,7 +103,7 @@ public:
     spdlog::info("Shared memory initialized successfully");
     return true;
   }
-  
+
   bool addFile(const std::string &path, const std::string &content) {
     std::lock_guard<std::mutex> lock(data->mutex);
 
@@ -112,14 +137,95 @@ public:
     return true;
   }
 
+  bool addContainer(const std::string &container_id, const std::string &owner,
+                    const std::string &namespace_, const std::string &status,
+                    size_t size, bool available, const std::string &labels_json,
+                    const std::string &commands_json) {
+    std::lock_guard<std::mutex> lock(data->mutex);
+
+    if (data->container_count >= 50) {
+      spdlog::error("Shared memory full, cannot add more containers");
+      return false;
+    }
+
+    for (int i = 0; i < data->container_count; i++) {
+      if (strcmp(data->containers[i].container_id, container_id.c_str()) == 0) {
+        spdlog::warn("Container already exists in shared memory: {}",
+                     container_id);
+        return true;
+      }
+    }
+
+    SharedContainerInfo container_info;
+    strncpy(container_info.container_id, container_id.c_str(),
+            sizeof(container_info.container_id) - 1);
+    container_info.container_id[sizeof(container_info.container_id) - 1] = '\0';
+
+    strncpy(container_info.owner, owner.c_str(),
+            sizeof(container_info.owner) - 1);
+    container_info.owner[sizeof(container_info.owner) - 1] = '\0';
+
+    strncpy(container_info.namespace_, namespace_.c_str(),
+            sizeof(container_info.namespace_) - 1);
+    container_info.namespace_[sizeof(container_info.namespace_) - 1] = '\0';
+
+    strncpy(container_info.status, status.c_str(),
+            sizeof(container_info.status) - 1);
+    container_info.status[sizeof(container_info.status) - 1] = '\0';
+
+    container_info.size = size;
+    container_info.available = available;
+
+    strncpy(container_info.labels, labels_json.c_str(),
+            sizeof(container_info.labels) - 1);
+    container_info.labels[sizeof(container_info.labels) - 1] = '\0';
+
+    strncpy(container_info.commands, commands_json.c_str(),
+            sizeof(container_info.commands) - 1);
+    container_info.commands[sizeof(container_info.commands) - 1] = '\0';
+
+    data->containers[data->container_count] = container_info;
+    data->container_count++;
+    data->containers_updated = true;
+    data->needs_update = true;
+
+    spdlog::info("Added container to shared memory: {} (owner: {}, status: {})",
+                 container_id, owner, status);
+    return true;
+  }
+
+  bool removeContainer(const std::string &container_id) {
+    std::lock_guard<std::mutex> lock(data->mutex);
+
+    for (int i = 0; i < data->container_count; i++) {
+      if (strcmp(data->containers[i].container_id, container_id.c_str()) == 0) {
+        for (int j = i; j < data->container_count - 1; j++) {
+          data->containers[j] = data->containers[j + 1];
+        }
+        data->container_count--;
+        data->containers_updated = true;
+        data->needs_update = true;
+
+        spdlog::info("Removed container from shared memory: {}", container_id);
+        return true;
+      }
+    }
+
+    spdlog::warn("Container not found in shared memory: {}", container_id);
+    return false;
+  }
+
   bool needsUpdate() const { return data->needs_update; }
+  bool containersNeedUpdate() const { return data->containers_updated; }
 
   void clearUpdateFlag() {
     std::lock_guard<std::mutex> lock(data->mutex);
     data->needs_update = false;
+    data->containers_updated = false;
   }
 
   int getFileCount() const { return data->file_count; }
+  int getContainerCount() const { return data->container_count; }
 
   const SharedFileInfo *getFile(int index) const {
     if (index < 0 || index >= data->file_count) {
@@ -128,9 +234,33 @@ public:
     return &data->files[index];
   }
 
+  const SharedContainerInfo *getContainer(int index) const {
+    if (index < 0 || index >= data->container_count) {
+      return nullptr;
+    }
+    return &data->containers[index];
+  }
+
+  const SharedContainerInfo *
+  findContainer(const std::string &container_id) const {
+    for (int i = 0; i < data->container_count; i++) {
+      if (strcmp(data->containers[i].container_id, container_id.c_str()) == 0) {
+        return &data->containers[i];
+      }
+    }
+    return nullptr;
+  }
+
   void clearFiles() {
     std::lock_guard<std::mutex> lock(data->mutex);
     data->file_count = 0;
+    data->needs_update = true;
+  }
+
+  void clearContainers() {
+    std::lock_guard<std::mutex> lock(data->mutex);
+    data->container_count = 0;
+    data->containers_updated = true;
     data->needs_update = true;
   }
 
