@@ -3,17 +3,22 @@
 
 #define FUSE_USE_VERSION 31
 
+#include <atomic>
 #include <fuse3/fuse.h>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
+#include <thread>
 
 #include "file/fileinfo.hpp"
 #include "knowledge_container.hpp"
 #include "shared_memory/shared_memory.hpp"
 #include "state.hpp"
 #include <spdlog/spdlog.h>
+
+#include <nlohmann/json.hpp>
+#include <zmq.hpp>
 
 namespace owl::vectorfs {
 
@@ -28,8 +33,12 @@ private:
 
   static VectorFS *instance_;
 
-  void updateFromSharedMemory();
+  zmq::context_t zmq_context_;
+  std::unique_ptr<zmq::socket_t> zmq_subscriber_;
+  std::thread message_thread_;
+  std::atomic<bool> running_{false};
 
+  void updateFromSharedMemory();
   void initialize_container_paths();
   std::shared_ptr<IKnowledgeContainer>
   get_container_for_path(const std::string &path);
@@ -43,12 +52,29 @@ private:
 
   std::string generate_markov_test_result();
 
+  // Новые методы для обработки ZeroMQ сообщений
+  void initialize_zeromq();
+  void process_messages();
+  void handle_container_create(const nlohmann::json &message);
+  void handle_file_create(const nlohmann::json &message);
+  bool create_container_from_message(const nlohmann::json &message);
+  bool create_file_from_message(const nlohmann::json &message);
+
 public:
-  VectorFS(State &state) : state_{state} {
+  VectorFS(State &state) : state_{state}, zmq_context_(1) {
     virtual_dirs.insert("/");
     initialize_container_paths();
     initialize_shared_memory();
+    initialize_zeromq();
     instance_ = this;
+  }
+
+  ~VectorFS() {
+    running_ = false;
+    if (message_thread_.joinable()) {
+      message_thread_.join();
+    }
+    instance_ = nullptr;
   }
 
   void test_semantic_search();
@@ -116,6 +142,7 @@ public:
     return result;
   }
 
+  // FUSE операции
   int getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi);
   int readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
               struct fuse_file_info *fi, enum fuse_readdir_flags flags);
@@ -135,8 +162,7 @@ public:
   int listxattr(const char *path, char *list, size_t size);
   int open(const char *path, struct fuse_file_info *fi);
 
-  ~VectorFS() { instance_ = nullptr; }
-
+  // Статические callback'и для FUSE
   static inline int getattr_callback(const char *path, struct stat *stbuf,
                                      struct fuse_file_info *fi) {
     if (!instance_)

@@ -4,18 +4,23 @@ project(owl)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ZMQ REQUIRED libzmq)
+pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+pkg_check_modules(FUSE3 REQUIRED fuse3)
+pkg_check_modules(LZ4 REQUIRED liblz4)
+
+set(ZeroMQ_FOUND ${ZMQ_FOUND})
+set(ZeroMQ_INCLUDE_DIRS ${ZMQ_INCLUDE_DIRS})
+set(ZeroMQ_LIBRARIES ${ZMQ_LIBRARIES})
+
+
 set(FAISS_ENABLE_GPU OFF CACHE BOOL "Disable GPU support" FORCE)
 set(FAISS_ENABLE_PYTHON OFF CACHE BOOL "Disable Python bindings" FORCE)
 set(FAISS_ENABLE_C_API OFF CACHE BOOL "Disable C API" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "Disable testing" FORCE)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-pkg_check_modules(FUSE3 REQUIRED fuse3)
-pkg_check_modules(LZ4 REQUIRED liblz4)
-
 find_package(OpenSSL REQUIRED)
-
 find_package(fmt REQUIRED)
 
 add_subdirectory(3dparty/faiss EXCLUDE_FROM_ALL)
@@ -44,6 +49,7 @@ target_include_directories(owl PRIVATE
     ${CMAKE_SOURCE_DIR}/lib/cppcore
     ${CMAKE_SOURCE_DIR}/lib/cppcore/infrastructure
     ${OPENSSL_INCLUDE_DIR}
+    ${ZMQ_INCLUDE_DIRS}
 )
 
 target_link_libraries(owl faiss)
@@ -61,6 +67,7 @@ target_link_libraries(owl Boost::url)
 target_link_libraries(owl fmt::fmt)
 target_link_libraries(owl ${LZ4_LIBRARIES})
 target_link_libraries(owl OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(owl ${ZMQ_LIBRARIES})
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(owl PRIVATE -mavx2 -mfma)

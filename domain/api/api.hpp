@@ -1,6 +1,7 @@
 #ifndef VECTORFS_PISTACHE_API_HPP
 #define VECTORFS_PISTACHE_API_HPP
 
+#include "publisher.hpp"
 #include "responses.hpp"
 #include "validate.hpp"
 
@@ -10,7 +11,8 @@ template <typename EmbeddedModel> class VectorFSApi {
 public:
   VectorFSApi()
       : httpEndpoint(std::make_unique<Pistache::Http::Endpoint>(
-            Pistache::Address("0.0.0.0", 9999))) {}
+            Pistache::Address("0.0.0.0", 9999))),
+        publisher_(std::make_unique<pub::MessagePublisher>()) {}
 
   void init() {
     spdlog::info("Initializing Pistache API...");
@@ -85,7 +87,7 @@ private:
             .and_then([](Json::Value json) {
               return validate::Validator::validate<validate::CreateFile>(json);
             })
-            .and_then([](validate::CreateFile params) {
+            .and_then([this](validate::CreateFile params) {
               auto [path, content, user_id, container_id] = params;
 
               spdlog::info("File path: {}", path);
@@ -93,19 +95,26 @@ private:
               spdlog::info("Target container: {}", container_id);
               spdlog::info("User: {}", user_id);
 
-              return responses::addFileToContainer<EmbeddedModel>(
-                         path, content, container_id, user_id)
-                  .map([path, content]() -> std::pair<std::string, size_t> {
-                    return {path, content.size()};
-                  });
+              if (publisher_->sendFileCreate(path, content, user_id,
+                                             container_id)) {
+                spdlog::info("File creation message sent via ZeroMQ: {}", path);
+                return core::
+                    Result<std::pair<std::string, size_t>, std::string>::Ok(
+                        std::make_pair(path, content.size()));
+              } else {
+                return core::
+                    Result<std::pair<std::string, size_t>, std::string>::Error(
+                        "Failed to send file creation message");
+              }
             })
             .map([](std::pair<std::string, size_t> result) -> Json::Value {
               auto [path, size] = result;
-              spdlog::info("Successfully added file to container: {}", path);
+              spdlog::info("File creation request sent: {}", path);
               return utils::create_success_response(
-                  {"path", "size", "created", "container_id"}, path,
+                  {"path", "size", "created", "container_id", "message"}, path,
                   static_cast<Json::UInt64>(size), true,
-                  "container_id_placeholder");
+                  "container_id_placeholder",
+                  "File creation request sent to FUSE process");
             });
 
     responses::handleJsonResult(result, response);
@@ -149,118 +158,27 @@ private:
                   json);
             })
             .map([this](validate::CreateContainer params) -> Json::Value {
-              auto &vfs_instance =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-              auto &state = vfs_instance.get_state();
-              auto &container_manager = state.get_container_manager();
+              if (publisher_->sendContainerCreate(
+                      params.container_id, params.user_id, params.memory_limit,
+                      params.storage_quota, params.file_limit,
+                      params.privileged, params.env_label.second,
+                      params.type_label.second, params.commands)) {
 
-              spdlog::info("Creating container via FUSE: {}",
-                           params.container_id);
+                spdlog::info("Container creation message sent via ZeroMQ: {}",
+                             params.container_id);
 
-              auto existing_container =
-                  container_manager.get_container(params.container_id);
-              if (existing_container) {
-                throw std::runtime_error("Container already exists: " +
-                                         params.container_id);
-              }
-
-              auto container_builder = ossec::ContainerBuilder::create();
-              auto container_result =
-                  container_builder.with_owner(params.user_id)
-                      .with_container_id(params.container_id)
-                      .with_data_path(
-                          "/home/bararide/my_fuse_mount/.containers/" +
-                          params.container_id)
-                      .with_vectorfs_namespace("default")
-                      .with_supported_formats(
-                          {"txt", "json", "yaml", "cpp", "py"})
-                      .with_vector_search(true)
-                      .with_memory_limit(params.memory_limit)
-                      .with_storage_quota(params.storage_quota)
-                      .with_file_limit(params.file_limit)
-                      .with_label("environment", params.env_label.second)
-                      .with_label("type", params.type_label.second)
-                      .with_commands(params.commands)
-                      .privileged(params.privileged)
-                      .build();
-
-              if (!container_result.is_ok()) {
-                container_result.error().what();
-              }
-
-              spdlog::info(
-                  "Container built successfully, creating PID container...");
-              auto container = container_result.value();
-              auto pid_container =
-                  std::make_shared<ossec::PidContainer>(std::move(container));
-
-              spdlog::info("Starting container...");
-              auto start_result = pid_container->start();
-              if (!start_result.is_ok()) {
-                start_result.error().what();
-              }
-
-              spdlog::info("Creating container adapter...");
-              auto adapter = std::make_shared<vectorfs::OssecContainerAdapter>(
-                  pid_container, state.get_embedder_manager());
-
-              spdlog::info("Initializing Markov chain...");
-              adapter->initialize_markov_chain();
-
-              spdlog::info("Registering container in container manager...");
-              if (!container_manager.register_container(adapter)) {
+                return utils::create_success_response(
+                    {"container_id", "status", "memory_limit", "storage_quota",
+                     "file_limit", "message"},
+                    params.container_id, "pending",
+                    static_cast<Json::UInt64>(params.memory_limit),
+                    static_cast<Json::UInt64>(params.storage_quota),
+                    static_cast<Json::UInt64>(params.file_limit),
+                    "Container creation request sent to FUSE process");
+              } else {
                 throw std::runtime_error(
-                    "Failed to register container in container manager");
+                    "Failed to send container creation message");
               }
-              
-              // spdlog::info("Adding container to shared memory...");
-              // auto &shm_manager =
-              //     owl::shared::SharedMemoryManager::getInstance();
-              // if (shm_manager.initialize()) {
-              //   std::string labels_json =
-              //       "{\"environment\":\"" + params.env_label.second +
-              //       "\",\"type\":\"" + params.type_label.second + "\"}";
-
-              //   std::string commands_json = "[";
-              //   for (size_t i = 0; i < params.commands.size(); ++i) {
-              //     commands_json += "\"" + params.commands[i] + "\"";
-              //     if (i < params.commands.size() - 1) {
-              //       commands_json += ",";
-              //     }
-              //   }
-              //   commands_json += "]";
-
-              //   shm_manager.addContainer(params.container_id, params.user_id,
-              //                            "default",
-              //                            "running",
-              //                            0,
-              //                            true,
-              //                            labels_json, commands_json);
-              //   spdlog::info("Container {} successfully added to shared memory",
-              //                params.container_id);
-              // } else {
-              //   spdlog::warn(
-              //       "Failed to initialize shared memory for container sync");
-              // }
-
-              spdlog::info("Successfully created and registered container: {}",
-                           params.container_id);
-
-              auto registered_container =
-                  container_manager.get_container(params.container_id);
-              if (!registered_container) {
-                throw std::runtime_error(
-                    "Container registration verification failed");
-              }
-
-              return utils::create_success_response(
-                  {"container_id", "status", "memory_limit", "storage_quota",
-                   "file_limit", "fuse_path"},
-                  params.container_id, "running",
-                  static_cast<Json::UInt64>(params.memory_limit),
-                  static_cast<Json::UInt64>(params.storage_quota),
-                  static_cast<Json::UInt64>(params.file_limit),
-                  "/.containers/" + params.container_id);
             });
 
     responses::handleJsonResult(result, response);
@@ -308,6 +226,7 @@ private:
 private:
   std::unique_ptr<Pistache::Http::Endpoint> httpEndpoint;
   Pistache::Rest::Router router;
+  std::unique_ptr<pub::MessagePublisher> publisher_;
 };
 
 } // namespace owl::api

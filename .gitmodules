@@ -37,3 +37,6 @@
 [submodule "3dparty/nanomsg"]
 	path = 3dparty/nanomsg
 	url = https://github.com/nanomsg/cppnanomsg.git
+[submodule "3dparty/zmq"]
+	path = 3dparty/zmq
+	url = https://github.com/zeromq/cppzmq.git
