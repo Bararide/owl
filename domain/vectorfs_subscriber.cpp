@@ -134,7 +134,7 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     auto container_result =
         container_builder.with_owner(user_id)
             .with_container_id(container_id)
-            .with_data_path("/home/bararide/my_fuse_mount/.containers/" +
+            .with_data_path("/tmp/" +
                             container_id)
             .with_vectorfs_namespace("default")
             .with_supported_formats({"txt", "json", "yaml", "cpp", "py"})

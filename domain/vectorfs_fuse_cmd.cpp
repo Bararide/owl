@@ -622,7 +622,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   }
 
   if (strcmp(path, "/.markov") == 0) {
-    test_markov_chains();
+    // test_markov_chains();
     std::string content = generate_markov_test_result();
 
     if (offset >= static_cast<off_t>(content.size())) {
