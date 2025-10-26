@@ -1,4 +1,3 @@
-
 #include "vectorfs.hpp"
 
 namespace owl::vectorfs {
@@ -189,7 +188,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
           std::string content = container->get_file_content(container_path);
           stbuf->st_size = content.size();
         } else {
-          auto files = container->list_files(container_path);
+          std::vector<std::string> files = {""};
           if (!files.empty()) {
             stbuf->st_mode = S_IFDIR | 0555;
             stbuf->st_nlink = 2;
@@ -298,19 +297,11 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     spdlog::info("Reading /containers directory, found containers:");
 
-    for (const auto &[container_id, container_info] : containers_) {
-      spdlog::info("  - Container from ZeroMQ: {} (status: {})", container_id,
-                   container_info.status);
-      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-    }
-
     auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
       std::string container_id = container->get_id();
-      if (containers_.find(container_id) == containers_.end()) {
-        spdlog::info("  - Container from manager: {}", container_id);
-        filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-      }
+      spdlog::info("  - Container: {}", container_id);
+      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
   } else if (strncmp(path, "/.containers/", 13) == 0) {
     std::string path_str(path);
@@ -320,10 +311,8 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     if (container_end == std::string::npos) {
       std::string container_id = path_str.substr(container_start);
 
-      auto container_it = container_adapters_.find(container_id);
-      if (container_it != container_adapters_.end()) {
-        auto container = container_it->second;
-
+      auto container = state_.get_container_manager().get_container(container_id);
+      if (container) {
         filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -332,33 +321,14 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         for (const auto &file : files) {
           filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
         }
-
-        spdlog::info(
-            "Container {} directory listing: special files + {} real files",
-            container_id, files.size());
-      } else {
-        auto container =
-            state_.get_container_manager().get_container(container_id);
-        if (container) {
-          filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
-          filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
-          filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
-
-          auto files = container->list_files(container->get_data_path());
-          for (const auto &file : files) {
-            filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-          }
-        }
       }
     } else {
       std::string container_id =
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
 
-      auto container_it = container_adapters_.find(container_id);
-      if (container_it != container_adapters_.end()) {
-        auto container = container_it->second;
-
+      auto container = state_.get_container_manager().get_container(container_id);
+      if (container) {
         if (container_path == "/.search") {
           filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -371,35 +341,13 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
           }
         }
-      } else {
-        auto container =
-            state_.get_container_manager().get_container(container_id);
-        if (container) {
-          if (container_path == "/.search") {
-            filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "neural", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "python", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "cpp", nullptr, 0, FUSE_FILL_DIR_PLUS);
-          } else {
-            auto files = container->list_files(container_path);
-            for (const auto &file : files) {
-              filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-            }
-          }
-        }
       }
     }
   } else if (strcmp(path, "/.containers/.search") == 0) {
-    for (const auto &[container_id, container_info] : containers_) {
-      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-    }
     auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
       std::string container_id = container->get_id();
-      if (containers_.find(container_id) == containers_.end()) {
-        filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-      }
+      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
   } else if (strcmp(path, "/.search") == 0) {
     filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -487,8 +435,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           path_str.substr(container_start, container_end - container_start);
       std::string container_path = path_str.substr(container_end);
 
-      auto container =
-          state_.get_container_manager().get_container(container_id);
+      auto container = state_.get_container_manager().get_container(container_id);
       if (!container) {
         return -ENOENT;
       }
@@ -622,7 +569,6 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
   }
 
   if (strcmp(path, "/.markov") == 0) {
-    // test_markov_chains();
     std::string content = generate_markov_test_result();
 
     if (offset >= static_cast<off_t>(content.size())) {
