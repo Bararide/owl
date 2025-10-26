@@ -63,7 +63,7 @@ VectorFS::generate_container_content(const std::string &container_id) {
   ss << "Size: " << container->get_size() << " bytes\n";
   ss << "Available: " << (container->is_available() ? "yes" : "no") << "\n\n";
 
-  auto files = container->list_files("/");
+  auto files = container->list_files(container->get_data_path());
   if (files.empty()) {
     ss << "No files in container\n";
   } else {
@@ -90,7 +90,7 @@ std::string VectorFS::handle_container_search(const std::string &container_id,
   ss << "Search functionality for containers is under development.\n";
   ss << "Available files:\n";
 
-  auto files = container->list_files("/");
+  auto files = container->list_files(container->get_data_path());
   for (const auto &file : files) {
     ss << "  - " << file << "\n";
   }
@@ -180,7 +180,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
           return 0;
         }
 
-        if (container_path == "/" || container_path.empty()) {
+        if (container_path == container->get_data_path() || container_path.empty()) {
           stbuf->st_mode = S_IFDIR | 0555;
           stbuf->st_nlink = 2;
         } else if (container->file_exists(container_path)) {
@@ -328,7 +328,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-        auto files = container->list_files("/");
+        auto files = container->list_files(container->get_data_path());
         for (const auto &file : files) {
           filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
         }
@@ -344,7 +344,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-          auto files = container->list_files("/");
+          auto files = container->list_files(container->get_data_path());
           for (const auto &file : files) {
             filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
           }
@@ -567,7 +567,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         std::stringstream ss;
         ss << "=== All Files in Container: " << container_id << " ===\n\n";
 
-        auto files = container->list_files("/");
+        auto files = container->list_files(container->get_data_path());
         for (const auto &file : files) {
           ss << file << "\n";
         }

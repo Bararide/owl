@@ -32,6 +32,10 @@ public:
     return container_->get_container().vectorfs_config.mount_namespace;
   }
 
+  std::string get_data_path() const override {
+    return container_->get_container().data_path.string();
+  }
+
   std::vector<std::string> get_commands() const override {
     return container_->get_container().vectorfs_config.commands;
   }
@@ -52,17 +56,6 @@ public:
         for (const auto &entry :
              std::filesystem::directory_iterator(full_path)) {
           std::string filename = entry.path().filename().string();
-
-          static const std::set<std::string> system_dirs = {
-              "lost+found", "sys",      "proc",    "dev",  "boot",  "lib",
-              "lib64",      "usr",      "var",     "tmp",  "run",   "mnt",
-              "media",      "srv",      "opt",     "sbin", "bin",   "root",
-              "home",       "etc",      "cdrom",   "snap", "lib32", "libx32",
-              "srv",        "swapfile", "swap.img"};
-
-          if (system_dirs.count(filename) > 0) {
-            continue;
-          }
 
           files.push_back(filename);
         }
@@ -154,7 +147,7 @@ public:
   void initialize_search() {
     spdlog::info("Initializing search for container: {}", get_id());
 
-    auto files = list_files("/");
+    auto files = list_files(container_->get_container().data_path.string());
     size_t indexed_count = 0;
 
     for (const auto &file : files) {
@@ -411,7 +404,7 @@ public:
     spdlog::info("Updating embeddings for all files in container: {}",
                  get_id());
 
-    auto files = list_files("/");
+    auto files = list_files(container_->get_container().data_path.string());
     size_t updated_count = 0;
 
     for (const auto &file : files) {
