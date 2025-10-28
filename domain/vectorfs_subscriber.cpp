@@ -257,12 +257,13 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
 
     virtual_dirs.insert(container_fuse_path + "/.search");
 
+    std::string unique_namespace = "namespace_" + container_id;
+
     ContainerInfo container_info;
     container_info.container_id = container_id;
     container_info.user_id = user_id;
     container_info.status = "running";
-    container_info.namespace_ =
-        unique_namespace;
+    container_info.namespace_ = unique_namespace;
     container_info.size = 0;
     container_info.available = true;
     container_info.labels = {{"environment", env_label}, {"type", type_label}};
