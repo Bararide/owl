@@ -524,7 +524,8 @@ void VectorFS::test_markov_chains() {
 
 void VectorFS::test_container() {
   try {
-    std::string container_data_path = "/home/bararide/test_container_2";
+    std::string container_data_path =
+        "/home/bararide/my_fuse_mount/.containers/test_container_2";
     std::filesystem::remove_all(container_data_path);
     std::filesystem::create_directories(container_data_path);
     spdlog::info("Created clean data directory: {}", container_data_path);
@@ -533,8 +534,7 @@ void VectorFS::test_container() {
 
     auto container_result =
         container_builder.with_owner("test_user")
-            .with_container_id(
-                "test_container_2")
+            .with_container_id("test_container_2")
             .with_data_path(container_data_path)
             .with_vectorfs_namespace("default")
             .with_supported_formats({"txt", "json", "yaml", "cpp", "py"})
@@ -616,12 +616,11 @@ void VectorFS::test_container() {
                                   "- Write docstrings\n"
                                   "- Follow PEP8"},
 
-              {"/settings.json",
-               "{\n"
-               "  \"container_id\": \"test_container_2\",\n"
-               "  \"owner\": \"test_user\",\n"
-               "  \"created\": \"2024-10-17\",\n"
-               "  \"status\": \"active\"\n}"}};
+              {"/settings.json", "{\n"
+                                 "  \"container_id\": \"test_container_2\",\n"
+                                 "  \"owner\": \"test_user\",\n"
+                                 "  \"created\": \"2024-10-17\",\n"
+                                 "  \"status\": \"active\"\n}"}};
 
           for (const auto &[file_path, content] : files_to_create) {
             bool success = adapter->add_file(file_path, content);
@@ -634,7 +633,8 @@ void VectorFS::test_container() {
 
           adapter->update_all_embeddings();
 
-          auto files = adapter->list_files("/");
+          auto files = adapter->list_files(
+              "/");
           spdlog::info("Container root now contains {} files:", files.size());
           for (const auto &file : files) {
             spdlog::info("  - {}", file);

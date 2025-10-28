@@ -44,86 +44,183 @@ public:
     return container_->get_container().labels;
   }
 
-  std::vector<std::string> list_files(const std::string &path) const override {
+  std::vector<std::string>
+  list_files(const std::string &virtual_path) const override {
     auto data_path = container_->get_container().data_path;
-    auto full_path = data_path / path;
 
-    spdlog::debug("Listing files in: '{}' (full path: {})", path,
-                  full_path.string());
+    // ВИРТУАЛЬНЫЙ ПУТЬ в FUSE: "/" -> РЕАЛЬНЫЙ ПУТЬ: data_path
+    std::string real_path = virtual_path;
+    if (real_path.empty() || real_path == "/") {
+      // Корень контейнера в FUSE = реальная директория data_path
+      real_path = "";
+    } else if (real_path[0] == '/') {
+      real_path = real_path.substr(1);
+    }
 
+    auto full_path = data_path / real_path;
     std::vector<std::string> files;
+
+    spdlog::info("📁 list_files: FUSE='{}' -> REAL='{}'", virtual_path,
+                 full_path.string());
 
     try {
       if (std::filesystem::exists(full_path) &&
           std::filesystem::is_directory(full_path)) {
-
         for (const auto &entry :
              std::filesystem::directory_iterator(full_path)) {
-          std::string filename = entry.path().filename().string();
-
-          files.push_back(filename);
+          if (entry.is_regular_file() || entry.is_directory()) {
+            std::string filename = entry.path().filename().string();
+            files.push_back(filename);
+            spdlog::info("📄 Found: {}", filename);
+          }
         }
       } else {
-        spdlog::warn("Directory does not exist or is not a directory: {}",
-                     full_path.string());
+        spdlog::warn("Directory not found: {}", full_path.string());
       }
     } catch (const std::exception &e) {
-      spdlog::error("Error listing files in {}: {}", full_path.string(),
-                    e.what());
+      spdlog::error("Error listing files: {}", e.what());
     }
 
     spdlog::debug("Found {} files in '{}'", files.size(), path);
     return files;
   }
 
-  std::string get_file_content(const std::string &path) const override {
+  bool file_exists(const std::string &virtual_path) const override {
+    if (virtual_path.empty() || virtual_path == "/") {
+      return true;
+    }
+
     auto data_path = container_->get_container().data_path;
-    auto full_path = data_path / path;
+
+    std::string real_path = virtual_path;
+    if (real_path[0] == '/') {
+      real_path = real_path.substr(1);
+    }
+
+    auto full_path = data_path / real_path;
+    bool exists = std::filesystem::exists(full_path);
+
+    spdlog::info("🔍 file_exists: FUSE='{}' -> REAL='{}' -> exists={}",
+                 virtual_path, full_path.string(), exists);
+
+    return exists;
+  }
+
+  std::string get_file_content(const std::string &virtual_path) const override {
+    if (virtual_path.empty() || virtual_path == "/") {
+      return "";
+    }
+
+    auto data_path = container_->get_container().data_path;
+
+    std::string real_path = virtual_path;
+    if (real_path[0] == '/') {
+      real_path = real_path.substr(1);
+    }
+
+    auto full_path = data_path / real_path;
+
+    spdlog::info("📖 get_file_content: FUSE='{}' -> REAL='{}'", virtual_path,
+                 full_path.string());
 
     try {
       if (std::filesystem::exists(full_path) &&
           std::filesystem::is_regular_file(full_path)) {
         std::ifstream file(full_path);
-        return std::string((std::istreambuf_iterator<char>(file)),
-                           std::istreambuf_iterator<char>());
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        spdlog::info("✅ Successfully read file, size: {} bytes",
+                     content.size());
+        return content;
+      } else {
+        spdlog::warn("File not found: {}", full_path.string());
       }
     } catch (const std::exception &e) {
-      spdlog::debug("Error reading file {}: {}", path, e.what());
+      spdlog::error("Error reading file: {}", e.what());
     }
 
     return "";
   }
 
+  bool is_directory(const std::string &virtual_path) const override {
+    auto data_path = container_->get_container().data_path;
+
+    std::string real_path = virtual_path;
+    if (real_path.empty() || real_path == "/") {
+      real_path = "";
+    } else if (real_path[0] == '/') {
+      real_path = real_path.substr(1);
+    }
+
+    auto full_path = data_path / real_path;
+
+    try {
+      bool is_dir = std::filesystem::exists(full_path) &&
+                    std::filesystem::is_directory(full_path);
+      spdlog::info("is_directory: virtual='{}', real='{}', is_dir={}",
+                   virtual_path, real_path, is_dir);
+      return is_dir;
+    } catch (const std::exception &e) {
+      spdlog::error("Error checking directory: {}", e.what());
+      return false;
+    }
+  }
+
   bool add_file(const std::string &path, const std::string &content) override {
     auto data_path = container_->get_container().data_path;
-    auto full_path = data_path / path;
+
+    std::string normalized_path = path;
+    if (!normalized_path.empty() && normalized_path[0] == '/') {
+      normalized_path = normalized_path.substr(1);
+    }
+
+    auto full_path = data_path / normalized_path;
+
+    spdlog::info("📝 ADD_FILE: path='{}', normalized='{}', full='{}'", path,
+                 normalized_path, full_path.string());
 
     try {
       std::filesystem::create_directories(full_path.parent_path());
+
       std::ofstream file(full_path);
-      if (file) {
-        file << content;
-        file.close();
-
-        auto result = search_->addFileImpl(path, content);
-        if (!result.is_ok()) {
-          spdlog::warn("Failed to add file to search index: {} - {}", path,
-                       result.error().what());
-          return false;
-        }
-
-        search_->updateSemanticRelationships();
-
-        record_file_access(path, "write");
-
-        spdlog::info("File added successfully: {}", path);
-        return true;
+      if (!file) {
+        spdlog::error("❌ Failed to open file for writing: {}",
+                      full_path.string());
+        return false;
       }
-    } catch (const std::exception &e) {
-      spdlog::error("Failed to add file {}: {}", path, e.what());
-    }
 
-    return false;
+      file << content;
+      file.close();
+
+      spdlog::info("✅ File written successfully: {}", full_path.string());
+
+      std::string search_path = "/" + normalized_path;
+
+      spdlog::info("🔍 Adding file to container search index: {}", search_path);
+
+      auto result = search_->addFileImpl(search_path, content);
+      if (!result.is_ok()) {
+        spdlog::error("❌ Failed to add file to search index: {} - {}",
+                      search_path, result.error().what());
+        return false;
+      }
+
+      spdlog::info("✅ File added to search index: {}", search_path);
+
+      spdlog::info("🔄 Updating semantic relationships...");
+      search_->updateSemanticRelationships();
+
+      record_file_access(search_path, "write");
+
+      spdlog::info(
+          "🎉 File {} successfully added to container and search index",
+          search_path);
+      return true;
+
+    } catch (const std::exception &e) {
+      spdlog::error("❌ Exception while adding file {}: {}", path, e.what());
+      return false;
+    }
   }
 
   bool remove_file(const std::string &path) override {
@@ -236,12 +333,6 @@ public:
       spdlog::info("Top semantic hub: {} (score: {:.3f})", hubs[0].first,
                    hubs[0].second);
     }
-  }
-
-  bool file_exists(const std::string &path) const override {
-    auto data_path = container_->get_container().data_path;
-    auto full_path = data_path / path;
-    return std::filesystem::exists(full_path);
   }
 
   std::vector<std::string> semantic_search(const std::string &query,

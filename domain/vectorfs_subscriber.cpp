@@ -133,27 +133,55 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
       return false;
     }
 
-    std::string container_data_path =
-        "/home/bararide/my_fuse_mount/.containers/" + container_id;
+    // 1. СНАЧАЛА СОЗДАЕМ ДИРЕКТОРИЮ В FUSE!
+    std::string container_fuse_path = "/.containers/" + container_id;
+    virtual_dirs.insert(container_fuse_path);
+    
+    spdlog::info("Created container directory in FUSE: {}", container_fuse_path);
 
-    if (std::filesystem::exists(container_data_path)) {
-      spdlog::warn("Container data directory already exists, cleaning: {}",
-                   container_data_path);
-      std::filesystem::remove_all(container_data_path);
-    }
+    // 2. СОЗДАЕМ ФАЙЛЫ В FUSE
+    time_t now = time(nullptr);
+    
+    std::string config_content = 
+        "{\n"
+        "  \"container_id\": \"" + container_id + "\",\n"
+        "  \"user_id\": \"" + user_id + "\",\n" 
+        "  \"status\": \"running\",\n"
+        "  \"memory_limit\": " + std::to_string(memory_limit) + ",\n"
+        "  \"storage_quota\": " + std::to_string(storage_quota) + ",\n"
+        "  \"file_limit\": " + std::to_string(file_limit) + ",\n"
+        "  \"privileged\": " + (privileged ? "true" : "false") + ",\n"
+        "  \"environment\": \"" + env_label + "\",\n"
+        "  \"type\": \"" + type_label + "\"\n"
+        "}";
+    
+    std::string config_file_path = container_fuse_path + "/container_config.json";
+    virtual_files[config_file_path] = fileinfo::FileInfo(
+        S_IFREG | 0644, config_content.size(), config_content, 
+        getuid(), getgid(), now, now, now
+    );
 
-    std::filesystem::create_directories(container_data_path);
-    spdlog::info("Created clean container data directory: {}",
-                 container_data_path);
+    std::string policy_content = 
+        "{\n"
+        "  \"container_id\": \"" + container_id + "\",\n"
+        "  \"owner\": \"" + user_id + "\",\n"
+        "  \"access\": \"public\",\n"
+        "  \"permissions\": [\"read\", \"write\", \"search\"]\n"
+        "}";
+    
+    std::string policy_file_path = container_fuse_path + "/access_policy.json";
+    virtual_files[policy_file_path] = fileinfo::FileInfo(
+        S_IFREG | 0644, policy_content.size(), policy_content, 
+        getuid(), getgid(), now, now, now
+    );
 
-    std::string unique_namespace = "container_" + container_id;
-
+    // 3. ТЕПЕРЬ СОЗДАЕМ КОНТЕЙНЕР С ПУТЕМ ВО ВНЕШНЕЙ ФС
     auto container_builder = ossec::ContainerBuilder::create();
     auto container_result =
         container_builder.with_owner(user_id)
             .with_container_id(container_id)
-            .with_data_path(container_data_path)
-            .with_vectorfs_namespace(unique_namespace)
+            .with_data_path("/home/bararide/.vectorfs/containers/" + container_id)
+            .with_vectorfs_namespace("default")
             .with_supported_formats({"txt", "json", "yaml", "cpp", "py"})
             .with_vector_search(true)
             .with_memory_limit(memory_limit)
@@ -190,17 +218,47 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     spdlog::info("Initializing Markov chain...");
     adapter->initialize_markov_chain();
 
-    if (!state_.get_container_manager().register_container(adapter)) {
-      spdlog::error("Failed to register container in main storage: {}",
-                    container_id);
-
-      auto stop_result = pid_container->stop();
-      if (!stop_result.is_ok()) {
-        spdlog::warn("Failed to stop container after registration failure: {}",
-                     stop_result.error().what());
-      }
+    bool registered = state_.get_container_manager().register_container(adapter);
+    if (!registered) {
+      spdlog::error("Failed to register container in manager: {}", container_id);
       return false;
     }
+
+    std::string debug_content = 
+        "=== Debug Info for Container: " + container_id + " ===\n\n"
+        "Owner: " + user_id + "\n"
+        "Status: running\n"
+        "Memory Limit: " + std::to_string(memory_limit) + " MB\n"
+        "Storage Quota: " + std::to_string(storage_quota) + " MB\n"
+        "File Limit: " + std::to_string(file_limit) + "\n"
+        "Environment: " + env_label + "\n"
+        "Type: " + type_label + "\n"
+        "Commands: " + (commands.empty() ? "none" : "") + "\n";
+    
+    for (const auto& cmd : commands) {
+        debug_content += "  - " + cmd + "\n";
+    }
+    
+    std::string debug_file_path = container_fuse_path + "/.debug";
+    virtual_files[debug_file_path] = fileinfo::FileInfo(
+        S_IFREG | 0444, debug_content.size(), debug_content, 
+        getuid(), getgid(), now, now, now
+    );
+
+    std::string all_content = 
+        "=== All Files in Container: " + container_id + " ===\n\n"
+        "container_config.json\n"
+        "access_policy.json\n"
+        ".debug\n"
+        ".all\n";
+    
+    std::string all_file_path = container_fuse_path + "/.all";
+    virtual_files[all_file_path] = fileinfo::FileInfo(
+        S_IFREG | 0444, all_content.size(), all_content, 
+        getuid(), getgid(), now, now, now
+    );
+
+    virtual_dirs.insert(container_fuse_path + "/.search");
 
     ContainerInfo container_info;
     container_info.container_id = container_id;
@@ -216,23 +274,8 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     containers_[container_id] = container_info;
     container_adapters_[container_id] = adapter;
 
-    std::string container_path = "/.containers/" + container_id;
-    virtual_dirs.insert(container_path);
-    virtual_dirs.insert("/.containers");
-
-    spdlog::info(
-        "Successfully created and registered container: {} with namespace: {}",
-        container_id, unique_namespace);
-
-    auto files = adapter->list_files(container_data_path);
-    spdlog::info("Container initially contains {} files", files.size());
-    if (!files.empty()) {
-      spdlog::warn("Unexpected files in new container:");
-      for (const auto &file : files) {
-        spdlog::warn("  - {}", file);
-      }
-    }
-
+    spdlog::info("Successfully created and registered container: {}", container_id);
+    
     return true;
 
   } catch (const std::exception &e) {

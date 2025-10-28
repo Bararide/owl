@@ -85,17 +85,18 @@ int main(int argc, char *argv[]) {
 
     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
 
-    // core::measure::Measure::start();
-    // vectorfs.test_semantic_search();
-    // core::measure::Measure::end();
-    // core::measure::Measure::result<std::chrono::milliseconds>(
-    //     "Semantic search test completed in {} ms");
 
-    // core::measure::Measure::start();
-    // vectorfs.test_markov_model();
-    // core::measure::Measure::end();
-    // core::measure::Measure::result<std::chrono::milliseconds>(
-    //     "Markov search test completed in {} ms");
+    core::measure::Measure::start();
+    vectorfs.test_semantic_search();
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "Semantic search test completed in {} ms");
+
+    core::measure::Measure::start();
+    vectorfs.test_markov_model();
+    core::measure::Measure::end();
+    core::measure::Measure::result<std::chrono::milliseconds>(
+        "Markov search test completed in {} ms");
 
     // core::measure::Measure::start();
     // vectorfs.test_container();
