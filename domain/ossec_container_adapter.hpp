@@ -48,10 +48,8 @@ public:
   list_files(const std::string &virtual_path) const override {
     auto data_path = container_->get_container().data_path;
 
-    // ВИРТУАЛЬНЫЙ ПУТЬ в FUSE: "/" -> РЕАЛЬНЫЙ ПУТЬ: data_path
     std::string real_path = virtual_path;
     if (real_path.empty() || real_path == "/") {
-      // Корень контейнера в FUSE = реальная директория data_path
       real_path = "";
     } else if (real_path[0] == '/') {
       real_path = real_path.substr(1);
@@ -284,7 +282,7 @@ public:
                  get_id(), indexed_count, files.size());
   }
 
-  void initialize_markov_chain() {
+  void initialize_markov_recommend_chain() {
     spdlog::info("Initializing Markov chain for container: {}", get_id());
 
     auto semantic_graph = search_->getSemanticGraph();
