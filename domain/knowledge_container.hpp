@@ -23,6 +23,7 @@ public:
   virtual bool add_file(const std::string &path,
                         const std::string &content) = 0;
   virtual bool remove_file(const std::string &path) = 0;
+  virtual bool is_directory(const std::string &virtual_path) const = 0;
 
   virtual bool file_exists(const std::string &path) const = 0;
   virtual std::vector<std::string> semantic_search(const std::string &query,

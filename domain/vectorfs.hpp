@@ -16,7 +16,6 @@
 #include "state.hpp"
 #include <spdlog/spdlog.h>
 
-// ZeroMQ
 #include <nlohmann/json.hpp>
 #include <zmq.hpp>
 
