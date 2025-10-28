@@ -28,7 +28,7 @@ public:
       : search_(std::move(search)),
         container_manager_(std::move(container_manager)),
         embedder_manager_(std::move(embedder_manager)) {
-          if(!env_manager_.load_from_file(".env")) {
+          if(!env_manager_.load_from_file("../.env")) {
             spdlog::error("Error load env file");
           }
         }
