@@ -130,13 +130,11 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
       return false;
     }
 
-    // 1. СНАЧАЛА СОЗДАЕМ ДИРЕКТОРИЮ В FUSE!
     std::string container_fuse_path = "/.containers/" + container_id;
     virtual_dirs.insert(container_fuse_path);
     
     spdlog::info("Created container directory in FUSE: {}", container_fuse_path);
 
-    // 2. СОЗДАЕМ ФАЙЛЫ В FUSE
     time_t now = time(nullptr);
     
     std::string config_content = 
@@ -172,7 +170,6 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
         getuid(), getgid(), now, now, now
     );
 
-    // 3. ТЕПЕРЬ СОЗДАЕМ КОНТЕЙНЕР С ПУТЕМ ВО ВНЕШНЕЙ ФС
     auto container_builder = ossec::ContainerBuilder::create();
     auto container_result =
         container_builder.with_owner(user_id)
@@ -214,7 +211,7 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
         pid_container, state_.get_embedder_manager());
 
     spdlog::info("Initializing Markov chain...");
-    adapter->initialize_markov_chain();
+    adapter->initialize_markov_recommend_chain();
 
     bool registered = state_.get_container_manager().register_container(adapter);
     if (!registered) {

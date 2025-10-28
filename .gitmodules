@@ -40,3 +40,6 @@
 [submodule "3dparty/zmq"]
 	path = 3dparty/zmq
 	url = https://github.com/zeromq/cppzmq.git
+[submodule "3dparty/cppenv"]
+	path = 3dparty/cppenv
+	url = https://github.com/Tina-1300/cppenv.git
