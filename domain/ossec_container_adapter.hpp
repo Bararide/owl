@@ -81,6 +81,7 @@ public:
       spdlog::error("Error listing files: {}", e.what());
     }
 
+    spdlog::debug("Found {} files in '{}'", files.size(), path);
     return files;
   }
 
@@ -251,11 +252,12 @@ public:
   void initialize_search() {
     spdlog::info("Initializing search for container: {}", get_id());
 
-    auto files = list_files("/");
+    auto files = list_files(container_->get_container().data_path.string());
+
     size_t indexed_count = 0;
 
     for (const auto &file : files) {
-      std::string file_path = "/" + file;
+      std::string file_path = file;
       std::string content = get_file_content(file_path);
 
       if (!content.empty()) {

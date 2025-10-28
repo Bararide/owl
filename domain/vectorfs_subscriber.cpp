@@ -125,8 +125,11 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
 
     spdlog::info("Creating container: {}", container_id);
 
-    if (containers_.find(container_id) != containers_.end()) {
-      spdlog::warn("Container already exists: {}", container_id);
+    auto existing_container =
+        state_.get_container_manager().get_container(container_id);
+    if (existing_container) {
+      spdlog::warn("Container already exists in main storage: {}",
+                   container_id);
       return false;
     }
 
@@ -196,7 +199,6 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
       return false;
     }
 
-    spdlog::info("Container built successfully, creating PID container...");
     auto container = container_result.value();
     auto pid_container =
         std::make_shared<ossec::PidContainer>(std::move(container));
@@ -262,7 +264,8 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     container_info.container_id = container_id;
     container_info.user_id = user_id;
     container_info.status = "running";
-    container_info.namespace_ = "default";
+    container_info.namespace_ =
+        unique_namespace;
     container_info.size = 0;
     container_info.available = true;
     container_info.labels = {{"environment", env_label}, {"type", type_label}};
@@ -291,16 +294,14 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
     spdlog::info("Creating file: {} in container: {}", path, container_id);
 
     if (!container_id.empty()) {
-      auto it = container_adapters_.find(container_id);
-      if (it == container_adapters_.end()) {
-        spdlog::error("Container not found: {}", container_id);
+      auto container =
+          state_.get_container_manager().get_container(container_id);
+      if (!container) {
+        spdlog::error("Container not found in main storage: {}", container_id);
         return false;
       }
 
-      auto &container = it->second;
-      auto container_info_it = containers_.find(container_id);
-      if (container_info_it == containers_.end() ||
-          container_info_it->second.user_id != user_id) {
+      if (container->get_owner() != user_id) {
         spdlog::error("User {} does not have access to container {}", user_id,
                       container_id);
         return false;
@@ -311,8 +312,6 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
         spdlog::error("Failed to create file in container");
         return false;
       }
-
-      containers_[container_id].size += content.size();
 
       spdlog::info("File {} successfully created in container {}", path,
                    container_id);
@@ -353,18 +352,27 @@ bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
 
     spdlog::info("Stopping container: {}", container_id);
 
-    auto it = container_adapters_.find(container_id);
-    if (it == container_adapters_.end()) {
-      spdlog::warn("Container not found: {}", container_id);
+    auto container = state_.get_container_manager().get_container(container_id);
+    if (!container) {
+      spdlog::warn("Container not found in main storage: {}", container_id);
       return false;
     }
 
-    auto &container_adapter = it->second;
+    if (!state_.get_container_manager().unregister_container(container_id)) {
+      spdlog::warn("Failed to unregister container from main storage: {}",
+                   container_id);
+    }
 
-    containers_[container_id].status = "stopped";
-    containers_[container_id].available = false;
+    auto it = containers_.find(container_id);
+    if (it != containers_.end()) {
+      it->second.status = "stopped";
+      it->second.available = false;
+    }
 
-    spdlog::info("Container {} stopped successfully", container_id);
+    container_adapters_.erase(container_id);
+
+    spdlog::info("Container {} stopped and unregistered successfully",
+                 container_id);
     return true;
 
   } catch (const std::exception &e) {

@@ -283,19 +283,11 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     spdlog::info("Reading /containers directory, found containers:");
 
-    for (const auto &[container_id, container_info] : containers_) {
-      spdlog::info("  - Container from ZeroMQ: {} (status: {})", container_id,
-                   container_info.status);
-      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-    }
-
     auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
       std::string container_id = container->get_id();
-      if (containers_.find(container_id) == containers_.end()) {
-        spdlog::info("  - Container from manager: {}", container_id);
-        filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-      }
+      spdlog::info("  - Container: {}", container_id);
+      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
   } else if (strncmp(path, "/.containers/", 13) == 0) {
     std::string path_str(path);
@@ -315,7 +307,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-        auto files = container->list_files("/");
+        auto files = container->list_files(container->get_data_path());
         for (const auto &file : files) {
           filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
         }
@@ -367,35 +359,13 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
           }
         }
-      } else {
-        auto container =
-            state_.get_container_manager().get_container(container_id);
-        if (container) {
-          if (container_path == "/.search") {
-            filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "sql", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "neural", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "python", nullptr, 0, FUSE_FILL_DIR_PLUS);
-            filler(buf, "cpp", nullptr, 0, FUSE_FILL_DIR_PLUS);
-          } else {
-            auto files = container->list_files(container_path);
-            for (const auto &file : files) {
-              filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-            }
-          }
-        }
       }
     }
   } else if (strcmp(path, "/.containers/.search") == 0) {
-    for (const auto &[container_id, container_info] : containers_) {
-      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-    }
     auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
       std::string container_id = container->get_id();
-      if (containers_.find(container_id) == containers_.end()) {
-        filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
-      }
+      filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
   } else if (strcmp(path, "/.search") == 0) {
     filler(buf, "test", nullptr, 0, FUSE_FILL_DIR_PLUS);
@@ -490,8 +460,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
 
       spdlog::info("📖 Container start: {}, end: {}", container_start, container_end);
 
-      auto container =
-          state_.get_container_manager().get_container(container_id);
+      auto container = state_.get_container_manager().get_container(container_id);
       if (!container) {
         spdlog::error("❌ Container not found: {}", container_id);
         return -ENOENT;
@@ -611,7 +580,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         std::stringstream ss;
         ss << "=== All Files in Container: " << container_id << " ===\n\n";
 
-        auto files = container->list_files("/");
+        auto files = container->list_files(container->get_data_path());
         for (const auto &file : files) {
           ss << file << "\n";
         }
