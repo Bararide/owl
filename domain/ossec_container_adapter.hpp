@@ -55,17 +55,16 @@ public:
       real_path = real_path.substr(1);
     }
 
-    auto full_path = data_path / real_path;
     std::vector<std::string> files;
 
     spdlog::info("📁 list_files: FUSE='{}' -> REAL='{}'", virtual_path,
-                 full_path.string());
+                 data_path.string());
 
     try {
-      if (std::filesystem::exists(full_path) &&
-          std::filesystem::is_directory(full_path)) {
+      if (std::filesystem::exists(data_path) &&
+          std::filesystem::is_directory(data_path)) {
         for (const auto &entry :
-             std::filesystem::directory_iterator(full_path)) {
+             std::filesystem::directory_iterator(data_path)) {
           if (entry.is_regular_file() || entry.is_directory()) {
             std::string filename = entry.path().filename().string();
             files.push_back(filename);
@@ -73,7 +72,7 @@ public:
           }
         }
       } else {
-        spdlog::warn("Directory not found: {}", full_path.string());
+        spdlog::warn("Directory not found: {}", data_path.string());
       }
     } catch (const std::exception &e) {
       spdlog::error("Error listing files: {}", e.what());
