@@ -19,7 +19,8 @@ public:
 
     auto opts = Pistache::Http::Endpoint::options()
                     .threads(std::thread::hardware_concurrency())
-                    .flags(Pistache::Tcp::Options::ReuseAddr);
+                    .flags(Pistache::Tcp::Options::ReuseAddr)
+                    .maxRequestSize(10 * 1024 * 1024);
 
     httpEndpoint->init(opts);
     setupRoutes();
