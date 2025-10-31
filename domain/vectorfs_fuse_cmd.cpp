@@ -134,13 +134,15 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
           path_str.substr(container_start, container_end - container_start);
       std::string item_path = path_str.substr(container_end);
 
-      spdlog::info("🔍 getattr for container path: {} -> {}", container_id, item_path);
+      spdlog::info("🔍 getattr for container path: {} -> {}", container_id,
+                   item_path);
 
       if (item_path.find("/.search/") == 0) {
         std::string search_file = item_path.substr(9);
-        
-        spdlog::info("✅ Treating as search file: {} in container {}", search_file, container_id);
-        
+
+        spdlog::info("✅ Treating as search file: {} in container {}",
+                     search_file, container_id);
+
         stbuf->st_mode = S_IFREG | 0444;
         stbuf->st_nlink = 1;
         stbuf->st_size = 1024;
@@ -277,7 +279,6 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       }
     }
   } else if (strcmp(path, "/.containers") == 0) {
-
     filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
     filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
@@ -286,8 +287,16 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     auto containers = state_.get_container_manager().get_all_containers();
     for (const auto &container : containers) {
       std::string container_id = container->get_id();
-      spdlog::info("  - Container: {}", container_id);
+      spdlog::info("  - Container (main): {}", container_id);
       filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+    }
+
+    for (const auto &[container_id, info] : containers_) {
+      if (state_.get_container_manager().get_container(container_id) ==
+          nullptr) {
+        spdlog::info("  - Container (local): {}", container_id);
+        filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
+      }
     }
   } else if (strncmp(path, "/.containers/", 13) == 0) {
     std::string path_str(path);
@@ -312,9 +321,9 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
         }
 
-        spdlog::info(
-            "✅ Container {} directory listing complete: special files + {} real files",
-            container_id, files.size());
+        spdlog::info("✅ Container {} directory listing complete: special "
+                     "files + {} real files",
+                     container_id, files.size());
       } else {
         auto container =
             state_.get_container_manager().get_container(container_id);
@@ -458,9 +467,11 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
       spdlog::info("📖 Reading from container: {} -> {}", container_id,
                    item_path);
 
-      spdlog::info("📖 Container start: {}, end: {}", container_start, container_end);
+      spdlog::info("📖 Container start: {}, end: {}", container_start,
+                   container_end);
 
-      auto container = state_.get_container_manager().get_container(container_id);
+      auto container =
+          state_.get_container_manager().get_container(container_id);
       if (!container) {
         spdlog::error("❌ Container not found: {}", container_id);
         return -ENOENT;
@@ -468,11 +479,12 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
 
       if (strncmp(item_path.c_str(), "/.search/", 9) == 0) {
         std::string query = item_path.substr(9);
-        spdlog::info("🎯 SEARCH REQUEST DETECTED! Container: {}, Query: '{}'", container_id, query);
-        
+        spdlog::info("🎯 SEARCH REQUEST DETECTED! Container: {}, Query: '{}'",
+                     container_id, query);
+
         query = url_decode(query);
         std::replace(query.begin(), query.end(), '_', ' ');
-        
+
         spdlog::info("🎯 Decoded query: '{}'", query);
 
         spdlog::info("🔍 Performing search in container {}: '{}'", container_id,

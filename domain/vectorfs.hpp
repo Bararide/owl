@@ -63,6 +63,13 @@ private:
 
   void initialize_zeromq();
   void process_messages();
+  void parse_base_dir();
+  bool load_existing_container(const std::string &container_id,
+                               const std::string &container_path);
+  bool load_container_adapter(const std::string &container_id,
+                              const std::string &container_path,
+                              const nlohmann::json &config);
+
   void handle_container_create(const nlohmann::json &message);
   void handle_file_create(const nlohmann::json &message);
   void handle_container_stop(const nlohmann::json &message);
