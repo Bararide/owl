@@ -185,6 +185,40 @@ private:
     responses::handleJsonResult(result, response);
   }
 
+  void
+  handleSemanticSearchInContainer(const Pistache::Rest::Request &request,
+                                  Pistache::Http::ResponseWriter response) {
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<
+                  validate::SemanticSearchInContainer>(json);
+            })
+            .map([this](validate::SemanticSearchInContainer params)
+                     -> Json::Value {
+              auto [query, limit, user_id, container_id] = params;
+
+              auto &vfs =
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance()
+                      .get_vector_fs();
+              auto results = vfs.get_search().semanticSearchInContainerImpl(
+                  query, limit, user_id, container_id);
+
+              Json::Value resultsJson(Json::arrayValue);
+              for (const auto &[path, score] : results) {
+                Json::Value resultJson;
+                resultJson["path"] = path;
+                resultJson["score"] = score;
+                resultsJson.append(resultJson);
+              }
+
+              return utils::create_success_response(
+                  {"query", "results", "count"}, query, resultsJson,
+                  static_cast<int>(results.size()));
+            });
+    responses::handleJsonResult(result, response);
+  }
+
   void handleSemanticSearch(const Pistache::Rest::Request &request,
                             Pistache::Http::ResponseWriter response) {
     auto result =
