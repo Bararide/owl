@@ -113,7 +113,7 @@ bool VectorFS::load_existing_container(const std::string &container_id,
         "=== Debug Info for Container: " + container_id +
         " ===\n\n"
         "Owner: " +
-        config.value("user_id", "unknown") +
+        config.value("owner", "unknown") +
         "\n"
         "Status: " +
         config.value("status", "unknown") +
@@ -158,7 +158,7 @@ bool VectorFS::load_existing_container(const std::string &container_id,
 
     ContainerInfo container_info;
     container_info.container_id = container_id;
-    container_info.user_id = config.value("user_id", "unknown");
+    container_info.user_id = config.value("owner", "unknown");
     container_info.status = config.value("status", "stopped");
     container_info.namespace_ = "default";
     container_info.size = 0;
@@ -225,7 +225,7 @@ bool VectorFS::load_container_adapter(const std::string &container_id,
 
     auto container_builder = ossec::ContainerBuilder::create();
 
-    std::string user_id = config.value("user_id", "unknown");
+    std::string user_id = config.value("owner", "unknown");
     size_t memory_limit = config.value("memory_limit", 512);
     size_t storage_quota = config.value("storage_quota", 1024);
     size_t file_limit = config.value("file_limit", 100);

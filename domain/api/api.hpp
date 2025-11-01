@@ -53,6 +53,9 @@ private:
                  Routes::bind(&VectorFSApi::handleContainerCreate, this));
     Routes::Post(router, "/semantic",
                  Routes::bind(&VectorFSApi::handleSemanticSearch, this));
+    Routes::Post(
+        router, "/containers/semantic",
+        Routes::bind(&VectorFSApi::handleSemanticSearchInContainer, this));
     Routes::Post(router, "/rebuild",
                  Routes::bind(&VectorFSApi::handleRebuild, this));
 
