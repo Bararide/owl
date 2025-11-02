@@ -198,7 +198,7 @@ private:
               return validate::Validator::validate<validate::ReadFileByIdBody>(
                   json);
             })
-            .and_then([this](validate::ReadFileByIdBody params) {
+            .map([this](validate::ReadFileByIdBody params) -> Json::Value {
               auto [file_id, container_id] = params;
 
               spdlog::info("file_id: {}", file_id);
@@ -221,8 +221,7 @@ private:
                   container->get_file_content(data_path + "/" + file_id);
 
               return content;
-            })
-            .map([](std::string content) -> Json::Value {
+
               Json::Value result_json;
               result_json["content"] = content;
 
