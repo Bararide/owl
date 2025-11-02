@@ -161,7 +161,6 @@ public:
       return false;
     }
   }
-
   bool add_file(const std::string &path, const std::string &content) override {
     auto data_path = container_->get_container().data_path;
 
@@ -205,6 +204,12 @@ public:
 
       spdlog::info("🔄 Updating semantic relationships...");
       search_->updateSemanticRelationships();
+
+      auto rebuild_result = search_->rebuildIndexImpl();
+      if (!rebuild_result.is_ok()) {
+        spdlog::warn("Failed to rebuild container index: {}",
+                     rebuild_result.error().what());
+      }
 
       record_file_access(search_path, "write");
 
@@ -330,7 +335,7 @@ public:
     }
   }
 
-  std::vector<std::string> semantic_search(const std::string &query,
+  std::vector<std::pair<std::string, float>> semantic_search(const std::string &query,
                                            int limit = 10) override {
     spdlog::debug("Semantic search in container {}: '{}'", get_id(), query);
 
@@ -343,9 +348,9 @@ public:
       return {};
     }
 
-    std::vector<std::string> file_paths;
+    std::vector<std::pair<std::string, float>> file_paths;
     for (const auto &[file_path, score] : result) {
-      file_paths.push_back(file_path);
+      file_paths.push_back({file_path, score});
 
       record_file_access(file_path, "semantic_search");
     }
@@ -381,7 +386,7 @@ public:
     return results;
   }
 
-  std::vector<std::string> enhanced_semantic_search(const std::string &query,
+  std::vector<std::pair<std::string, float>> enhanced_semantic_search(const std::string &query,
                                                     int limit) override {
     spdlog::debug("Enhanced semantic search in container {}: '{}'", get_id(),
                   query);
@@ -396,9 +401,9 @@ public:
       return semantic_search(query, limit);
     }
 
-    std::vector<std::string> file_paths;
+    std::vector<std::pair<std::string, float>> file_paths;
     for (const auto &[file_path, score] : result.value()) {
-      file_paths.push_back(file_path);
+      file_paths.push_back({file_path, score});
       record_file_access(file_path, "enhanced_search");
     }
 

@@ -91,7 +91,8 @@
         "variant": "cpp",
         "rope": "cpp",
         "regex": "cpp",
-        "scoped_allocator": "cpp"
+        "scoped_allocator": "cpp",
+        "filesystem": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled",
     "lldb.showDisassembly": "auto",

@@ -201,24 +201,40 @@ private:
                      -> Json::Value {
               auto [query, limit, user_id, container_id] = params;
 
+              spdlog::debug("Semantic search in container {}: '{}'",
+                            container_id, query);
+
               auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance()
-                      .get_vector_fs();
-              auto results = vfs.get_search().semanticSearchInContainerImpl(
-                  query, limit, user_id, container_id);
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+
+              auto &state = vfs.get_state();
+              auto &container_manager = state.get_container_manager();
+
+              auto container = container_manager.get_container(container_id);
+              if (!container) {
+                throw std::runtime_error("Container not found: " +
+                                         container_id);
+              }
+
+              auto results = container->semantic_search(query, limit);
+
+              spdlog::debug("Semantic search found {} results", results.size());
 
               Json::Value resultsJson(Json::arrayValue);
-              for (const auto &[path, score] : results) {
+              for (const auto &[file_path, score] : results) {
                 Json::Value resultJson;
-                resultJson["path"] = path;
+                resultJson["path"] = file_path;
                 resultJson["score"] = score;
                 resultsJson.append(resultJson);
               }
 
               return utils::create_success_response(
-                  {"query", "results", "count"}, query, resultsJson,
-                  static_cast<int>(results.size()));
+                  {"query", "container_id", "results", "count"}, query,
+                  container_id, resultsJson, static_cast<int>(results.size()));
             });
+
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
     responses::handleJsonResult(result, response);
   }
 

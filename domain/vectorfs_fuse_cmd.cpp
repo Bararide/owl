@@ -524,7 +524,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
             }
           } else {
             ss << "📊 Search Results (with PageRank):\n";
-            for (const auto &result : search_results) {
+            for (const auto &[result, file_score] : search_results) {
               double score = 0.7 + static_cast<double>(rand()) / RAND_MAX * 0.3;
               ss << "📄 " << result << " (score: " << std::fixed
                  << std::setprecision(6) << score << ")\n";
@@ -542,7 +542,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           }
         } else {
           ss << "📊 Search Results (with PageRank):\n";
-          for (const auto &result : search_results) {
+          for (const auto &[result, file_score] : search_results) {
             double score = 0.7 + static_cast<double>(rand()) / RAND_MAX * 0.3;
             ss << "📄 " << result << " (score: " << std::fixed
                << std::setprecision(6) << score << ")\n";
@@ -558,8 +558,9 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           }
 
           if (!search_results.empty()) {
+            auto res = search_results[0];
             auto recommendations =
-                container->get_recommendations(search_results[0], 3);
+                container->get_recommendations(res.first, 3);
             if (!recommendations.empty()) {
               ss << "🎯 Recommended Files:\n";
               for (const auto &rec : recommendations) {

@@ -26,8 +26,8 @@ public:
   virtual bool is_directory(const std::string &virtual_path) const = 0;
 
   virtual bool file_exists(const std::string &path) const = 0;
-  virtual std::vector<std::string> semantic_search(const std::string &query,
-                                                   int limit = 10) = 0;
+  virtual std::vector<std::pair<std::string, float>>
+  semantic_search(const std::string &query, int limit = 10) = 0;
   virtual std::vector<std::string>
   search_files(const std::string &pattern) const = 0;
   virtual bool is_available() const = 0;
@@ -35,7 +35,7 @@ public:
   virtual std::string get_status() const = 0;
   virtual std::string get_data_path() const = 0;
 
-  virtual std::vector<std::string>
+  virtual std::vector<std::pair<std::string, float>>
   enhanced_semantic_search(const std::string &query, int limit = 10) = 0;
 
   virtual std::vector<std::string>
