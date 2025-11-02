@@ -49,6 +49,8 @@ private:
                  Routes::bind(&VectorFSApi::handleFileCreate, this));
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::handleFileRead, this));
+    Routes::Get(router, "/files/read",
+                Routes::bind(&VectorFSApi::getFileById, this));
     Routes::Post(router, "/containers/create",
                  Routes::bind(&VectorFSApi::handleContainerCreate, this));
     Routes::Post(router, "/semantic",
