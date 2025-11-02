@@ -216,9 +216,8 @@ private:
                                          container_id);
               }
 
-              auto data_path = container->get_data_path();
               auto content =
-                  container->get_file_content(data_path + "/" + file_id);
+                  container->get_file_content(file_id);
 
               return content;
 
