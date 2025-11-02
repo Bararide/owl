@@ -188,6 +188,50 @@ private:
     responses::handleJsonResult(result, response);
   }
 
+  void getFileById(const Pistache::Rest::Request &request,
+                   Pistache::Http::ResponseWriter response) {
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<validate::ReadFileByIdBody>(
+                  json);
+            })
+            .and_then([this](validate::ReadFileByIdBody params) {
+              auto [file_id, container_id] = params;
+
+              spdlog::info("file_id: {}", file_id);
+              spdlog::info("container_id, {}", container_id);
+
+              auto &vfs =
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+              auto &state = vfs.get_state();
+              auto &container_manager = state.get_container_manager();
+
+              auto container = container_manager.get_container(container_id);
+
+              if (!container) {
+                throw std::runtime_error("Container not found: " +
+                                         container_id);
+              }
+
+              auto data_path = container->get_data_path();
+              auto content =
+                  container->get_file_content(data_path + "/" + file_id);
+
+              return content;
+            })
+            .map([](std::string content) -> Json::Value {
+              Json::Value result_json;
+              result_json["content"] = content;
+
+              return utils::create_success_response({"content"}, content);
+            });
+
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
+    responses::handleJsonResult(result, response);
+  }
+
   void
   handleSemanticSearchInContainer(const Pistache::Rest::Request &request,
                                   Pistache::Http::ResponseWriter response) {
