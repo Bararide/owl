@@ -8,6 +8,12 @@
 
 namespace owl::vectorfs {
 
+template<typename Derived>
+class ContainerOwner {
+  public:
+
+};
+
 class IKnowledgeContainer {
 public:
   virtual ~IKnowledgeContainer() = default;

@@ -1,7 +1,6 @@
 #ifndef VECTORFS_CONTAINER_MANAGER_HPP
 #define VECTORFS_CONTAINER_MANAGER_HPP
 
-#include "knowledge_container.hpp"
 #include "ossec_container_adapter.hpp"
 #include <map>
 #include <memory>
