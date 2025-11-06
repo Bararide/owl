@@ -98,6 +98,7 @@ private:
 
               spdlog::info("File path: {}", path);
               spdlog::info("Content length: {} bytes", content.size());
+              spdlog::info("Content: {}", content);
               spdlog::info("Target container: {}", container_id);
               spdlog::info("User: {}", user_id);
 
