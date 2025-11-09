@@ -215,7 +215,7 @@ bool VectorFS::load_container_adapter(const std::string &container_id,
     }
 
     auto existing_in_main =
-        state_.get_container_manager().get_container(container_id);
+        state_.getContainerManager().get_container(container_id);
     if (existing_in_main) {
       spdlog::info("Container already registered in main storage: {}",
                    container_id);
@@ -275,12 +275,11 @@ bool VectorFS::load_container_adapter(const std::string &container_id,
     }
 
     auto adapter = std::make_shared<vectorfs::OssecContainerAdapter>(
-        pid_container, state_.get_embedder_manager());
+        pid_container, state_.getEmbedderManager());
 
     adapter->initialize_markov_recommend_chain();
 
-    bool registered =
-        state_.get_container_manager().register_container(adapter);
+    bool registered = state_.getContainerManager().register_container(adapter);
     if (!registered) {
       spdlog::error("Failed to register container in manager: {}",
                     container_id);
@@ -405,7 +404,7 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     spdlog::info("Creating container: {}", container_id);
 
     auto existing_container =
-        state_.get_container_manager().get_container(container_id);
+        state_.getContainerManager().get_container(container_id);
     if (existing_container) {
       spdlog::warn("Container already exists in main storage: {}",
                    container_id);
@@ -509,13 +508,12 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
 
     spdlog::info("Creating container adapter...");
     auto adapter = std::make_shared<vectorfs::OssecContainerAdapter>(
-        pid_container, state_.get_embedder_manager());
+        pid_container, state_.getEmbedderManager());
 
     spdlog::info("Initializing Markov chain...");
     adapter->initialize_markov_recommend_chain();
 
-    bool registered =
-        state_.get_container_manager().register_container(adapter);
+    bool registered = state_.getContainerManager().register_container(adapter);
     if (!registered) {
       spdlog::error("Failed to register container in manager: {}",
                     container_id);
@@ -606,8 +604,7 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
     spdlog::info("Creating file: {} in container: {}", path, container_id);
 
     if (!container_id.empty()) {
-      auto container =
-          state_.get_container_manager().get_container(container_id);
+      auto container = state_.getContainerManager().get_container(container_id);
       if (!container) {
         spdlog::error("Container not found in main storage: {}", container_id);
         return false;
@@ -619,10 +616,18 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
         return false;
       }
 
-      auto result = container->add_file(path, content);
-      if (!result) {
-        spdlog::error("Failed to create file in container");
-        return false;
+      // added chunking and save separate chunk with path+chunk_id
+
+      auto chunks = state_.getSemanticChunker().chunk_text(content);
+
+      int i = 0;
+      for (const auto &chunk : chunks) {
+        auto result =
+            container->add_file(path + std::to_string(i++), chunk.text);
+        if (!result) {
+          spdlog::error("Failed to create file in container");
+          return false;
+        }
       }
 
       spdlog::info("File {} successfully created in container {}", path,
@@ -642,7 +647,7 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
 
       virtual_files[path] = file_info;
 
-      auto add_result = state_.get_search().addFileImpl(path, content);
+      auto add_result = state_.getSearch().addFileImpl(path, content);
       if (!add_result.is_ok()) {
         spdlog::warn("Failed to add file to search index: {} - {}", path,
                      add_result.error().what());
@@ -664,13 +669,13 @@ bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
 
     spdlog::info("Stopping container: {}", container_id);
 
-    auto container = state_.get_container_manager().get_container(container_id);
+    auto container = state_.getContainerManager().get_container(container_id);
     if (!container) {
       spdlog::warn("Container not found in main storage: {}", container_id);
       return false;
     }
 
-    if (!state_.get_container_manager().unregister_container(container_id)) {
+    if (!state_.getContainerManager().unregister_container(container_id)) {
       spdlog::warn("Failed to unregister container from main storage: {}",
                    container_id);
     }

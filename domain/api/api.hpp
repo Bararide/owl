@@ -208,7 +208,7 @@ private:
               auto &vfs =
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance();
               auto &state = vfs.get_state();
-              auto &container_manager = state.get_container_manager();
+              auto &container_manager = state.getContainerManager();
 
               auto container = container_manager.get_container(container_id);
 
@@ -253,7 +253,7 @@ private:
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance();
 
               auto &state = vfs.get_state();
-              auto &container_manager = state.get_container_manager();
+              auto &container_manager = state.getContainerManager();
 
               auto container = container_manager.get_container(container_id);
               if (!container) {
@@ -297,7 +297,7 @@ private:
               auto &vfs =
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance()
                       .get_vector_fs();
-              auto results = vfs.get_search().semanticSearchImpl(query, limit);
+              auto results = vfs.getSearch().semanticSearchImpl(query, limit);
 
               Json::Value resultsJson(Json::arrayValue);
               for (const auto &[path, score] : results) {

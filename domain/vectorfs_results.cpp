@@ -5,7 +5,7 @@ namespace owl::vectorfs {
 std::string
 VectorFS::generate_enhanced_search_result(const std::string &query) {
   auto result =
-      state_.get_search().recordFileAccessImpl("/.search/" + query, "search");
+      state_.getSearch().recordFileAccessImpl("/.search/" + query, "search");
 
   if (result.is_ok()) {
     spdlog::info("Success record file access");
@@ -14,10 +14,10 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
   }
 
   auto search_results =
-      state_.get_search().enhancedSemanticSearchImpl(query, 5);
-  auto recommendations = state_.get_search().getRecommendationsImpl(query);
-  auto predicted_next = state_.get_search().predictNextFilesImpl();
-  auto hubs_result = state_.get_search().getSemanticHubsImpl(3);
+      state_.getSearch().enhancedSemanticSearchImpl(query, 5);
+  auto recommendations = state_.getSearch().getRecommendationsImpl(query);
+  auto predicted_next = state_.getSearch().predictNextFilesImpl();
+  auto hubs_result = state_.getSearch().getSemanticHubsImpl(3);
 
   std::stringstream ss;
   ss << "=== Enhanced Semantic Search Results ===\n";
@@ -38,7 +38,7 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
            << "\n";
 
         std::string category =
-            state_.get_search().classifyFileCategoryImpl(file_path);
+            state_.getSearch().classifyFileCategoryImpl(file_path);
         ss << "   Category: " << category << "\n";
       }
       ss << "\n";
@@ -71,7 +71,7 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
 
   ss << "=== Analytics ===\n";
 
-  auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
+  auto indexed_count = state_.getSearch().getIndexedFilesCountImpl();
   if (indexed_count.is_ok()) {
     ss << "Total indexed files: " << indexed_count.value() << "\n";
   } else {
@@ -85,7 +85,7 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
 std::string VectorFS::generate_search_result(const std::string &query) {
   spdlog::info("Processing search query: {}", query);
 
-  auto search_results = state_.get_search().semanticSearchImpl(query, 5);
+  auto search_results = state_.getSearch().semanticSearchImpl(query, 5);
 
   std::stringstream ss;
   ss << "=== Semantic Search Results ===\n";
@@ -94,7 +94,7 @@ std::string VectorFS::generate_search_result(const std::string &query) {
   if (search_results.empty()) {
     ss << "No results found\n";
 
-    auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
+    auto indexed_count = state_.getSearch().getIndexedFilesCountImpl();
     ss << "Indexed files: ";
     if (indexed_count.is_ok()) {
       ss << indexed_count.value();
@@ -123,7 +123,7 @@ std::string VectorFS::generate_search_result(const std::string &query) {
 
   ss << "\n=== Search Info ===\n";
 
-  auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
+  auto indexed_count = state_.getSearch().getIndexedFilesCountImpl();
   ss << "Total indexed files: ";
   if (indexed_count.is_ok()) {
     ss << indexed_count.value();
@@ -132,7 +132,7 @@ std::string VectorFS::generate_search_result(const std::string &query) {
   }
   ss << "\n";
 
-  auto embedder_info = state_.get_search().getEmbedderInfoImpl();
+  auto embedder_info = state_.getSearch().getEmbedderInfoImpl();
   ss << "Embedder: " << embedder_info << "\n";
 
   return ss.str();

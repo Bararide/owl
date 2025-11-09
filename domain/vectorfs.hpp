@@ -97,27 +97,27 @@ public:
   void test_markov_chains();
   void test_container();
 
-  [[nodiscard]] chunkees::Search &get_search() noexcept {
-    return state_.get_search();
+  [[nodiscard]] chunkees::Search &getSearch() noexcept {
+    return state_.getSearch();
   }
 
-  [[nodiscard]] const chunkees::Search &get_search() const noexcept {
-    return state_.get_search();
+  [[nodiscard]] const chunkees::Search &getSearch() const noexcept {
+    return state_.getSearch();
   }
 
   std::string get_embedder_info() const {
-    return state_.get_search().getEmbedderInfoImpl();
+    return state_.getSearch().getEmbedderInfoImpl();
   }
 
   void rebuild_index() {
-    auto result = state_.get_search().rebuildIndexImpl();
+    auto result = state_.getSearch().rebuildIndexImpl();
     if (!result.is_ok()) {
       spdlog::warn("Failed to rebuild index: {}", result.error().what());
     }
   }
 
   size_t get_indexed_files_count() const {
-    auto result = state_.get_search().getIndexedFilesCountImpl();
+    auto result = state_.getSearch().getIndexedFilesCountImpl();
     return result.is_ok() ? result.value() : 0;
   }
 

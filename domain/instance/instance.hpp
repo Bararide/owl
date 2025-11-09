@@ -104,7 +104,7 @@ public:
   }
 
   vectorfs::VectorFS &get_vector_fs() const { return *vector_fs_; }
-  chunkees::Search &get_search() {
+  chunkees::Search &getSearch() {
     if (!search_) {
       throw std::runtime_error("Search not initialized");
     }

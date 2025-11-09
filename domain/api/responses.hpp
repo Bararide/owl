@@ -139,7 +139,7 @@ addFileToContainer(const std::string &path, const std::string &content,
   try {
     auto &vfs_instance =
         owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-    auto &container_manager = vfs_instance.get_state().get_container_manager();
+    auto &container_manager = vfs_instance.get_state().getContainerManager();
 
     auto container = container_manager.get_container(container_id);
     if (!container) {
@@ -217,7 +217,7 @@ inline core::Result<std::string, std::string>
 getFileContent(const std::string &path) {
   try {
     auto &search =
-        owl::instance::VFSInstance<EmbeddedModel>::getInstance().get_search();
+        owl::instance::VFSInstance<EmbeddedModel>::getInstance().getSearch();
     const std::string &content = search.getFileContentImpl(path);
     return core::Result<std::string, std::string>::Ok(content);
   } catch (const std::exception &e) {

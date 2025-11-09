@@ -531,7 +531,7 @@ public:
     return updated_count > 0;
   }
 
-  std::string get_search_info() const override {
+  std::string getSearch_info() const override {
     auto file_count = search_->getIndexedFilesCountImpl();
     auto recent_queries = search_->getRecentQueriesCountImpl();
 

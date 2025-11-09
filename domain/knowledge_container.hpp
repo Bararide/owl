@@ -55,7 +55,7 @@ public:
 
   virtual bool update_all_embeddings() = 0;
 
-  virtual std::string get_search_info() const = 0;
+  virtual std::string getSearch_info() const = 0;
 
   virtual void record_search_query(const std::string &query) = 0;
 };

@@ -6,8 +6,8 @@ std::string VectorFS::generate_markov_test_result() {
   std::stringstream ss;
   ss << "=== Markov Chain Test Results ===\n\n";
 
-  auto *semantic_graph = state_.get_search().getSemanticGraph();
-  auto *hmm_model = state_.get_search().getHiddenModel();
+  auto *semantic_graph = state_.getSearch().getSemanticGraph();
+  auto *hmm_model = state_.getSearch().getHiddenModel();
 
   if (!semantic_graph || !hmm_model) {
     ss << "Error: Markov models not initialized\n";
@@ -18,7 +18,7 @@ std::string VectorFS::generate_markov_test_result() {
   ss << "Nodes: " << semantic_graph->get_node_count() << "\n";
   ss << "Edges: " << semantic_graph->get_edge_count() << "\n";
 
-  auto hubs_result = state_.get_search().getSemanticHubsImpl(5);
+  auto hubs_result = state_.getSearch().getSemanticHubsImpl(5);
   if (hubs_result.is_ok() && !hubs_result.value().empty()) {
     ss << "Top semantic hubs:\n";
     for (const auto &hub : hubs_result.value()) {
@@ -31,7 +31,7 @@ std::string VectorFS::generate_markov_test_result() {
   ss << "Trained states: " << hmm_model->get_state_count() << "\n";
   ss << "Observation sequences: " << hmm_model->get_sequence_count() << "\n";
 
-  auto predictions_result = state_.get_search().predictNextFilesImpl();
+  auto predictions_result = state_.getSearch().predictNextFilesImpl();
   if (predictions_result.is_ok() && !predictions_result.value().empty()) {
     ss << "Current predictions:\n";
     for (const auto &pred : predictions_result.value()) {
@@ -46,7 +46,7 @@ std::string VectorFS::generate_markov_test_result() {
     if (test_count >= 3)
       break;
 
-    auto recs_result = state_.get_search().getRecommendationsImpl(path);
+    auto recs_result = state_.getSearch().getRecommendationsImpl(path);
     if (recs_result.is_ok() && !recs_result.value().empty()) {
       ss << "For " << path << ":\n";
       for (const auto &rec : recs_result.value()) {
@@ -59,7 +59,7 @@ std::string VectorFS::generate_markov_test_result() {
 
   ss << "Access Patterns:\n";
 
-  auto recent_queries_result = state_.get_search().getRecentQueriesImpl();
+  auto recent_queries_result = state_.getSearch().getRecentQueriesImpl();
   if (recent_queries_result.is_ok()) {
     const auto &recent_queries = recent_queries_result.value();
     ss << "Recent queries: " << recent_queries.size() << "\n";
@@ -79,15 +79,15 @@ std::string VectorFS::generate_markov_test_result() {
 
 void VectorFS::test_semantic_search() {
   try {
-    auto *semantic_graph = state_.get_search().getSemanticGraph();
-    auto *hmm_model = state_.get_search().getHiddenModel();
+    auto *semantic_graph = state_.getSearch().getSemanticGraph();
+    auto *hmm_model = state_.getSearch().getHiddenModel();
 
     if (!semantic_graph || !hmm_model) {
       spdlog::error("Markov models not initialized for testing");
       return;
     }
 
-    auto embedder_info = state_.get_search().getEmbedderInfoImpl();
+    auto embedder_info = state_.getSearch().getEmbedderInfoImpl();
     if (embedder_info == "Embedder not initialized") {
       spdlog::error("Embedder not initialized for testing");
       return;
@@ -294,14 +294,14 @@ void VectorFS::test_semantic_search() {
           fileinfo::FileInfo(S_IFREG | 0644, 0, content, getuid(), getgid(),
                              time(nullptr), time(nullptr), time(nullptr));
 
-      auto result_file_add = state_.get_search().addFileImpl(path, content);
+      auto result_file_add = state_.getSearch().addFileImpl(path, content);
 
       if (!result_file_add.is_ok()) {
         spdlog::critical("Failed to add file {}: {}", path,
                          result_file_add.error().what());
       }
 
-      auto result = state_.get_search().updateEmbedding(path);
+      auto result = state_.getSearch().updateEmbedding(path);
     }
 
     std::vector<std::vector<std::string>> access_patterns = {
@@ -327,16 +327,16 @@ void VectorFS::test_semantic_search() {
 
     for (const auto &pattern : access_patterns) {
       for (const auto &file : pattern) {
-        (void)state_.get_search().recordFileAccessImpl(file, "test_pattern");
+        (void)state_.getSearch().recordFileAccessImpl(file, "test_pattern");
       }
       hmm_model->add_sequence(pattern);
     }
 
     hmm_model->train();
 
-    (void)state_.get_search().rebuildIndex();
+    (void)state_.getSearch().rebuildIndex();
 
-    auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
+    auto indexed_count = state_.getSearch().getIndexedFilesCountImpl();
 
     std::vector<std::pair<std::string, std::string>> test_queries = {
         {"программирование", "Общие запросы по программированию"},
@@ -355,7 +355,7 @@ void VectorFS::test_semantic_search() {
     for (const auto &[query, description] : test_queries) {
       spdlog::info("=== Query: '{}' ({}) ===", query, description);
 
-      auto basic_results = state_.get_search().semanticSearchImpl(query, 5);
+      auto basic_results = state_.getSearch().semanticSearchImpl(query, 5);
       spdlog::info("Basic semantic search results:");
       if (basic_results.empty()) {
         spdlog::warn("  No results found");
@@ -374,7 +374,7 @@ void VectorFS::test_semantic_search() {
       }
 
       auto enhanced_results =
-          state_.get_search().enhancedSemanticSearchImpl(query, 3).value();
+          state_.getSearch().enhancedSemanticSearchImpl(query, 3).value();
       spdlog::info("Enhanced search with Markov chains:");
       if (enhanced_results.empty()) {
         spdlog::warn("  No enhanced results found");
@@ -388,7 +388,7 @@ void VectorFS::test_semantic_search() {
 
       if (!basic_results.empty()) {
         auto recommendations =
-            state_.get_search().getRecommendationsImpl(query);
+            state_.getSearch().getRecommendationsImpl(query);
         if (recommendations.is_ok() && !recommendations.value().empty()) {
           spdlog::info("Related recommendations:");
           for (const auto &rec : recommendations.value()) {
@@ -403,7 +403,7 @@ void VectorFS::test_semantic_search() {
 
     spdlog::info("=== Additional Statistics ===");
 
-    auto hubs_result = state_.get_search().getSemanticHubsImpl(5);
+    auto hubs_result = state_.getSearch().getSemanticHubsImpl(5);
     if (hubs_result.is_ok() && !hubs_result.value().empty()) {
       spdlog::info("Top semantic hubs:");
       for (const auto &hub : hubs_result.value()) {
@@ -412,7 +412,7 @@ void VectorFS::test_semantic_search() {
       }
     }
 
-    auto predictions_result = state_.get_search().predictNextFilesImpl();
+    auto predictions_result = state_.getSearch().predictNextFilesImpl();
     if (predictions_result.is_ok() && !predictions_result.value().empty()) {
       spdlog::info("Predicted next files:");
       for (const auto &pred : predictions_result.value()) {
@@ -440,7 +440,7 @@ void VectorFS::test_semantic_search() {
 void VectorFS::test_markov_chains() {
   spdlog::info("=== Testing Markov Chains ===");
 
-  auto *hmm_model = state_.get_search().getHiddenModel();
+  auto *hmm_model = state_.getSearch().getHiddenModel();
   if (!hmm_model) {
     spdlog::error("HMM model not initialized");
     return;
@@ -463,7 +463,7 @@ void VectorFS::test_markov_chains() {
         time(nullptr), time(nullptr));
 
     auto add_result =
-        state_.get_search().addFileImpl(test_files[i], test_contents[i]);
+        state_.getSearch().addFileImpl(test_files[i], test_contents[i]);
     if (!add_result.is_ok()) {
       spdlog::warn("Failed to add file to search index: {} - {}", test_files[i],
                    add_result.error().what());
@@ -480,7 +480,7 @@ void VectorFS::test_markov_chains() {
 
     for (const auto &file : seq) {
       auto record_result =
-          state_.get_search().recordFileAccessImpl(file, "test");
+          state_.getSearch().recordFileAccessImpl(file, "test");
       if (!record_result.is_ok()) {
         spdlog::warn("Failed to record file access: {} - {}", file,
                      record_result.error().what());
@@ -488,20 +488,20 @@ void VectorFS::test_markov_chains() {
     }
   }
 
-  state_.get_search().updateSemanticRelationships();
+  state_.getSearch().updateSemanticRelationships();
 
-  auto rebuild_result = state_.get_search().rebuildIndexImpl();
+  auto rebuild_result = state_.getSearch().rebuildIndexImpl();
   if (!rebuild_result.is_ok()) {
     spdlog::warn("Failed to rebuild index: {}", rebuild_result.error().what());
   }
 
-  auto indexed_count = state_.get_search().getIndexedFilesCountImpl();
+  auto indexed_count = state_.getSearch().getIndexedFilesCountImpl();
   spdlog::info("Test files indexed: {}",
                indexed_count.is_ok() ? indexed_count.value() : 0);
   spdlog::info("HMM states: {}", hmm_model->get_state_count());
   spdlog::info("HMM sequences: {}", hmm_model->get_sequence_count());
 
-  auto predictions_result = state_.get_search().predictNextFilesImpl();
+  auto predictions_result = state_.getSearch().predictNextFilesImpl();
   if (predictions_result.is_ok() && !predictions_result.value().empty()) {
     spdlog::info("Test predictions:");
     for (const auto &pred : predictions_result.value()) {
@@ -510,7 +510,7 @@ void VectorFS::test_markov_chains() {
   }
 
   for (const auto &test_file : test_files) {
-    auto recs_result = state_.get_search().getRecommendationsImpl(test_file);
+    auto recs_result = state_.getSearch().getRecommendationsImpl(test_file);
     if (recs_result.is_ok() && !recs_result.value().empty()) {
       spdlog::info("Recommendations for {}:", test_file);
       for (const auto &rec : recs_result.value()) {
@@ -557,11 +557,11 @@ void VectorFS::test_container() {
       auto start_result = pid_container->start();
       if (start_result.is_ok()) {
         auto adapter = std::make_shared<OssecContainerAdapter>(
-            pid_container, state_.get_embedder_manager());
+            pid_container, state_.getEmbedderManager());
 
         adapter->initialize_markov_recommend_chain();
 
-        if (state_.get_container_manager().register_container(adapter)) {
+        if (state_.getContainerManager().register_container(adapter)) {
           spdlog::info("Successfully created and registered container: "
                        "test_container_2");
 
