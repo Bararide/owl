@@ -257,6 +257,7 @@ private:
 
               auto container = container_manager.get_container(container_id);
               if (!container) {
+                spdlog::error("container with id: {} not found", container_id);
                 throw std::runtime_error("Container not found: " +
                                          container_id);
               }
