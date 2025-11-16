@@ -46,6 +46,12 @@ struct DeleteContainer {
   std::string container_id;
 };
 
+struct DeleteFile {
+  std::string user_id;
+  std::string container_id;
+  std::string file_id;
+};
+
 struct ContainerFiles {
   std::string user_id;
   std::string container_id;
@@ -72,5 +78,7 @@ BOOST_HANA_ADAPT_STRUCT(owl::api::validate::DeleteContainer, user_id,
                         container_id);
 BOOST_HANA_ADAPT_STRUCT(owl::api::validate::ContainerFiles, user_id,
                         container_id);
+BOOST_HANA_ADAPT_STRUCT(owl::api::validate::DeleteFile, user_id,
+                        container_id, file_id);
 
 #endif // OWL_API_BODIES
