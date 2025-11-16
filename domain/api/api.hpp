@@ -124,6 +124,8 @@ private:
                   "File creation request sent to FUSE process");
             });
 
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
     responses::handleJsonResult(result, response);
   }
 
@@ -325,6 +327,8 @@ private:
                   "Container deletion request sent to FUSE process");
             });
 
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
     responses::handleJsonResult(result, response);
   }
 
@@ -389,6 +393,8 @@ private:
               }
             });
 
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
     responses::handleJsonResult(result, response);
   }
 
