@@ -51,6 +51,8 @@ private:
     //             Routes::bind(&VectorFSApi::handleFileRead, this));
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::getFileById, this));
+    Routes::Get(router, "/container/files",
+                Routes::bind(&VectorFSApi::handleContainerFilesGet, this));
     Routes::Delete(router, "/containers/delete",
                    Routes::bind(&VectorFSApi::handleContainerDelete, this));
     Routes::Post(router, "/containers/create",
