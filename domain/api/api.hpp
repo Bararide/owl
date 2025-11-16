@@ -405,7 +405,7 @@ private:
 
                 auto container = container_manager.get_container(container_id);
                 if (container) {
-                  bool deleted = container->delete_file(file_path);
+                  bool deleted = container->remove_file(file_path);
                   if (deleted) {
                     spdlog::info("File successfully deleted from container: {}",
                                  file_path);

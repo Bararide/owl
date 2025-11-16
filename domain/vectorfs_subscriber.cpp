@@ -731,7 +731,7 @@ bool VectorFS::delete_file_from_message(const nlohmann::json &message) {
       return false;
     }
 
-    bool deleted = container->delete_file(path);
+    bool deleted = container->remove_file(path);
     if (deleted) {
       spdlog::info("File {} successfully deleted from container {}", path,
                    container_id);
