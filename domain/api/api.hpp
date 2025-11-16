@@ -127,6 +127,18 @@ private:
     responses::handleJsonResult(result, response);
   }
 
+  void handleContainerFilesGet(const Pistache::Rest::Request &request, Pistache::Http::ResponseWriter response) {
+    auto result = response::parseJsonBody(request.body())
+      .and_then([](Json::Value json) {
+        return validate::Validator::validate<validate::ContainerFiles>(
+          json
+        );
+      })
+        .and_then([&request] (validate::ContainerFiles params) {
+          auto [user_id, file_id, container_id] = params;
+        })
+  }
+
   void handleContainerDelete(const Pistache::Rest::Request &request,
                              Pistache::Http::ResponseWriter response) {
     spdlog::info("=== Container Deletion Request ===");
