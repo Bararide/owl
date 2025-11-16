@@ -661,6 +661,25 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
   }
 }
 
+bool VectorFS::sendContainerDelete(const std::string& container_id) {
+    try {
+        Json::Value message;
+        message["type"] = "container_delete";
+        message["container_id"] = container_id;
+        message["timestamp"] = std::time(nullptr);
+        
+        std::string message_str = Json::writeString(json_builder_, message);
+        
+        zmq::message_t zmq_message(message_str.size());
+        memcpy(zmq_message.data(), message_str.data(), message_str.size());
+        
+        return publisher_.send(zmq_message, zmq::send_flags::dontwait);
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to send container delete message: {}", e.what());
+        return false;
+    }
+}
+
 bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
   try {
     std::string container_id = message["container_id"];

@@ -51,6 +51,8 @@ private:
     //             Routes::bind(&VectorFSApi::handleFileRead, this));
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::getFileById, this));
+    Routes::Delete(router, "/containers/:container_id",
+                   Routes::bind(&VectorFSApi::handleContainerDelete, this));
     Routes::Post(router, "/containers/create",
                  Routes::bind(&VectorFSApi::handleContainerCreate, this));
     Routes::Post(router, "/semantic",
@@ -125,6 +127,63 @@ private:
             });
 
     responses::handleJsonResult(result, response);
+  }
+
+  void handleContainerDelete(const Pistache::Rest::Request &request,
+                             Pistache::Http::ResponseWriter response) {
+    spdlog::info("=== Container Deletion Request ===");
+    spdlog::info("Client IP: {}", request.address().host());
+
+    try {
+      auto container_id = request.param(":container_id").as<std::string>();
+
+      if (container_id.empty()) {
+        responses::sendError(response, "Container ID is required");
+        return;
+      }
+
+      spdlog::info("Deleting container: {}", container_id);
+
+      auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+      auto &state = vfs.get_state();
+      auto &container_manager = state.getContainerManager();
+
+      auto container = container_manager.get_container(container_id);
+      if (!container) {
+        spdlog::warn("Container not found: {}", container_id);
+        responses::sendNotFound(response,
+                                "Container not found: " + container_id);
+        return;
+      }
+
+      if (publisher_->sendContainerDelete(container_id)) {
+        spdlog::info("Container deletion message sent via ZeroMQ: {}",
+                     container_id);
+
+        bool unregistered =
+            container_manager.unregister_container(container_id);
+        if (unregistered) {
+          spdlog::info("Container unregistered from container manager: {}",
+                       container_id);
+        }
+
+        auto response_data = utils::create_success_response(
+            {"container_id", "status", "message"}, container_id, "deleted",
+            "Container deletion request sent to FUSE process");
+
+        responses::sendSuccess(response, response_data);
+      } else {
+        spdlog::error("Failed to send container deletion message: {}",
+                      container_id);
+        responses::sendError(response,
+                             "Failed to send container deletion message");
+      }
+
+    } catch (const std::exception &e) {
+      spdlog::error("Error in handleContainerDelete: {}", e.what());
+      responses::sendError(response,
+                           std::string("Internal server error: ") + e.what());
+    }
   }
 
   void handleFileRead(const Pistache::Rest::Request &request,
@@ -217,8 +276,7 @@ private:
                                          container_id);
               }
 
-              auto content =
-                  container->get_file_content(file_id);
+              auto content = container->get_file_content(file_id);
 
               return content;
 
