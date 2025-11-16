@@ -44,6 +44,13 @@ public:
     return sendMessage(message.dump());
   }
 
+  bool sendContainerDelete(const std::string& container_id) {
+    nlohmann::json message;
+    message["container_id"] = container_id;
+
+    return sendMessage(message);
+  }
+
   bool sendFileCreate(const std::string &path, const std::string &content,
                       const std::string &user_id,
                       const std::string &container_id) {

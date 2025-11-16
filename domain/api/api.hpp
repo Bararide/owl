@@ -86,10 +86,6 @@ private:
 
   void handleFileCreate(const Pistache::Rest::Request &request,
                         Pistache::Http::ResponseWriter response) {
-    spdlog::info("=== File Creation Request ===");
-    spdlog::info("Client IP: {}", request.address().host());
-    spdlog::info("URL: {}", request.resource());
-
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
@@ -133,57 +129,82 @@ private:
                              Pistache::Http::ResponseWriter response) {
     spdlog::info("=== Container Deletion Request ===");
     spdlog::info("Client IP: {}", request.address().host());
+    spdlog::info("URL: {}", request.resource());
 
-    try {
-      auto container_id = request.param(":container_id").as<std::string>();
+    auto result = [&request]()
+        -> core::Result<std::string, std::string> {
+      try {
+        auto container_id = request.param(":container_id").as<std::string>();
 
-      if (container_id.empty()) {
-        responses::sendError(response, "Container ID is required");
-        return;
+        if (container_id.empty()) {
+          return core::Result<std::string, std::string>::Error(
+              "Container ID is required");
+        }
+
+        spdlog::info("Container ID to delete: {}", container_id);
+        return core::Result<std::string, std::string>::Ok(container_id);
+      } catch (const std::exception &e) {
+        return core::Result<std::string, std::string>::Error(
+            "Failed to extract container ID from URL");
       }
-
-      spdlog::info("Deleting container: {}", container_id);
-
-      auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+    }().and_then([this](std::string container_id) {
+      auto &vfs =
+          owl::instance::VFSInstance<EmbeddedModel>::getInstance();
       auto &state = vfs.get_state();
       auto &container_manager = state.getContainerManager();
 
       auto container = container_manager.get_container(container_id);
       if (!container) {
         spdlog::warn("Container not found: {}", container_id);
-        responses::sendNotFound(response,
-                                "Container not found: " + container_id);
-        return;
+        return core::Result<std::string, std::string>::Error(
+            "Container not found: " + container_id);
       }
 
+      return core::Result<std::string, std::string>::Ok(
+          container_id);
+    })
+    .and_then([this](std::string container_id) {
       if (publisher_->sendContainerDelete(container_id)) {
-        spdlog::info("Container deletion message sent via ZeroMQ: {}",
-                     container_id);
+        spdlog::info(
+            "Container deletion message sent via ZeroMQ: {}",
+            container_id);
+
+        auto &vfs =
+            owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+        auto &state = vfs.get_state();
+        auto &container_manager = state.getContainerManager();
 
         bool unregistered =
             container_manager.unregister_container(container_id);
         if (unregistered) {
-          spdlog::info("Container unregistered from container manager: {}",
-                       container_id);
+          spdlog::info(
+              "Container unregistered from container manager: {}",
+              container_id);
+        } else {
+          spdlog::warn("Container not found in container manager "
+                      "during unregistration: {}",
+                      container_id);
         }
 
-        auto response_data = utils::create_success_response(
-            {"container_id", "status", "message"}, container_id, "deleted",
-            "Container deletion request sent to FUSE process");
-
-        responses::sendSuccess(response, response_data);
+        return core::Result<std::string, std::string>::Ok(
+            container_id);
       } else {
-        spdlog::error("Failed to send container deletion message: {}",
-                      container_id);
-        responses::sendError(response,
-                             "Failed to send container deletion message");
+        return core::Result<std::string, std::string>::Error(
+            "Failed to send container deletion message via ZeroMQ");
       }
+    })
+    .map([](std::string container_id) -> Json::Value {
+      spdlog::info(
+          "Container deletion request processed successfully: {}",
+          container_id);
 
-    } catch (const std::exception &e) {
-      spdlog::error("Error in handleContainerDelete: {}", e.what());
-      responses::sendError(response,
-                           std::string("Internal server error: ") + e.what());
-    }
+      return utils::create_success_response(
+          {"container_id", "status", "message"}, container_id,
+          "deletion_pending",
+          "Container deletion request sent to FUSE process");
+    });
+
+    responses::handleJsonResult(result, response);
   }
 
   void handleFileRead(const Pistache::Rest::Request &request,
