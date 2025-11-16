@@ -153,6 +153,8 @@ private:
             .and_then([this](validate::DeleteContainer params) {
               auto [user_id, container_id] = params;
 
+              spdlog::error("AAAAAAAAAAAAAAAAAAAA");
+
               auto &vfs =
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance();
               auto &state = vfs.get_state();
@@ -174,11 +176,15 @@ private:
                           "this container");
               }
 
+              spdlog::error("BBBBBBBBBBBBBBBBBB");
+
               return core::Result<validate::DeleteContainer, std::string>::Ok(
                   params);
             })
             .and_then([this](validate::DeleteContainer params) {
               auto [user_id, container_id] = params;
+
+              spdlog::error("CCCCCCCCCCCCCCCCCCCC");
 
               if (publisher_->sendContainerDelete(container_id, user_id)) {
                 spdlog::info("Container deletion message sent via ZeroMQ: {} "
@@ -201,6 +207,8 @@ private:
                                "during unregistration: {}",
                                container_id);
                 }
+
+                spdlog::error("DDDDDDDDDDDDDDDDDD");
 
                 return core::Result<
                     std::pair<std::string, std::string>,

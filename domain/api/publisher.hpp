@@ -50,7 +50,7 @@ public:
     message["user_id"] = user_id;
     message["container_id"] = container_id;
 
-    return sendMessage(message);
+    return sendMessage(message.dump());
   }
 
   bool sendFileCreate(const std::string &path, const std::string &content,
