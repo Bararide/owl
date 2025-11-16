@@ -221,6 +221,8 @@ private:
                   static_cast<int>(filesArray.size()));
             });
 
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
     responses::handleJsonResult(result, response);
   }
 
