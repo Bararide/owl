@@ -332,100 +332,112 @@ private:
     responses::handleJsonResult(result, response);
   }
 
-  void handleFileDelete(const Pistache::Rest::Request &request, 
-                       Pistache::Http::ResponseWriter response) {
+  void handleFileDelete(const Pistache::Rest::Request &request,
+                        Pistache::Http::ResponseWriter response) {
     spdlog::info("=== File Deletion Request ===");
     spdlog::info("Client IP: {}", request.address().host());
     spdlog::info("URL: {}", request.resource());
 
-    auto result = responses::parseJsonBody(request.body())
-      .and_then([](Json::Value json) {
-        return validate::Validator::validate<validate::DeleteFile>(json);
-      })
-      .and_then([this](validate::DeleteFile params) {
-        auto [user_id, container_id, file_path] = params;
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<validate::DeleteFile>(json);
+            })
+            .and_then([this](validate::DeleteFile params) {
+              auto [user_id, container_id, file_path] = params;
 
-        spdlog::info("Deleting file: {} from container: {} for user: {}", 
-                    file_path, container_id, user_id);
+              spdlog::info("Deleting file: {} from container: {} for user: {}",
+                           file_path, container_id, user_id);
 
-        if (file_path.empty()) {
-          return core::Result<validate::DeleteFile, std::string>::Error(
-              "File path is required");
-        }
+              if (file_path.empty()) {
+                return core::Result<validate::DeleteFile, std::string>::Error(
+                    "File path is required");
+              }
 
-        if (container_id.empty()) {
-          return core::Result<validate::DeleteFile, std::string>::Error(
-              "Container ID is required");
-        }
+              if (container_id.empty()) {
+                return core::Result<validate::DeleteFile, std::string>::Error(
+                    "Container ID is required");
+              }
 
-        auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-        auto &state = vfs.get_state();
-        auto &container_manager = state.getContainerManager();
+              auto &vfs =
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+              auto &state = vfs.get_state();
+              auto &container_manager = state.getContainerManager();
 
-        auto container = container_manager.get_container(container_id);
-        if (!container) {
-          spdlog::warn("Container not found: {}", container_id);
-          return core::Result<validate::DeleteFile, std::string>::Error(
-              "Container not found: " + container_id);
-        }
+              auto container = container_manager.get_container(container_id);
+              if (!container) {
+                spdlog::warn("Container not found: {}", container_id);
+                return core::Result<validate::DeleteFile, std::string>::Error(
+                    "Container not found: " + container_id);
+              }
 
-        if (container->get_owner() != user_id) {
-          spdlog::warn("User {} does not have permission to delete files "
-                      "from container {} owned by {}",
-                      user_id, container_id, container->get_owner());
-          return core::Result<validate::DeleteFile, std::string>::Error(
-              "Access denied: you don't have permission to delete files "
-              "from this container");
-        }
+              if (container->get_owner() != user_id) {
+                spdlog::warn("User {} does not have permission to delete files "
+                             "from container {} owned by {}",
+                             user_id, container_id, container->get_owner());
+                return core::Result<validate::DeleteFile, std::string>::Error(
+                    "Access denied: you don't have permission to delete files "
+                    "from this container");
+              }
 
-        if (!container->file_exists(file_path)) {
-          spdlog::warn("File not found in container: {}", file_path);
-          return core::Result<validate::DeleteFile, std::string>::Error(
-              "File not found: " + file_path);
-        }
+              if (!container->file_exists(file_path)) {
+                spdlog::warn("File not found in container: {}", file_path);
+                return core::Result<validate::DeleteFile, std::string>::Error(
+                    "File not found: " + file_path);
+              }
 
-        return core::Result<validate::DeleteFile, std::string>::Ok(params);
-      })
-      .and_then([this](validate::DeleteFile params) {
-        auto [user_id, container_id, file_path] = params;
+              return core::Result<validate::DeleteFile, std::string>::Ok(
+                  params);
+            })
+            .and_then([this](validate::DeleteFile params) {
+              auto [user_id, container_id, file_path] = params;
 
-        if (publisher_->sendFileDelete(file_path, user_id, container_id)) {
-          spdlog::info("File deletion message sent via ZeroMQ: {} from container {}",
-                      file_path, container_id);
+              if (publisher_->sendFileDelete(file_path, user_id,
+                                             container_id)) {
+                spdlog::info("File deletion message sent via ZeroMQ: {} from "
+                             "container {}",
+                             file_path, container_id);
 
-          auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-          auto &state = vfs.get_state();
-          auto &container_manager = state.getContainerManager();
+                auto &vfs =
+                    owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+                auto &state = vfs.get_state();
+                auto &container_manager = state.getContainerManager();
 
-          auto container = container_manager.get_container(container_id);
-          if (container) {
-            bool deleted = container->delete_file(file_path);
-            if (deleted) {
-              spdlog::info("File successfully deleted from container: {}", file_path);
-            } else {
-              spdlog::warn("Failed to delete file from container: {}", file_path);
-            }
-          }
+                auto container = container_manager.get_container(container_id);
+                if (container) {
+                  bool deleted = container->delete_file(file_path);
+                  if (deleted) {
+                    spdlog::info("File successfully deleted from container: {}",
+                                 file_path);
+                  } else {
+                    spdlog::warn("Failed to delete file from container: {}",
+                                 file_path);
+                  }
+                }
 
-          return core::Result<std::tuple<std::string, std::string, std::string>, 
-                            std::string>::Ok(std::make_tuple(file_path, container_id, user_id));
-        } else {
-          return core::Result<std::tuple<std::string, std::string, std::string>,
-                            std::string>::Error(
-              "Failed to send file deletion message via ZeroMQ");
-        }
-      })
-      .map([](std::tuple<std::string, std::string, std::string> result) -> Json::Value {
-        auto [file_path, container_id, user_id] = result;
-        spdlog::info("File deletion request processed successfully: "
-                    "{} from container {} for user: {}",
-                    file_path, container_id, user_id);
+                return core::Result<
+                    std::tuple<std::string, std::string, std::string>,
+                    std::string>::Ok(std::make_tuple(file_path, container_id,
+                                                     user_id));
+              } else {
+                return core::Result<
+                    std::tuple<std::string, std::string, std::string>,
+                    std::string>::
+                    Error("Failed to send file deletion message via ZeroMQ");
+              }
+            })
+            .map([](std::tuple<std::string, std::string, std::string> result)
+                     -> Json::Value {
+              auto [file_path, container_id, user_id] = result;
+              spdlog::info("File deletion request processed successfully: "
+                           "{} from container {} for user: {}",
+                           file_path, container_id, user_id);
 
-        return utils::create_success_response(
-            {"file_path", "container_id", "user_id", "status", "message"},
-            file_path, container_id, user_id, "deleted",
-            "File deletion request sent to FUSE process");
-      });
+              return utils::create_success_response(
+                  {"file_path", "container_id", "user_id", "status", "message"},
+                  file_path, container_id, user_id, "deleted",
+                  "File deletion request sent to FUSE process");
+            });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
         MIME(Application, Json));

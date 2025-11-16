@@ -317,6 +317,8 @@ void VectorFS::process_messages() {
             handle_container_create(json_msg);
           } else if (message_type == "file_create") {
             handle_file_create(json_msg);
+          } else if (message_type == "file_delete") {
+            handle_file_delete(json_msg);
           } else if (message_type == "container_stop") {
             handle_container_stop(json_msg);
           } else if (message_type == "container_delete") {
@@ -374,6 +376,20 @@ void VectorFS::handle_file_create(const nlohmann::json &message) {
     }
   } catch (const std::exception &e) {
     spdlog::error("Error handling file create: {}", e.what());
+  }
+}
+
+void VectorFS::handle_file_delete(const nlohmann::json &message) {
+  try {
+    spdlog::info("Processing file deletion request");
+
+    if (delete_file_from_message(message)) {
+      spdlog::info("File deleted successfully from ZeroMQ message");
+    } else {
+      spdlog::error("Failed to delete file from ZeroMQ message");
+    }
+  } catch (const std::exception &e) {
+    spdlog::error("Error handling file delete: {}", e.what());
   }
 }
 
@@ -681,6 +697,53 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
 
   } catch (const std::exception &e) {
     spdlog::error("Exception in create_file_from_message: {}", e.what());
+    return false;
+  }
+}
+
+bool VectorFS::delete_file_from_message(const nlohmann::json &message) {
+  try {
+    std::string path = message["path"];
+    std::string user_id = message["user_id"];
+    std::string container_id = message["container_id"];
+
+    spdlog::info("Deleting file: {} from container: {}", path, container_id);
+
+    if (container_id.empty()) {
+      spdlog::error("Container ID is required for file deletion");
+      return false;
+    }
+
+    auto container = state_.getContainerManager().get_container(container_id);
+    if (!container) {
+      spdlog::error("Container not found in main storage: {}", container_id);
+      return false;
+    }
+
+    if (container->get_owner() != user_id) {
+      spdlog::error("User {} does not have access to container {}", user_id,
+                    container_id);
+      return false;
+    }
+
+    if (!container->file_exists(path)) {
+      spdlog::warn("File not found in container: {}", path);
+      return false;
+    }
+
+    bool deleted = container->delete_file(path);
+    if (deleted) {
+      spdlog::info("File {} successfully deleted from container {}", path,
+                   container_id);
+      return true;
+    } else {
+      spdlog::error("Failed to delete file {} from container {}", path,
+                    container_id);
+      return false;
+    }
+
+  } catch (const std::exception &e) {
+    spdlog::error("Exception in delete_file_from_message: {}", e.what());
     return false;
   }
 }

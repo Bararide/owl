@@ -68,6 +68,17 @@ public:
     return sendMessage(message.dump());
   }
 
+  bool sendFileDelete(const std::string &path, const std::string &user_id,
+                      const std::string &container_id) {
+    nlohmann::json message;
+    message["type"] = "file_delete";
+    message["path"] = path;
+    message["user_id"] = user_id;
+    message["container_id"] = container_id;
+
+    return sendMessage(message.dump());
+  }
+
   bool isConnected() const { return connected_; }
 
 private:
