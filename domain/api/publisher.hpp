@@ -47,6 +47,7 @@ public:
   bool sendContainerDelete(const std::string &container_id,
                            const std::string &user_id) {
     nlohmann::json message;
+    message["type"] = "container_delete";
     message["user_id"] = user_id;
     message["container_id"] = container_id;
 
