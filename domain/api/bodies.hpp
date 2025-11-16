@@ -41,6 +41,11 @@ struct CreateContainer {
   bool privileged;
 };
 
+struct DeleteContainer {
+  std::string user_id;
+  std::string container_id;
+};
+
 struct ReadFileByIdBody {
   std::string file_id;
   std::string container_id;
@@ -57,6 +62,8 @@ BOOST_HANA_ADAPT_STRUCT(owl::api::validate::CreateContainer, user_id,
                         container_id, memory_limit, storage_quota, file_limit,
                         env_label, type_label, commands, privileged);
 BOOST_HANA_ADAPT_STRUCT(owl::api::validate::ReadFileByIdBody, file_id,
+                        container_id);
+BOOST_HANA_ADAPT_STRUCT(owl::api::validate::DeleteContainer, user_id,
                         container_id);
 
 #endif // OWL_API_BODIES

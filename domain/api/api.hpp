@@ -51,7 +51,7 @@ private:
     //             Routes::bind(&VectorFSApi::handleFileRead, this));
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::getFileById, this));
-    Routes::Delete(router, "/containers/:container_id",
+    Routes::Delete(router, "/containers/delete",
                    Routes::bind(&VectorFSApi::handleContainerDelete, this));
     Routes::Post(router, "/containers/create",
                  Routes::bind(&VectorFSApi::handleContainerCreate, this));
@@ -131,78 +131,98 @@ private:
     spdlog::info("Client IP: {}", request.address().host());
     spdlog::info("URL: {}", request.resource());
 
-    auto result = [&request]()
-        -> core::Result<std::string, std::string> {
-      try {
-        auto container_id = request.param(":container_id").as<std::string>();
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<validate::DeleteContainer>(
+                  json);
+            })
+            .and_then([&request](validate::DeleteContainer params) {
+              auto [user_id, container_id] = params;
 
-        if (container_id.empty()) {
-          return core::Result<std::string, std::string>::Error(
-              "Container ID is required");
-        }
+              if (container_id.empty()) {
+                return core::Result<validate::DeleteContainer, std::string>::
+                    Error("Container ID is required");
+              }
 
-        spdlog::info("Container ID to delete: {}", container_id);
-        return core::Result<std::string, std::string>::Ok(container_id);
-      } catch (const std::exception &e) {
-        return core::Result<std::string, std::string>::Error(
-            "Failed to extract container ID from URL");
-      }
-    }().and_then([this](std::string container_id) {
-      auto &vfs =
-          owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-      auto &state = vfs.get_state();
-      auto &container_manager = state.getContainerManager();
+              spdlog::info("Deleting container: {} for user: {}", container_id,
+                           user_id);
+              return core::Result<validate::DeleteContainer, std::string>::Ok(
+                  params);
+            })
+            .and_then([this](validate::DeleteContainer params) {
+              auto [user_id, container_id] = params;
 
-      auto container = container_manager.get_container(container_id);
-      if (!container) {
-        spdlog::warn("Container not found: {}", container_id);
-        return core::Result<std::string, std::string>::Error(
-            "Container not found: " + container_id);
-      }
+              auto &vfs =
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+              auto &state = vfs.get_state();
+              auto &container_manager = state.getContainerManager();
 
-      return core::Result<std::string, std::string>::Ok(
-          container_id);
-    })
-    .and_then([this](std::string container_id) {
-      if (publisher_->sendContainerDelete(container_id)) {
-        spdlog::info(
-            "Container deletion message sent via ZeroMQ: {}",
-            container_id);
+              auto container = container_manager.get_container(container_id);
+              if (!container) {
+                spdlog::warn("Container not found: {}", container_id);
+                return core::Result<validate::DeleteContainer, std::string>::
+                    Error("Container not found: " + container_id);
+              }
 
-        auto &vfs =
-            owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-        auto &state = vfs.get_state();
-        auto &container_manager = state.getContainerManager();
+              if (container->get_owner() != user_id) {
+                spdlog::warn("User {} does not have permission to delete "
+                             "container {} owned by {}",
+                             user_id, container_id, container->get_owner());
+                return core::Result<validate::DeleteContainer, std::string>::
+                    Error("Access denied: you don't have permission to delete "
+                          "this container");
+              }
 
-        bool unregistered =
-            container_manager.unregister_container(container_id);
-        if (unregistered) {
-          spdlog::info(
-              "Container unregistered from container manager: {}",
-              container_id);
-        } else {
-          spdlog::warn("Container not found in container manager "
-                      "during unregistration: {}",
+              return core::Result<validate::DeleteContainer, std::string>::Ok(
+                  params);
+            })
+            .and_then([this](validate::DeleteContainer params) {
+              auto [user_id, container_id] = params;
+
+              if (publisher_->sendContainerDelete(container_id, user_id)) {
+                spdlog::info("Container deletion message sent via ZeroMQ: {} "
+                             "for user: {}",
+                             container_id, user_id);
+
+                auto &vfs =
+                    owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+                auto &state = vfs.get_state();
+                auto &container_manager = state.getContainerManager();
+
+                bool unregistered =
+                    container_manager.unregister_container(container_id);
+                if (unregistered) {
+                  spdlog::info(
+                      "Container unregistered from container manager: {}",
                       container_id);
-        }
+                } else {
+                  spdlog::warn("Container not found in container manager "
+                               "during unregistration: {}",
+                               container_id);
+                }
 
-        return core::Result<std::string, std::string>::Ok(
-            container_id);
-      } else {
-        return core::Result<std::string, std::string>::Error(
-            "Failed to send container deletion message via ZeroMQ");
-      }
-    })
-    .map([](std::string container_id) -> Json::Value {
-      spdlog::info(
-          "Container deletion request processed successfully: {}",
-          container_id);
+                return core::Result<
+                    std::pair<std::string, std::string>,
+                    std::string>::Ok(std::make_pair(container_id, user_id));
+              } else {
+                return core::Result<std::pair<std::string, std::string>,
+                                    std::string>::
+                    Error(
+                        "Failed to send container deletion message via ZeroMQ");
+              }
+            })
+            .map([](std::pair<std::string, std::string> result) -> Json::Value {
+              auto [container_id, user_id] = result;
+              spdlog::info("Container deletion request processed successfully: "
+                           "{} for user: {}",
+                           container_id, user_id);
 
-      return utils::create_success_response(
-          {"container_id", "status", "message"}, container_id,
-          "deletion_pending",
-          "Container deletion request sent to FUSE process");
-    });
+              return utils::create_success_response(
+                  {"container_id", "user_id", "status", "message"},
+                  container_id, user_id, "deletion_pending",
+                  "Container deletion request sent to FUSE process");
+            });
 
     responses::handleJsonResult(result, response);
   }
