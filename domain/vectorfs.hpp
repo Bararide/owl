@@ -73,10 +73,12 @@ private:
   void handle_container_create(const nlohmann::json &message);
   void handle_file_create(const nlohmann::json &message);
   void handle_container_stop(const nlohmann::json &message);
+  void handle_container_delete(const nlohmann::json &message);
+  
   bool create_container_from_message(const nlohmann::json &message);
-  bool sendContainerDelete(const std::string& container_id);
   bool create_file_from_message(const nlohmann::json &message);
   bool stop_container_from_message(const nlohmann::json &message);
+  bool delete_container_from_message(const nlohmann::json &message);
 
 public:
   VectorFS(State &state) : state_{state}, zmq_context_(1) {

@@ -12,6 +12,7 @@ bool ContainerManager::register_container(
   if (containers_.find(container_id) != containers_.end())
     return false;
   containers_[container_id] = container;
+  spdlog::info("Container registered: {}", container_id);
   return true;
 }
 
@@ -25,7 +26,46 @@ bool ContainerManager::register_ossec_container(
 
 bool ContainerManager::unregister_container(const std::string &container_id) {
   std::lock_guard<std::mutex> lock(containers_mutex_);
-  return containers_.erase(container_id) > 0;
+  auto it = containers_.find(container_id);
+  if (it != containers_.end()) {
+    spdlog::info("Container unregistered: {}", container_id);
+    containers_.erase(it);
+    return true;
+  }
+  spdlog::warn("Container not found for unregistration: {}", container_id);
+  return false;
+}
+
+bool ContainerManager::delete_container(const std::string &container_id) {
+  std::lock_guard<std::mutex> lock(containers_mutex_);
+  auto it = containers_.find(container_id);
+  if (it != containers_.end()) {
+    spdlog::info("=== Starting container deletion: {} ===", container_id);
+
+    auto container = it->second;
+
+    if (auto ossec_adapter =
+            std::dynamic_pointer_cast<OssecContainerAdapter>(container)) {
+      auto native_container = ossec_adapter->get_native_container();
+      if (native_container && native_container->is_running()) {
+        spdlog::info("Stopping container: {}", container_id);
+        auto stop_result = native_container->stop();
+        if (!stop_result.is_ok()) {
+          spdlog::warn("Failed to stop container {}: {}", container_id,
+                       stop_result.error().what());
+        } else {
+          spdlog::info("Container stopped successfully: {}", container_id);
+        }
+      }
+    }
+
+    containers_.erase(it);
+    spdlog::info("Container deleted from container manager: {}", container_id);
+    spdlog::info("=== Container {} deletion completed ===", container_id);
+    return true;
+  }
+  spdlog::warn("Container not found for deletion: {}", container_id);
+  return false;
 }
 
 std::shared_ptr<IKnowledgeContainer>
@@ -93,6 +133,7 @@ size_t ContainerManager::get_available_container_count() {
 
 void ContainerManager::clear() {
   std::lock_guard<std::mutex> lock(containers_mutex_);
+  spdlog::info("Clearing all containers, count: {}", containers_.size());
   containers_.clear();
 }
 

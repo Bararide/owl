@@ -319,6 +319,8 @@ void VectorFS::process_messages() {
             handle_file_create(json_msg);
           } else if (message_type == "container_stop") {
             handle_container_stop(json_msg);
+          } else if (message_type == "container_delete") {
+            handle_container_delete(json_msg);
           } else {
             spdlog::warn("Unknown message type: {}", message_type);
           }
@@ -386,6 +388,28 @@ void VectorFS::handle_container_stop(const nlohmann::json &message) {
     }
   } catch (const std::exception &e) {
     spdlog::error("Error handling container stop: {}", e.what());
+  }
+}
+
+void VectorFS::handle_container_delete(const nlohmann::json &message) {
+  try {
+    spdlog::info("=== FUSE: Processing container deletion request ===");
+
+    std::string container_id = message["container_id"];
+    spdlog::info("Container ID to delete: {}", container_id);
+
+    if (delete_container_from_message(message)) {
+      spdlog::info("=== FUSE: Container deleted successfully ===");
+
+      spdlog::info("Remaining containers in FUSE: {}", containers_.size());
+      for (const auto &[id, info] : containers_) {
+        spdlog::info("  - Container: {} (status: {})", id, info.status);
+      }
+    } else {
+      spdlog::error("=== FUSE: Failed to delete container ===");
+    }
+  } catch (const std::exception &e) {
+    spdlog::error("Error handling container delete: {}", e.what());
   }
 }
 
@@ -661,23 +685,90 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::sendContainerDelete(const std::string& container_id) {
-    try {
-        Json::Value message;
-        message["type"] = "container_delete";
-        message["container_id"] = container_id;
-        message["timestamp"] = std::time(nullptr);
-        
-        std::string message_str = Json::writeString(json_builder_, message);
-        
-        zmq::message_t zmq_message(message_str.size());
-        memcpy(zmq_message.data(), message_str.data(), message_str.size());
-        
-        return publisher_.send(zmq_message, zmq::send_flags::dontwait);
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to send container delete message: {}", e.what());
-        return false;
+bool VectorFS::delete_container_from_message(const nlohmann::json &message) {
+  try {
+    std::string container_id = message["container_id"];
+
+    spdlog::info("=== Starting container deletion: {} ===", container_id);
+
+    auto container = state_.getContainerManager().get_container(container_id);
+    if (!container) {
+      spdlog::warn("Container not found in main storage: {}", container_id);
     }
+
+    bool unregistered =
+        state_.getContainerManager().unregister_container(container_id);
+    if (unregistered) {
+      spdlog::info("Container unregistered from main storage: {}",
+                   container_id);
+    } else {
+      spdlog::warn(
+          "Container not found in main storage during unregistration: {}",
+          container_id);
+    }
+
+    bool deleted = state_.getContainerManager().delete_container(container_id);
+    if (deleted) {
+      spdlog::info("Container deleted from container manager: {}",
+                   container_id);
+    }
+
+    containers_.erase(container_id);
+    container_adapters_.erase(container_id);
+
+    std::string container_fuse_path = "/.containers/" + container_id;
+
+    std::vector<std::string> files_to_remove;
+    for (const auto &[file_path, _] : virtual_files) {
+      if (file_path.find(container_fuse_path) == 0) {
+        files_to_remove.push_back(file_path);
+      }
+    }
+
+    for (const auto &file_path : files_to_remove) {
+      virtual_files.erase(file_path);
+      spdlog::debug("Removed virtual file: {}", file_path);
+    }
+
+    std::vector<std::string> dirs_to_remove;
+    for (const auto &dir_path : virtual_dirs) {
+      if (dir_path.find(container_fuse_path) == 0) {
+        dirs_to_remove.push_back(dir_path);
+      }
+    }
+
+    for (const auto &dir_path : dirs_to_remove) {
+      virtual_dirs.erase(dir_path);
+      spdlog::debug("Removed virtual directory: {}", dir_path);
+    }
+
+    virtual_dirs.erase(container_fuse_path);
+    spdlog::info("Removed container directory from FUSE: {}",
+                 container_fuse_path);
+
+    std::string container_physical_path =
+        "/home/bararide/.vectorfs/containers/" + container_id;
+    try {
+      if (std::filesystem::exists(container_physical_path)) {
+        std::filesystem::remove_all(container_physical_path);
+        spdlog::info("Removed physical container directory: {}",
+                     container_physical_path);
+      } else {
+        spdlog::warn("Physical container directory not found: {}",
+                     container_physical_path);
+      }
+    } catch (const std::filesystem::filesystem_error &e) {
+      spdlog::error("Failed to remove physical container directory {}: {}",
+                    container_physical_path, e.what());
+    }
+
+    spdlog::info("=== Container {} successfully deleted ===", container_id);
+    return true;
+
+  } catch (const std::exception &e) {
+    spdlog::error("Exception in delete_container_from_message: {}", e.what());
+    return false;
+  }
 }
 
 bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
