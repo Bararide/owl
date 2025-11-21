@@ -560,10 +560,12 @@ private:
 
               Json::Value resultsJson(Json::arrayValue);
               for (const auto &[file_path, score] : results) {
-                Json::Value resultJson;
-                resultJson["path"] = file_path;
-                resultJson["score"] = score;
-                resultsJson.append(resultJson);
+                if (score < 1.0) {
+                  Json::Value resultJson;
+                  resultJson["path"] = file_path;
+                  resultJson["score"] = score;
+                  resultsJson.append(resultJson);
+                }
               }
 
               return utils::create_success_response(
