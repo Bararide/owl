@@ -102,6 +102,27 @@ public:
   void test_markov_chains();
   void test_container();
 
+  std::shared_ptr<IKnowledgeContainer> 
+  get_unified_container(const std::string& container_id) {
+      auto container = state_.getContainerManager().get_container(container_id);
+      if (container) {
+          return container;
+      }
+      
+      auto adapter_it = container_adapters_.find(container_id);
+      if (adapter_it != container_adapters_.end()) {
+          return adapter_it->second;
+      }
+      
+      return nullptr;
+  }
+
+  std::shared_ptr<IKnowledgeContainer> 
+  get_container_adapter(const std::string& container_id) {
+      auto it = container_adapters_.find(container_id);
+      return it != container_adapters_.end() ? it->second : nullptr;
+  }
+
   [[nodiscard]] chunkees::Search &getSearch() noexcept {
     return state_.getSearch();
   }

@@ -553,11 +553,33 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     spdlog::info("Initializing Markov chain...");
     adapter->initialize_markov_recommend_chain();
 
+    spdlog::info("=== FUSE: Registering container in ContainerManager: {} ===",
+                 container_id);
+
     bool registered = state_.getContainerManager().register_container(adapter);
     if (!registered) {
-      spdlog::error("Failed to register container in manager: {}",
+      spdlog::error("=== FUSE: FAILED to register container in manager: {} ===",
                     container_id);
+
+      auto existing = state_.getContainerManager().get_container(container_id);
+      if (existing) {
+        spdlog::error(
+            "=== FUSE: Container already exists in manager with owner: {} ===",
+            existing->get_owner());
+      }
+
+      auto all_containers = state_.getContainerManager().get_all_containers();
+      spdlog::info("=== FUSE: Current containers in manager: {} ===",
+                   all_containers.size());
+      for (const auto &cont : all_containers) {
+        spdlog::info("  - {} (owner: {})", cont->get_id(), cont->get_owner());
+      }
+
       return false;
+    } else {
+      spdlog::info(
+          "=== FUSE: SUCCESSFULLY registered container in manager: {} ===",
+          container_id);
     }
 
     std::string debug_content =
