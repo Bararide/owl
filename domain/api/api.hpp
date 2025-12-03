@@ -2,6 +2,7 @@
 #define VECTORFS_PISTACHE_API_HPP
 
 #include "publisher.hpp"
+#include "requests.hpp"
 #include "responses.hpp"
 #include "validate.hpp"
 
@@ -49,6 +50,8 @@ private:
                  Routes::bind(&VectorFSApi::handleFileCreate, this));
     Routes::Get(router, "/files/read",
                 Routes::bind(&VectorFSApi::getFileById, this));
+    Routes::Get(router, "/container/metrics",
+                Routes::bind(&VectorFSApi::handleGetContainerMetrics, this));
     Routes::Get(router, "/container/files",
                 Routes::bind(&VectorFSApi::handleContainerFilesGet, this));
     Routes::Delete(router, "/containers/delete",
@@ -84,6 +87,34 @@ private:
     response.send(Pistache::Http::Code::Ok, "OK");
 
     spdlog::info("=== ROOT HANDLER COMPLETED ===");
+  }
+
+  void handleGetContainerMetrics(const Pistache::Rest::Request &request,
+                                 Pistache::Http::ResponseWriter response) {
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<validate::Container>(json);
+            })
+            .and_then([this](validate::Container params) {
+              auto [user_id, container_id] = params;
+
+              validate::GetContainerMetrics metrics{};
+
+              if (publisher_->sendContainerMetrics(user_id, container_id,
+                                                   metrics)) {
+                return core::Result<validate::GetContainerMetrics>::Ok(metrics);
+              } else {
+                return core::Result<validate::GetContainerMetrics>::Error(
+                    "Failed to get container metrics");
+              }
+            })
+            .map([](validate::GetContainerMetrics result) -> Json::Value {
+              auto [memory_limit, cpu_limit] = result;
+
+              return utils::create_success_response(
+                  {"memory_limit", "cpu_limit"}, memory_limit, cpu_limit);
+            });
   }
 
   void handleFileCreate(const Pistache::Rest::Request &request,
@@ -130,96 +161,109 @@ private:
   }
 
   void handleContainerFilesGet(const Pistache::Rest::Request &request,
-                              Pistache::Http::ResponseWriter response) {
-      spdlog::info("=== Container Files Get Request ===");
-      
-      auto result = responses::parseJsonBody(request.body())
-          .and_then([](Json::Value json) {
-              return validate::Validator::validate<validate::ContainerFiles>(json);
-          })
-          .and_then([this](validate::ContainerFiles params) {
+                               Pistache::Http::ResponseWriter response) {
+    spdlog::info("=== Container Files Get Request ===");
+
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<validate::Container>(json);
+            })
+            .and_then([this](validate::Container params) {
               auto [user_id, container_id] = params;
 
-              spdlog::info("Getting files for container: {} for user: {}", 
-                          container_id, user_id);
+              spdlog::info("Getting files for container: {} for user: {}",
+                           container_id, user_id);
 
-              auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+              auto &vfs =
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
               auto &state = vfs.get_state();
               auto &container_manager = state.getContainerManager();
 
               auto container = container_manager.get_container(container_id);
-              
+
               if (!container) {
-                  auto &fuse_instance = owl::instance::VFSInstance<EmbeddedModel>::getInstance().get_vector_fs();
-                  auto fuse_container = fuse_instance.get_container_adapter(container_id);
-                  
-                  if (fuse_container) {
-                      container = fuse_container;
-                      spdlog::info("Found container in FUSE storage: {}", container_id);
-                  }
+                auto &fuse_instance =
+                    owl::instance::VFSInstance<EmbeddedModel>::getInstance()
+                        .get_vector_fs();
+                auto fuse_container =
+                    fuse_instance.get_container_adapter(container_id);
+
+                if (fuse_container) {
+                  container = fuse_container;
+                  spdlog::info("Found container in FUSE storage: {}",
+                               container_id);
+                }
               }
 
               if (!container) {
-                  spdlog::warn("Container not found: {}", container_id);
-                  return core::Result<validate::ContainerFiles, std::string>::Error(
-                      "Container not found: " + container_id);
+                spdlog::warn("Container not found: {}", container_id);
+                return core::Result<validate::ContainerFiles, std::string>::
+                    Error("Container not found: " + container_id);
               }
 
               if (container->get_owner() != user_id) {
-                  spdlog::warn("User {} doesn't have permission for container {} owned by {}", 
-                              user_id, container_id, container->get_owner());
-                  return core::Result<validate::ContainerFiles, std::string>::Error(
-                      "Access denied");
+                spdlog::warn("User {} doesn't have permission for container {} "
+                             "owned by {}",
+                             user_id, container_id, container->get_owner());
+                return core::Result<validate::ContainerFiles,
+                                    std::string>::Error("Access denied");
               }
 
-              return core::Result<validate::ContainerFiles, std::string>::Ok(params);
-          })
-          .and_then([this](validate::ContainerFiles params) {
+              return core::Result<validate::ContainerFiles, std::string>::Ok(
+                  params);
+            })
+            .and_then([this](validate::ContainerFiles params) {
               auto [user_id, container_id] = params;
 
-              auto &vfs = owl::instance::VFSInstance<EmbeddedModel>::getInstance();
+              auto &vfs =
+                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
               auto &state = vfs.get_state();
               auto &container_manager = state.getContainerManager();
 
-              auto container = vfs.get_vector_fs().get_unified_container(container_id);
+              auto container =
+                  vfs.get_vector_fs().get_unified_container(container_id);
               if (!container) {
-                  return core::Result<Json::Value, std::string>::Error(
-                      "Container not found after validation: " + container_id);
+                return core::Result<Json::Value, std::string>::Error(
+                    "Container not found after validation: " + container_id);
               }
 
               auto files = container->list_files("/");
               Json::Value filesArray(Json::arrayValue);
 
               for (const auto &file_name : files) {
-                  std::string file_path = file_name;
-                  if (file_path[0] != '/') {
-                      file_path = "/" + file_path;
-                  }
+                std::string file_path = file_name;
+                if (file_path[0] != '/') {
+                  file_path = "/" + file_path;
+                }
 
-                  Json::Value fileInfo;
-                  fileInfo["name"] = file_name;
-                  fileInfo["path"] = file_path;
+                Json::Value fileInfo;
+                fileInfo["name"] = file_name;
+                fileInfo["path"] = file_path;
 
-                  std::string content = container->get_file_content(file_path);
-                  fileInfo["content"] = content;
-                  fileInfo["size"] = static_cast<Json::UInt64>(content.size());
-                  fileInfo["exists"] = container->file_exists(file_path);
-                  fileInfo["is_directory"] = container->is_directory(file_path);
-                  fileInfo["category"] = container->classify_file(file_path);
+                std::string content = container->get_file_content(file_path);
+                fileInfo["content"] = content;
+                fileInfo["size"] = static_cast<Json::UInt64>(content.size());
+                fileInfo["exists"] = container->file_exists(file_path);
+                fileInfo["is_directory"] = container->is_directory(file_path);
+                fileInfo["category"] = container->classify_file(file_path);
 
-                  filesArray.append(fileInfo);
+                filesArray.append(fileInfo);
               }
 
-              spdlog::info("Found {} files in container: {}", filesArray.size(), container_id);
+              spdlog::info("Found {} files in container: {}", filesArray.size(),
+                           container_id);
               return core::Result<Json::Value, std::string>::Ok(filesArray);
-          })
-          .map([this](Json::Value filesArray) -> Json::Value {
+            })
+            .map([this](Json::Value filesArray) -> Json::Value {
               return utils::create_success_response(
-                  {"files", "count"}, filesArray, static_cast<int>(filesArray.size()));
-          });
+                  {"files", "count"}, filesArray,
+                  static_cast<int>(filesArray.size()));
+            });
 
-      response.headers().add<Pistache::Http::Header::ContentType>(MIME(Application, Json));
-      responses::handleJsonResult(result, response);
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
+    responses::handleJsonResult(result, response);
   }
 
   void handleContainerDelete(const Pistache::Rest::Request &request,
