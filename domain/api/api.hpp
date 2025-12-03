@@ -135,15 +135,8 @@ private:
             .and_then([this](validate::CreateFile params) {
               auto [path, content, user_id, container_id] = params;
 
-              spdlog::info("File path: {}", path);
-              spdlog::info("Content length: {} bytes", content.size());
-              spdlog::info("Content: {}", content);
-              spdlog::info("Target container: {}", container_id);
-              spdlog::info("User: {}", user_id);
-
               if (publisher_->sendFileCreate(path, content, user_id,
                                              container_id)) {
-                spdlog::info("File creation message sent via ZeroMQ: {}", path);
                 return core::
                     Result<std::pair<std::string, size_t>, std::string>::Ok(
                         std::make_pair(path, content.size()));
@@ -155,7 +148,6 @@ private:
             })
             .map([](std::pair<std::string, size_t> result) -> Json::Value {
               auto [path, size] = result;
-              spdlog::info("File creation request sent: {}", path);
               return utils::create_success_response(
                   {"path", "size", "created", "container_id", "message"}, path,
                   static_cast<Json::UInt64>(size), true,
@@ -170,8 +162,6 @@ private:
 
   void handleContainerFilesGet(const Pistache::Rest::Request &request,
                                Pistache::Http::ResponseWriter response) {
-    spdlog::info("=== Container Files Get Request ===");
-
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
@@ -179,9 +169,6 @@ private:
             })
             .and_then([this](validate::Container params) {
               auto [user_id, container_id] = params;
-
-              spdlog::info("Getting files for container: {} for user: {}",
-                           container_id, user_id);
 
               auto &vfs =
                   owl::instance::VFSInstance<EmbeddedModel>::getInstance();
@@ -199,8 +186,6 @@ private:
 
                 if (fuse_container) {
                   container = fuse_container;
-                  spdlog::info("Found container in FUSE storage: {}",
-                               container_id);
                 }
               }
 
@@ -257,9 +242,7 @@ private:
 
                 filesArray.append(fileInfo);
               }
-
-              spdlog::info("Found {} files in container: {}", filesArray.size(),
-                           container_id);
+              
               return core::Result<Json::Value, std::string>::Ok(filesArray);
             })
             .map([this](Json::Value filesArray) -> Json::Value {
