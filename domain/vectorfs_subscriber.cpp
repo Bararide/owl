@@ -423,6 +423,7 @@ bool VectorFS::handle_container_create(const nlohmann::json &message) {
     return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling container create: {}", e.what());
+    return false;
   }
 }
 
@@ -440,6 +441,7 @@ bool VectorFS::handle_file_create(const nlohmann::json &message) {
     return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling file create: {}", e.what());
+    return false;
   }
 }
 
@@ -457,6 +459,7 @@ bool VectorFS::handle_file_delete(const nlohmann::json &message) {
     return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling file delete: {}", e.what());
+    return false;
   }
 }
 
@@ -474,6 +477,7 @@ bool VectorFS::handle_container_stop(const nlohmann::json &message) {
     return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling container stop: {}", e.what());
+    return false;
   }
 }
 
@@ -500,6 +504,7 @@ bool VectorFS::handle_container_delete(const nlohmann::json &message) {
     return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling container delete: {}", e.what());
+    return false;
   }
 }
 
