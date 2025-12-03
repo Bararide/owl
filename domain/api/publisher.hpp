@@ -7,6 +7,8 @@
 #include <string>
 #include <zmq.hpp>
 
+#include "requests.hpp"
+
 namespace owl::api::pub {
 
 class MessagePublisher {
@@ -19,6 +21,41 @@ public:
   ~MessagePublisher() {
     if (connected_) {
       socket_.close();
+    }
+  }
+
+  bool sendContainerMetrics(const std::string &user_id,
+                            const std::string &container_id,
+                            validate::GetContainerMetrics &metrics) {
+    nlohmann::json message;
+    message["type"] = "get_container_metrics";
+    message["user_id"] = user_id;
+    message["container_id"] = container_id;
+    message["request_id"] = generate_request_id();
+
+    if (!sendMessage(message.dump())) {
+      return false;
+    }
+
+    std::string response_data;
+    if (!receiveResponse(response_data)) {
+      return false;
+    }
+
+    try {
+      auto response = nlohmann::json::parse(response_data);
+
+      if (response.contains("success") && response["success"].get<bool>()) {
+        metrics.memory_limit = response["memory_limit"].get<uint16_t>();
+        metrics.cpu_limit = response["cpu_limit"].get<uint16_t>();
+        return true;
+      } else {
+        spdlog::error("Response indicates failure");
+        return false;
+      }
+    } catch (const std::exception &e) {
+      spdlog::error("Failed to parse response: {}", e.what());
+      return false;
     }
   }
 
@@ -84,8 +121,10 @@ public:
 private:
   void connect() {
     try {
-      socket_ = zmq::socket_t(context_, ZMQ_PUB);
+      socket_ = zmq::socket_t(context_, ZMQ_REQ);
       socket_.connect(address_);
+
+      socket_.set(zmq::sockopt::rcvtimeo, 10000);
 
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
       connected_ = true;
@@ -95,6 +134,32 @@ private:
       spdlog::error("Failed to connect to ZeroMQ server: {}", e.what());
       connected_ = false;
     }
+  }
+
+  bool receiveResponse(std::string &response) {
+    try {
+      zmq::message_t reply;
+      auto result = socket_.recv(reply, zmq::recv_flags::none);
+
+      if (result) {
+        response = std::string(static_cast<char *>(reply.data()), reply.size());
+        spdlog::debug("Received response: {} bytes", response.size());
+        return true;
+      } else {
+        spdlog::warn("Failed to receive response");
+        return false;
+      }
+    } catch (const zmq::error_t &e) {
+      spdlog::error("Error receiving response: {}", e.what());
+      return false;
+    }
+  }
+
+  std::string generate_request_id() {
+    static std::atomic<uint64_t> counter{0};
+    return std::to_string(counter++) + "-" +
+           std::to_string(
+               std::chrono::system_clock::now().time_since_epoch().count());
   }
 
   bool sendMessage(const std::string &message) {

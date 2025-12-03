@@ -61,6 +61,8 @@ private:
   std::string generate_search_result(const std::string &query);
   std::string generate_markov_test_result();
 
+  nlohmann::json handle_get_container_metrics(const nlohmann::json &message);
+
   void initialize_zeromq();
   void process_messages();
   void parse_base_dir();
@@ -70,11 +72,11 @@ private:
                               const std::string &container_path,
                               const nlohmann::json &config);
 
-  void handle_container_create(const nlohmann::json &message);
-  void handle_file_create(const nlohmann::json &message);
-  void handle_file_delete(const nlohmann::json &message);
-  void handle_container_stop(const nlohmann::json &message);
-  void handle_container_delete(const nlohmann::json &message);
+  bool handle_container_create(const nlohmann::json &message);
+  bool handle_file_create(const nlohmann::json &message);
+  bool handle_file_delete(const nlohmann::json &message);
+  bool handle_container_stop(const nlohmann::json &message);
+  bool handle_container_delete(const nlohmann::json &message);
 
   bool create_container_from_message(const nlohmann::json &message);
   bool create_file_from_message(const nlohmann::json &message);

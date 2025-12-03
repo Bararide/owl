@@ -103,18 +103,26 @@ private:
 
               if (publisher_->sendContainerMetrics(user_id, container_id,
                                                    metrics)) {
-                return core::Result<validate::GetContainerMetrics>::Ok(metrics);
+                return core::Result<validate::GetContainerMetrics,
+                                    std::string>::Ok(metrics);
               } else {
-                return core::Result<validate::GetContainerMetrics>::Error(
-                    "Failed to get container metrics");
+                return core::
+                    Result<validate::GetContainerMetrics, std::string>::Error(
+                        "Failed to get container metrics");
               }
             })
             .map([](validate::GetContainerMetrics result) -> Json::Value {
               auto [memory_limit, cpu_limit] = result;
 
-              return utils::create_success_response(
+              auto response_json = utils::create_success_response(
                   {"memory_limit", "cpu_limit"}, memory_limit, cpu_limit);
+
+              return response_json;
             });
+
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
+    responses::handleJsonResult(result, response);
   }
 
   void handleFileCreate(const Pistache::Rest::Request &request,
@@ -198,22 +206,21 @@ private:
 
               if (!container) {
                 spdlog::warn("Container not found: {}", container_id);
-                return core::Result<validate::ContainerFiles, std::string>::
-                    Error("Container not found: " + container_id);
+                return core::Result<validate::Container, std::string>::Error(
+                    "Container not found: " + container_id);
               }
 
               if (container->get_owner() != user_id) {
                 spdlog::warn("User {} doesn't have permission for container {} "
                              "owned by {}",
                              user_id, container_id, container->get_owner());
-                return core::Result<validate::ContainerFiles,
-                                    std::string>::Error("Access denied");
+                return core::Result<validate::Container, std::string>::Error(
+                    "Access denied");
               }
 
-              return core::Result<validate::ContainerFiles, std::string>::Ok(
-                  params);
+              return core::Result<validate::Container, std::string>::Ok(params);
             })
-            .and_then([this](validate::ContainerFiles params) {
+            .and_then([this](validate::Container params) {
               auto [user_id, container_id] = params;
 
               auto &vfs =

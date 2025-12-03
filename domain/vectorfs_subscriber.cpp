@@ -4,18 +4,15 @@ namespace owl::vectorfs {
 
 void VectorFS::initialize_zeromq() {
   try {
-    zmq_subscriber_ = std::make_unique<zmq::socket_t>(zmq_context_, ZMQ_SUB);
+    zmq_subscriber_ = std::make_unique<zmq::socket_t>(zmq_context_, ZMQ_REP);
     zmq_subscriber_->bind("tcp://*:5555");
-    zmq_subscriber_->set(zmq::sockopt::subscribe, "");
-
-    zmq_subscriber_->set(zmq::sockopt::rcvtimeo, 0);
 
     running_ = true;
     message_thread_ = std::thread(&VectorFS::process_messages, this);
 
     parse_base_dir();
 
-    spdlog::info("ZeroMQ subscriber started on tcp://*:5555");
+    spdlog::info("ZeroMQ server started on tcp://*:5555");
   } catch (const zmq::error_t &e) {
     spdlog::error("Failed to initialize ZeroMQ: {}", e.what());
   }
@@ -301,11 +298,11 @@ void VectorFS::process_messages() {
   while (running_) {
     try {
       zmq::message_t message;
-      auto result = zmq_subscriber_->recv(message, zmq::recv_flags::dontwait);
+      auto result = zmq_subscriber_->recv(message);
 
       if (result && message.size() > 0) {
         std::string message_str(static_cast<char *>(message.data()),
-                                message.size());
+                              message.size());
 
         try {
           auto json_msg = nlohmann::json::parse(message_str);
@@ -313,30 +310,52 @@ void VectorFS::process_messages() {
 
           spdlog::info("Received ZeroMQ message type: {}", message_type);
 
-          if (message_type == "container_create") {
+          nlohmann::json response;
+          
+          if (message_type == "get_container_metrics") {
+            response = handle_get_container_metrics(json_msg);
+          } else if (message_type == "container_create") {
             handle_container_create(json_msg);
+            response["success"] = true;
           } else if (message_type == "file_create") {
-            handle_file_create(json_msg);
+            bool success = handle_file_create(json_msg);
+            response["success"] = success;
           } else if (message_type == "file_delete") {
-            handle_file_delete(json_msg);
+            bool success = handle_file_delete(json_msg);
+            response["success"] = success;
           } else if (message_type == "container_stop") {
-            handle_container_stop(json_msg);
+            bool success = handle_container_stop(json_msg);
+            response["success"] = success;
           } else if (message_type == "container_delete") {
-            handle_container_delete(json_msg);
+            bool success = handle_container_delete(json_msg);
+            response["success"] = success;
           } else {
             spdlog::warn("Unknown message type: {}", message_type);
+            response["success"] = false;
+            response["error"] = "Unknown message type";
           }
+          
+          std::string response_str = response.dump();
+          zmq::message_t reply(response_str.size());
+          memcpy(reply.data(), response_str.data(), response_str.size());
+          zmq_subscriber_->send(reply, zmq::send_flags::none);
+          
         } catch (const nlohmann::json::exception &e) {
           spdlog::error("Failed to parse JSON message: {}", e.what());
+          
+          nlohmann::json error_response;
+          error_response["success"] = false;
+          error_response["error"] = std::string("JSON parsing error: ") + e.what();
+          
+          std::string error_str = error_response.dump();
+          zmq::message_t reply(error_str.size());
+          memcpy(reply.data(), error_str.data(), error_str.size());
+          zmq_subscriber_->send(reply, zmq::send_flags::none);
         }
-      } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
     } catch (const zmq::error_t &e) {
-      if (e.num() != EAGAIN) {
-        spdlog::error("ZeroMQ error: {}", e.what());
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
+      spdlog::error("ZeroMQ error: {}", e.what());
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     } catch (const std::exception &e) {
       spdlog::error("Exception in ZeroMQ processing: {}", e.what());
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -344,7 +363,45 @@ void VectorFS::process_messages() {
   }
 }
 
-void VectorFS::handle_container_create(const nlohmann::json &message) {
+nlohmann::json VectorFS::handle_get_container_metrics(const nlohmann::json &message) {
+  nlohmann::json response;
+  try {
+    std::string container_id = message["container_id"];
+    std::string user_id = message["user_id"];
+    
+    spdlog::info("Getting metrics for container: {}", container_id);
+    
+    auto container = state_.getContainerManager().get_container(container_id);
+    if (!container) {
+      response["success"] = false;
+      response["error"] = "Container not found: " + container_id;
+      return response;
+    }
+    
+    if (container->get_owner() != user_id) {
+      response["success"] = false;
+      response["error"] = "Access denied: User " + user_id + 
+                          " doesn't have access to container " + container_id;
+      return response;
+    }
+    
+    uint16_t memory_limit = 100;
+    uint16_t cpu_limit = 100;
+    
+    response["success"] = true;
+    response["memory_limit"] = memory_limit;
+    response["cpu_limit"] = cpu_limit;
+    
+  } catch (const std::exception &e) {
+    spdlog::error("Error getting container metrics: {}", e.what());
+    response["success"] = false;
+    response["error"] = std::string("Error: ") + e.what();
+  }
+  
+  return response;
+}
+
+bool VectorFS::handle_container_create(const nlohmann::json &message) {
   try {
     spdlog::info("=== FUSE: Processing container creation request ===");
     spdlog::info("Container ID: {}",
@@ -357,57 +414,70 @@ void VectorFS::handle_container_create(const nlohmann::json &message) {
       for (const auto &[id, info] : containers_) {
         spdlog::info("  - Container: {} (status: {})", id, info.status);
       }
+
+      return true;
     } else {
       spdlog::error("=== FUSE: Failed to create container ===");
     }
+
+    return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling container create: {}", e.what());
   }
 }
 
-void VectorFS::handle_file_create(const nlohmann::json &message) {
+bool VectorFS::handle_file_create(const nlohmann::json &message) {
   try {
     spdlog::info("Processing file creation request");
 
     if (create_file_from_message(message)) {
       spdlog::info("File created successfully from ZeroMQ message");
+      return true;
     } else {
       spdlog::error("Failed to create file from ZeroMQ message");
     }
+
+    return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling file create: {}", e.what());
   }
 }
 
-void VectorFS::handle_file_delete(const nlohmann::json &message) {
+bool VectorFS::handle_file_delete(const nlohmann::json &message) {
   try {
     spdlog::info("Processing file deletion request");
 
     if (delete_file_from_message(message)) {
       spdlog::info("File deleted successfully from ZeroMQ message");
+      return true;
     } else {
       spdlog::error("Failed to delete file from ZeroMQ message");
     }
+
+    return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling file delete: {}", e.what());
   }
 }
 
-void VectorFS::handle_container_stop(const nlohmann::json &message) {
+bool VectorFS::handle_container_stop(const nlohmann::json &message) {
   try {
     spdlog::info("Processing container stop request");
 
     if (stop_container_from_message(message)) {
       spdlog::info("Container stopped successfully from ZeroMQ message");
+      return true;
     } else {
       spdlog::error("Failed to stop container from ZeroMQ message");
     }
+
+    return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling container stop: {}", e.what());
   }
 }
 
-void VectorFS::handle_container_delete(const nlohmann::json &message) {
+bool VectorFS::handle_container_delete(const nlohmann::json &message) {
   try {
     spdlog::info("=== FUSE: Processing container deletion request ===");
 
@@ -421,9 +491,13 @@ void VectorFS::handle_container_delete(const nlohmann::json &message) {
       for (const auto &[id, info] : containers_) {
         spdlog::info("  - Container: {} (status: {})", id, info.status);
       }
+
+      return true;
     } else {
       spdlog::error("=== FUSE: Failed to delete container ===");
     }
+
+    return false;
   } catch (const std::exception &e) {
     spdlog::error("Error handling container delete: {}", e.what());
   }
