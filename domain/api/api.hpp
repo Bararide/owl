@@ -195,10 +195,10 @@ private:
                     "Container not found: " + container_id);
               }
 
-              if (container->get_owner() != user_id) {
+              if (container->getOwner() != user_id) {
                 spdlog::warn("User {} doesn't have permission for container {} "
                              "owned by {}",
-                             user_id, container_id, container->get_owner());
+                             user_id, container_id, container->getOwner());
                 return core::Result<validate::Container, std::string>::Error(
                     "Access denied");
               }
@@ -220,7 +220,7 @@ private:
                     "Container not found after validation: " + container_id);
               }
 
-              auto files = container->list_files("/");
+              auto files = container->listFiles("/");
               Json::Value filesArray(Json::arrayValue);
 
               for (const auto &file_name : files) {
@@ -233,12 +233,12 @@ private:
                 fileInfo["name"] = file_name;
                 fileInfo["path"] = file_path;
 
-                std::string content = container->get_file_content(file_path);
+                std::string content = container->getFileContent(file_path);
                 fileInfo["content"] = content;
                 fileInfo["size"] = static_cast<Json::UInt64>(content.size());
-                fileInfo["exists"] = container->file_exists(file_path);
-                fileInfo["is_directory"] = container->is_directory(file_path);
-                fileInfo["category"] = container->classify_file(file_path);
+                fileInfo["exists"] = container->fileExists(file_path);
+                fileInfo["is_directory"] = container->isDirectory(file_path);
+                fileInfo["category"] = container->classifyFile(file_path);
 
                 filesArray.append(fileInfo);
               }
@@ -296,10 +296,10 @@ private:
                     Error("Container not found: " + container_id);
               }
 
-              if (container->get_owner() != user_id) {
+              if (container->getOwner() != user_id) {
                 spdlog::warn("User {} does not have permission to delete "
                              "container {} owned by {}",
-                             user_id, container_id, container->get_owner());
+                             user_id, container_id, container->getOwner());
                 return core::Result<validate::DeleteContainer, std::string>::
                     Error("Access denied: you don't have permission to delete "
                           "this container");
@@ -399,16 +399,16 @@ private:
                     "Container not found: " + container_id);
               }
 
-              if (container->get_owner() != user_id) {
+              if (container->getOwner() != user_id) {
                 spdlog::warn("User {} does not have permission to delete files "
                              "from container {} owned by {}",
-                             user_id, container_id, container->get_owner());
+                             user_id, container_id, container->getOwner());
                 return core::Result<validate::DeleteFile, std::string>::Error(
                     "Access denied: you don't have permission to delete files "
                     "from this container");
               }
 
-              if (!container->file_exists(file_path)) {
+              if (!container->fileExists(file_path)) {
                 spdlog::warn("File not found in container: {}", file_path);
                 return core::Result<validate::DeleteFile, std::string>::Error(
                     "File not found: " + file_path);
@@ -433,7 +433,7 @@ private:
 
                 auto container = container_manager.get_container(container_id);
                 if (container) {
-                  bool deleted = container->remove_file(file_path);
+                  bool deleted = container->removeFile(file_path);
                   if (deleted) {
                     spdlog::info("File successfully deleted from container: {}",
                                  file_path);
@@ -538,7 +538,7 @@ private:
                                          container_id);
               }
 
-              auto content = container->get_file_content(file_id);
+              auto content = container->getFileContent(file_id);
 
               return content;
 
@@ -582,7 +582,7 @@ private:
                                          container_id);
               }
 
-              auto results = container->semantic_search(query, limit);
+              auto results = container->semanticSearch(query, limit);
 
               spdlog::debug("Semantic search found {} results", results.size());
 

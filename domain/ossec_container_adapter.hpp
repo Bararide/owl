@@ -11,41 +11,42 @@
 
 namespace owl::vectorfs {
 
-class OssecContainerAdapter : public IKnowledgeContainer {
+class OssecContainerAdapter final
+    : public KnowledgeContainer<OssecContainerAdapter> {
 public:
   OssecContainerAdapter(std::shared_ptr<ossec::PidContainer> container,
                         EmbedderManager<> &embedder_manager)
       : container_(std::move(container)),
         search_(std::make_unique<chunkees::Search>(embedder_manager)) {
-    initialize_search();
+    initializeSearch();
   }
 
-  std::string get_id() const override {
+  std::string getId() const noexcept {
     return container_->get_container().container_id;
   }
 
-  std::string get_owner() const override {
+  std::string getOwner() const noexcept {
     return container_->get_container().owner_id;
   }
 
-  std::string get_namespace() const override {
+  std::string getNamespace() const noexcept {
     return container_->get_container().vectorfs_config.mount_namespace;
   }
 
-  std::string get_data_path() const override {
+  std::string getDataPath() const noexcept {
     return container_->get_container().data_path.string();
   }
 
-  std::vector<std::string> get_commands() const override {
+  std::vector<std::string> getCommands() const noexcept {
     return container_->get_container().vectorfs_config.commands;
   }
 
-  std::map<std::string, std::string> get_labels() const override {
+  std::map<std::string, std::string> getLabels() const noexcept {
     return container_->get_container().labels;
   }
 
   std::vector<std::string>
-  list_files(const std::string &virtual_path) const override {
+  listFiles(const std::string &virtual_path) const {
     auto data_path = container_->get_container().data_path;
 
     std::string real_path = virtual_path;
@@ -81,7 +82,7 @@ public:
     return files;
   }
 
-  bool file_exists(const std::string &virtual_path) const override {
+  bool fileExists(const std::string &virtual_path) const {
     if (virtual_path.empty() || virtual_path == "/") {
       return true;
     }
@@ -102,7 +103,7 @@ public:
     return exists;
   }
 
-  std::string get_file_content(const std::string &virtual_path) const override {
+  std::string getFileContent(const std::string &virtual_path) const {
     if (virtual_path.empty() || virtual_path == "/") {
       return "";
     }
@@ -116,7 +117,7 @@ public:
 
     auto full_path = data_path / real_path;
 
-    spdlog::info("📖 get_file_content: FUSE='{}' -> REAL='{}'", virtual_path,
+    spdlog::info("📖 getFileContent: FUSE='{}' -> REAL='{}'", virtual_path,
                  full_path.string());
 
     try {
@@ -138,7 +139,7 @@ public:
     return "";
   }
 
-  bool is_directory(const std::string &virtual_path) const override {
+  bool isDirectory(const std::string &virtual_path) const {
     auto data_path = container_->get_container().data_path;
 
     std::string real_path = virtual_path;
@@ -161,7 +162,7 @@ public:
       return false;
     }
   }
-  bool add_file(const std::string &path, const std::string &content) override {
+  bool addFile(const std::string &path, const std::string &content) {
     auto data_path = container_->get_container().data_path;
 
     std::string normalized_path = path;
@@ -211,7 +212,7 @@ public:
                      rebuild_result.error().what());
       }
 
-      record_file_access(search_path, "write");
+      recordFileAccess(search_path, "write");
 
       spdlog::info(
           "🎉 File {} successfully added to container and search index",
@@ -224,7 +225,7 @@ public:
     }
   }
 
-  bool remove_file(const std::string &path) override {
+  bool removeFile(const std::string &path) {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;
 
@@ -250,21 +251,21 @@ public:
     return false;
   }
 
-  void initialize_search() {
-    spdlog::info("Initializing search for container: {}", get_id());
+  void initializeSearch() {
+    spdlog::info("Initializing search for container: {}", getId());
 
-    auto files = list_files("/");
+    auto files = listFiles("/");
     size_t indexed_count = 0;
 
     for (const auto &file : files) {
       std::string file_path = "/" + file;
-      std::string content = get_file_content(file_path);
+      std::string content = getFileContent(file_path);
 
       if (!content.empty()) {
         auto result = search_->addFileImpl(file_path, content);
         if (result.is_ok()) {
           indexed_count++;
-          record_file_access(file_path, "read");
+          recordFileAccess(file_path, "read");
         } else {
           spdlog::warn("Failed to index file during initialization: {} - {}",
                        file_path, result.error().what());
@@ -281,11 +282,11 @@ public:
     }
 
     spdlog::info("Search initialized for container {} with {}/{} files indexed",
-                 get_id(), indexed_count, files.size());
+                 getId(), indexed_count, files.size());
   }
 
   void initialize_markov_recommend_chain() {
-    spdlog::info("Initializing Markov chain for container: {}", get_id());
+    spdlog::info("Initializing Markov chain for container: {}", getId());
 
     auto semantic_graph = search_->getSemanticGraph();
     auto hmm_model = search_->getHiddenModel();
@@ -335,11 +336,11 @@ public:
     }
   }
 
-  std::vector<std::pair<std::string, float>> semantic_search(const std::string &query,
-                                           int limit = 10) override {
-    spdlog::debug("Semantic search in container {}: '{}'", get_id(), query);
+  std::vector<std::pair<std::string, float>>
+  semanticSearch(const std::string &query, int limit = 10) {
+    spdlog::debug("Semantic search in container {}: '{}'", getId(), query);
 
-    record_search_query(query);
+    recordFileAccess(query);
 
     auto result = search_->semanticSearchImpl(query, limit);
 
@@ -352,7 +353,7 @@ public:
     for (const auto &[file_path, score] : result) {
       file_paths.push_back({file_path, score});
 
-      record_file_access(file_path, "semantic_search");
+      recordFileAccess(file_path, "semantic_search");
     }
 
     spdlog::debug("Semantic search found {} results", file_paths.size());
@@ -360,8 +361,8 @@ public:
   }
 
   std::vector<std::string>
-  search_files(const std::string &pattern) const override {
-    spdlog::debug("Pattern search in container {}: '{}'", get_id(), pattern);
+  searchFiles(const std::string &pattern) const {
+    spdlog::debug("Pattern search in container {}: '{}'", getId(), pattern);
 
     std::vector<std::string> results;
     auto data_path = container_->get_container().data_path;
@@ -386,25 +387,25 @@ public:
     return results;
   }
 
-  std::vector<std::pair<std::string, float>> enhanced_semantic_search(const std::string &query,
-                                                    int limit) override {
-    spdlog::debug("Enhanced semantic search in container {}: '{}'", get_id(),
+  std::vector<std::pair<std::string, float>>
+  enhancedSemanticSearch(const std::string &query, int limit) {
+    spdlog::debug("Enhanced semantic search in container {}: '{}'", getId(),
                   query);
 
-    record_search_query(query);
+    recordFileAccess(query);
 
     auto result = search_->enhancedSemanticSearchImpl(query, limit);
 
     if (!result.is_ok()) {
       spdlog::warn("Enhanced search failed, falling back to basic search: {}",
                    result.error().what());
-      return semantic_search(query, limit);
+      return semanticSearch(query, limit);
     }
 
     std::vector<std::pair<std::string, float>> file_paths;
     for (const auto &[file_path, score] : result.value()) {
       file_paths.push_back({file_path, score});
-      record_file_access(file_path, "enhanced_search");
+      recordFileAccess(file_path, "enhanced_search");
     }
 
     spdlog::debug("Enhanced semantic search found {} results",
@@ -412,11 +413,11 @@ public:
     return file_paths;
   }
 
-  std::vector<std::string> get_recommendations(const std::string &current_file,
-                                               int limit) override {
+  std::vector<std::string> getRecommendations(const std::string &current_file,
+                                               int limit) {
     spdlog::debug("Getting recommendations for file: {}", current_file);
 
-    record_file_access(current_file, "recommendation_request");
+    recordFileAccess(current_file, "recommendation_request");
 
     auto result = search_->getRecommendationsImpl(current_file);
 
@@ -441,7 +442,7 @@ public:
     return recommendations;
   }
 
-  std::vector<std::string> predict_next_files(int limit) override {
+  std::vector<std::string> predictNextFiles(int limit) {
     auto result = search_->predictNextFilesImpl();
 
     if (!result.is_ok()) {
@@ -454,7 +455,7 @@ public:
     return predictions;
   }
 
-  std::vector<std::string> get_semantic_hubs(int count = 5) override {
+  std::vector<std::string> getSemanticHubs(int count = 5) {
     auto result = search_->getSemanticHubsImpl(count);
 
     if (!result.is_ok()) {
@@ -467,13 +468,13 @@ public:
     return hubs;
   }
 
-  std::string classify_file(const std::string &file_path) override {
+  std::string classifyFile(const std::string &file_path) {
     std::string category = search_->classifyFileCategoryImpl(file_path);
     spdlog::debug("File {} classified as: {}", file_path, category);
     return category;
   }
 
-  void record_file_access(const std::string &file_path,
+  void recordFileAccess(const std::string &file_path,
                           const std::string &operation = "read") {
     auto result = search_->recordFileAccessImpl(file_path, operation);
     if (!result.is_ok()) {
@@ -484,7 +485,7 @@ public:
     }
   }
 
-  void record_search_query(const std::string &query) override {
+  void recordSearchQuery(const std::string &query) {
     auto recent_queries = search_->getRecentQueriesImpl();
     if (recent_queries.is_ok()) {
       spdlog::trace("Recorded search query: {}", query);
@@ -499,11 +500,10 @@ public:
     return true;
   }
 
-  bool update_all_embeddings() override {
-    spdlog::info("Updating embeddings for all files in container: {}",
-                 get_id());
+  bool updateAllEmbeddings() {
+    spdlog::info("Updating embeddings for all files in container: {}", getId());
 
-    auto files = list_files(container_->get_container().data_path.string());
+    auto files = listFiles(container_->get_container().data_path.string());
     size_t updated_count = 0;
 
     for (const auto &file : files) {
@@ -531,12 +531,12 @@ public:
     return updated_count > 0;
   }
 
-  std::string getSearch_info() const override {
+  std::string getSearchInfo() const {
     auto file_count = search_->getIndexedFilesCountImpl();
     auto recent_queries = search_->getRecentQueriesCountImpl();
 
     std::stringstream ss;
-    ss << "Search Info for Container " << get_id() << ":\n";
+    ss << "Search Info for Container " << getId() << ":\n";
     ss << "  Indexed Files: " << (file_count.is_ok() ? file_count.value() : 0)
        << "\n";
     ss << "  Recent Queries: "
@@ -546,11 +546,11 @@ public:
     return ss.str();
   }
 
-  bool is_available() const override {
+  bool isAvailable() const {
     return container_ && container_->is_running();
   }
 
-  size_t get_size() const override {
+  size_t getSize() const {
     try {
       auto data_path = container_->get_container().data_path;
       if (std::filesystem::exists(data_path)) {
@@ -569,7 +569,7 @@ public:
     return 0;
   }
 
-  std::string get_status() const override {
+  std::string getStatus() const {
     if (!container_)
       return "invalid";
     if (container_->is_running())

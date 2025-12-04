@@ -10,7 +10,7 @@ void VectorFS::initialize_container_paths() {
   virtual_dirs.insert("/.containers/.search");
 }
 
-std::shared_ptr<IKnowledgeContainer>
+std::shared_ptr<KnowledgeContainer<OssecContainerAdapter>>
 VectorFS::get_container_for_path(const std::string &path) {
   if (path.find("/.containers/") == 0) {
     size_t start = strlen("/.containers/");
@@ -26,13 +26,13 @@ std::string VectorFS::generate_container_listing() {
   ss << "=== Knowledge Containers ===\n\n";
   auto containers = state_.getContainerManager().get_all_containers();
   for (const auto &container : containers) {
-    ss << "Container: " << container->get_id() << "\n";
-    ss << "  Owner: " << container->get_owner() << "\n";
-    ss << "  Namespace: " << container->get_namespace() << "\n";
-    ss << "  Status: " << container->get_status() << "\n";
-    ss << "  Size: " << container->get_size() << " bytes\n";
-    ss << "  Available: " << (container->is_available() ? "yes" : "no") << "\n";
-    auto labels = container->get_labels();
+    ss << "Container: " << container->getId() << "\n";
+    ss << "  Owner: " << container->getOwner() << "\n";
+    ss << "  Namespace: " << container->getNamespace() << "\n";
+    ss << "  Status: " << container->getStatus() << "\n";
+    ss << "  Size: " << container->getSize() << " bytes\n";
+    ss << "  Available: " << (container->isAvailable() ? "yes" : "no") << "\n";
+    auto labels = container->getLabels();
     if (!labels.empty()) {
       ss << "  Labels:\n";
       for (const auto &[key, value] : labels)
@@ -56,13 +56,13 @@ VectorFS::generate_container_content(const std::string &container_id) {
 
   std::stringstream ss;
   ss << "=== Container: " << container_id << " ===\n\n";
-  ss << "Owner: " << container->get_owner() << "\n";
-  ss << "Namespace: " << container->get_namespace() << "\n";
-  ss << "Status: " << container->get_status() << "\n";
-  ss << "Size: " << container->get_size() << " bytes\n";
-  ss << "Available: " << (container->is_available() ? "yes" : "no") << "\n\n";
+  ss << "Owner: " << container->getOwner() << "\n";
+  ss << "Namespace: " << container->getNamespace() << "\n";
+  ss << "Status: " << container->getStatus() << "\n";
+  ss << "Size: " << container->getSize() << " bytes\n";
+  ss << "Available: " << (container->isAvailable() ? "yes" : "no") << "\n\n";
 
-  auto files = container->list_files(container->get_data_path());
+  auto files = container->listFiles(container->getDataPath());
   if (files.empty()) {
     ss << "No files in container\n";
   } else {
@@ -171,14 +171,14 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
           file_path = file_path.substr(1);
         }
 
-        if (container->file_exists(file_path)) {
-          if (container->is_directory(file_path)) {
+        if (container->fileExists(file_path)) {
+          if (container->isDirectory(file_path)) {
             stbuf->st_mode = S_IFDIR | 0555;
             stbuf->st_nlink = 2;
           } else {
             stbuf->st_mode = S_IFREG | 0444;
             stbuf->st_nlink = 1;
-            std::string content = container->get_file_content(file_path);
+            std::string content = container->getFileContent(file_path);
             stbuf->st_size = content.size();
           }
         } else {
@@ -286,7 +286,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     auto containers = state_.getContainerManager().get_all_containers();
     for (const auto &container : containers) {
-      std::string container_id = container->get_id();
+      std::string container_id = container->getId();
       spdlog::info("  - Container (main): {}", container_id);
       filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
@@ -316,7 +316,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-        auto files = container->list_files(container->get_data_path());
+        auto files = container->listFiles(container->getDataPath());
         for (const auto &file : files) {
           filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
         }
@@ -332,7 +332,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
-          auto files = container->list_files("/");
+          auto files = container->listFiles("/");
           for (const auto &file : files) {
             filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
           }
@@ -363,7 +363,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           spdlog::info("✅ Added search entries for container: {}",
                        container_id);
         } else {
-          auto files = container->list_files(container_path);
+          auto files = container->listFiles(container_path);
           for (const auto &file : files) {
             filler(buf, file.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
           }
@@ -373,7 +373,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   } else if (strcmp(path, "/.containers/.search") == 0) {
     auto containers = state_.getContainerManager().get_all_containers();
     for (const auto &container : containers) {
-      std::string container_id = container->get_id();
+      std::string container_id = container->getId();
       filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
     }
   } else if (strcmp(path, "/.search") == 0) {
@@ -490,17 +490,17 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         spdlog::info("🔍 Performing search in container {}: '{}'", container_id,
                      query);
 
-        auto search_results = container->enhanced_semantic_search(query, 10);
+        auto search_results = container->enhancedSemanticSearch(query, 10);
 
         std::stringstream ss;
         ss << "=== Enhanced Semantic Search Results ===\n";
         ss << "Query: " << query << "\n\n";
 
         if (search_results.empty()) {
-          search_results = container->semantic_search(query, 10);
+          search_results = container->semanticSearch(query, 10);
 
           if (search_results.empty()) {
-            auto pattern_results = container->search_files(query);
+            auto pattern_results = container->searchFiles(query);
             if (pattern_results.empty()) {
               ss << "No results found in container.\n";
             } else {
@@ -511,14 +511,14 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
                 ss << "📄 " << result << " (score: " << std::fixed
                    << std::setprecision(6) << score << ")\n";
 
-                std::string file_content = container->get_file_content(result);
+                std::string file_content = container->getFileContent(result);
                 if (!file_content.empty()) {
                   std::string preview = file_content.substr(0, 100);
                   if (file_content.size() > 100)
                     preview += "...";
                   ss << "   Content: " << preview << "\n";
                 }
-                ss << "   Category: " << container->classify_file(result)
+                ss << "   Category: " << container->classifyFile(result)
                    << "\n\n";
               }
             }
@@ -529,14 +529,14 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
               ss << "📄 " << result << " (score: " << std::fixed
                  << std::setprecision(6) << score << ")\n";
 
-              std::string file_content = container->get_file_content(result);
+              std::string file_content = container->getFileContent(result);
               if (!file_content.empty()) {
                 std::string preview = file_content.substr(0, 100);
                 if (file_content.size() > 100)
                   preview += "...";
                 ss << "   Content: " << preview << "\n";
               }
-              ss << "   Category: " << container->classify_file(result)
+              ss << "   Category: " << container->classifyFile(result)
                  << "\n\n";
             }
           }
@@ -547,20 +547,20 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
             ss << "📄 " << result << " (score: " << std::fixed
                << std::setprecision(6) << score << ")\n";
 
-            std::string file_content = container->get_file_content(result);
+            std::string file_content = container->getFileContent(result);
             if (!file_content.empty()) {
               std::string preview = file_content.substr(0, 100);
               if (file_content.size() > 100)
                 preview += "...";
               ss << "   Content: " << preview << "\n";
             }
-            ss << "   Category: " << container->classify_file(result) << "\n\n";
+            ss << "   Category: " << container->classifyFile(result) << "\n\n";
           }
 
           if (!search_results.empty()) {
             auto res = search_results[0];
             auto recommendations =
-                container->get_recommendations(res.first, 3);
+                container->getRecommendations(res.first, 3);
             if (!recommendations.empty()) {
               ss << "🎯 Recommended Files:\n";
               for (const auto &rec : recommendations) {
@@ -569,7 +569,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
               ss << "\n";
             }
 
-            auto hubs = container->get_semantic_hubs(3);
+            auto hubs = container->getSemanticHubs(3);
             if (!hubs.empty()) {
               ss << "🌐 Semantic Hubs:\n";
               for (const auto &hub : hubs) {
@@ -593,7 +593,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         std::stringstream ss;
         ss << "=== All Files in Container: " << container_id << " ===\n\n";
 
-        auto files = container->list_files(container->get_data_path());
+        auto files = container->listFiles(container->getDataPath());
         for (const auto &file : files) {
           ss << file << "\n";
         }
@@ -610,18 +610,18 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
       if (item_path == "/.debug") {
         std::stringstream ss;
         ss << "=== Debug Info for Container: " << container_id << " ===\n\n";
-        ss << "Owner: " << container->get_owner() << "\n";
-        ss << "Namespace: " << container->get_namespace() << "\n";
-        ss << "Status: " << container->get_status() << "\n";
-        ss << "Size: " << container->get_size() << " bytes\n";
-        ss << "Available: " << (container->is_available() ? "yes" : "no")
+        ss << "Owner: " << container->getOwner() << "\n";
+        ss << "Namespace: " << container->getNamespace() << "\n";
+        ss << "Status: " << container->getStatus() << "\n";
+        ss << "Size: " << container->getSize() << " bytes\n";
+        ss << "Available: " << (container->isAvailable() ? "yes" : "no")
            << "\n";
         ss << "\nCommands:\n";
-        for (const auto &cmd : container->get_commands()) {
+        for (const auto &cmd : container->getCommands()) {
           ss << "  - " << cmd << "\n";
         }
         ss << "\nLabels:\n";
-        for (const auto &[key, value] : container->get_labels()) {
+        for (const auto &[key, value] : container->getLabels()) {
           ss << "  " << key << ": " << value << "\n";
         }
 
@@ -644,8 +644,8 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
 
       spdlog::info("📖 Attempting to read container file: '{}'", file_path);
 
-      if (container->file_exists(file_path)) {
-        std::string content = container->get_file_content(file_path);
+      if (container->fileExists(file_path)) {
+        std::string content = container->getFileContent(file_path);
         spdlog::info("✅ File content retrieved, size: {} bytes",
                      content.size());
 

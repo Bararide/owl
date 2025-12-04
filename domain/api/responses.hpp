@@ -137,7 +137,7 @@ addFileToContainer(const std::string &path, const std::string &content,
                                                     container_id);
     }
 
-    if (container->get_owner() != user_id) {
+    if (container->getOwner() != user_id) {
       return core::Result<bool, std::string>::Error(
           "User " + user_id + " does not have access to container " +
           container_id);

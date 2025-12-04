@@ -378,7 +378,7 @@ nlohmann::json VectorFS::handle_get_container_metrics(const nlohmann::json &mess
       return response;
     }
     
-    if (container->get_owner() != user_id) {
+    if (container->getOwner() != user_id) {
       response["success"] = false;
       response["error"] = "Access denied: User " + user_id + 
                           " doesn't have access to container " + container_id;
@@ -644,14 +644,14 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
       if (existing) {
         spdlog::error(
             "=== FUSE: Container already exists in manager with owner: {} ===",
-            existing->get_owner());
+            existing->getOwner());
       }
 
       auto all_containers = state_.getContainerManager().get_all_containers();
       spdlog::info("=== FUSE: Current containers in manager: {} ===",
                    all_containers.size());
       for (const auto &cont : all_containers) {
-        spdlog::info("  - {} (owner: {})", cont->get_id(), cont->get_owner());
+        spdlog::info("  - {} (owner: {})", cont->getId(), cont->getOwner());
       }
 
       return false;
@@ -751,7 +751,7 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
         return false;
       }
 
-      if (container->get_owner() != user_id) {
+      if (container->getOwner() != user_id) {
         spdlog::error("User {} does not have access to container {}", user_id,
                       container_id);
         return false;
@@ -762,7 +762,7 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
       int i = 0;
       for (const auto &chunk : chunks) {
         auto result =
-            container->add_file(path + std::to_string(i++), chunk.text);
+            container->addFile(path + std::to_string(i++), chunk.text);
         if (!result) {
           spdlog::error("Failed to create file in container");
           return false;
@@ -821,18 +821,18 @@ bool VectorFS::delete_file_from_message(const nlohmann::json &message) {
       return false;
     }
 
-    if (container->get_owner() != user_id) {
+    if (container->getOwner() != user_id) {
       spdlog::error("User {} does not have access to container {}", user_id,
                     container_id);
       return false;
     }
 
-    if (!container->file_exists(path)) {
+    if (!container->fileExists(path)) {
       spdlog::warn("File not found in container: {}", path);
       return false;
     }
 
-    bool deleted = container->remove_file(path);
+    bool deleted = container->removeFile(path);
     if (deleted) {
       spdlog::info("File {} successfully deleted from container {}", path,
                    container_id);
