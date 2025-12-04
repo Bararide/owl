@@ -72,16 +72,14 @@ int main(int argc, char *argv[]) {
         "crawl-300d-2M-subword.bin";
 
     core::measure::Measure::start();
-    owl::instance::VFSInstance<embedded::FastTextEmbedder,
-                               owl::compression::Compressor>::
+    owl::instance::VFSInstance<embedded::FastTextEmbedder>::
         initialize(std::move(fasttext_model_path));
     core::measure::Measure::end();
     core::measure::Measure::result<std::chrono::milliseconds>(
         "VectorFS initialized with compression in {} ms");
 
     auto &vectorfs =
-        owl::instance::VFSInstance<embedded::FastTextEmbedder,
-                                   owl::compression::Compressor>::getInstance();
+        owl::instance::VFSInstance<embedded::FastTextEmbedder>::getInstance();
 
     spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
 
@@ -197,8 +195,7 @@ int main(int argc, char *argv[]) {
         spdlog::info("HTTP server terminated");
       }
 
-      owl::instance::VFSInstance<embedded::FastTextEmbedder,
-                                 owl::compression::Compressor>::shutdown();
+      owl::instance::VFSInstance<embedded::FastTextEmbedder>::shutdown();
       spdlog::info("VectorFS shutdown complete");
       return result;
     } else {
