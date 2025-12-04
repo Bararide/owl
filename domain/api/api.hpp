@@ -312,9 +312,6 @@ private:
               auto [user_id, container_id] = params;
 
               if (publisher_->sendContainerDelete(container_id, user_id)) {
-                spdlog::info("Container deletion message sent via ZeroMQ: {} "
-                             "for user: {}",
-                             container_id, user_id);
 
                 auto &vfs =
                     owl::instance::VFSInstance<EmbeddedModel>::getInstance();
@@ -345,9 +342,6 @@ private:
             })
             .map([](std::pair<std::string, std::string> result) -> Json::Value {
               auto [container_id, user_id] = result;
-              spdlog::info("Container deletion request processed successfully: "
-                           "{} for user: {}",
-                           container_id, user_id);
 
               return utils::create_success_response(
                   {"container_id", "user_id", "status", "message"},
@@ -362,10 +356,6 @@ private:
 
   void handleFileDelete(const Pistache::Rest::Request &request,
                         Pistache::Http::ResponseWriter response) {
-    spdlog::info("=== File Deletion Request ===");
-    spdlog::info("Client IP: {}", request.address().host());
-    spdlog::info("URL: {}", request.resource());
-
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
@@ -373,9 +363,6 @@ private:
             })
             .and_then([this](validate::DeleteFile params) {
               auto [user_id, container_id, file_path] = params;
-
-              spdlog::info("Deleting file: {} from container: {} for user: {}",
-                           file_path, container_id, user_id);
 
               if (file_path.empty()) {
                 return core::Result<validate::DeleteFile, std::string>::Error(
@@ -422,9 +409,6 @@ private:
 
               if (publisher_->sendFileDelete(file_path, user_id,
                                              container_id)) {
-                spdlog::info("File deletion message sent via ZeroMQ: {} from "
-                             "container {}",
-                             file_path, container_id);
 
                 auto &vfs =
                     owl::instance::VFSInstance<EmbeddedModel>::getInstance();
