@@ -14,7 +14,6 @@
 #include "container_manager.hpp"
 #include "env/cppenv.hpp"
 #include "file/fileinfo.hpp"
-#include "shared_memory/shared_memory.hpp"
 #include <memory/container_builder.hpp>
 #include <semantic/semantic_chunker.hpp>
 #include <spdlog/spdlog.h>

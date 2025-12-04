@@ -3,7 +3,6 @@
 
 #include "infrastructure/result.hpp"
 #include "instance/instance.hpp"
-#include "shared_memory/shared_memory.hpp"
 #include "utils/http_helpers.hpp"
 
 #include <functional>
@@ -122,15 +121,6 @@ validateFileCreateParams(const Json::Value &json) {
       std::make_pair(std::move(path), std::move(content)));
 }
 
-inline core::Result<bool, std::string> initializeSharedMemory() {
-  auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-  if (!shm_manager.initialize()) {
-    return core::Result<bool, std::string>::Error(
-        "Failed to initialize shared memory");
-  }
-  return core::Result<bool, std::string>::Ok(true);
-}
-
 template <typename EmbeddedModel>
 inline core::Result<bool, std::string>
 addFileToContainer(const std::string &path, const std::string &content,
@@ -168,48 +158,6 @@ addFileToContainer(const std::string &path, const std::string &content,
     return core::Result<bool, std::string>::Error(
         std::string("Failed to add file to container: ") + e.what());
   }
-}
-
-inline core::Result<bool, std::string> addFileToContainerViaSharedMemory(
-    const std::string &path, const std::string &content,
-    const std::string &container_id, const std::string &user_id) {
-  try {
-    auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-    if (!shm_manager.initialize()) {
-      return core::Result<bool, std::string>::Error(
-          "Failed to initialize shared memory");
-    }
-
-    std::string container_path = "/containers/" + container_id + path;
-    if (!container_path.empty() && container_path[0] != '/') {
-      container_path = "/" + container_path;
-    }
-
-    if (!shm_manager.addFile(container_path, content)) {
-      return core::Result<bool, std::string>::Error(
-          "Failed to add file to shared memory");
-    }
-
-    spdlog::info("File {} added to shared memory for container {}",
-                 container_path, container_id);
-    return core::Result<bool, std::string>::Ok(true);
-
-  } catch (const std::exception &e) {
-    spdlog::error("Exception in addFileToContainerViaSharedMemory: {}",
-                  e.what());
-    return core::Result<bool, std::string>::Error(
-        std::string("Failed to add file via shared memory: ") + e.what());
-  }
-}
-
-inline core::Result<bool, std::string>
-addFileToSharedMemory(const std::string &path, const std::string &content) {
-  auto &shm_manager = owl::shared::SharedMemoryManager::getInstance();
-  if (!shm_manager.addFile(path, content)) {
-    return core::Result<bool, std::string>::Error(
-        "Failed to add file to shared memory");
-  }
-  return core::Result<bool, std::string>::Ok(true);
 }
 
 template <typename EmbeddedModel>
