@@ -103,7 +103,6 @@ public:
 
   void test_semantic_search();
   void test_markov_chains();
-  void test_container();
 
   std::shared_ptr<KnowledgeContainer<OssecContainerAdapter>>
   get_unified_container(const std::string &container_id) {

@@ -53,12 +53,6 @@ public:
     }
   }
 
-  void test_container() noexcept {
-    if (vector_fs_) {
-      vector_fs_->test_container();
-    }
-  }
-
   int initialize_fuse(int argc, char *argv[]) {
     if (!vector_fs_) {
       throw std::runtime_error("VectorFS not initialized");
