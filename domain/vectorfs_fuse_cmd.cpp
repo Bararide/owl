@@ -2,8 +2,6 @@
 
 namespace owl::vectorfs {
 
-VectorFS *VectorFS::instance_ = nullptr;
-
 void VectorFS::initialize_container_paths() {
   virtual_dirs.insert("/.containers");
   virtual_dirs.insert("/.containers/.all");
