@@ -36,10 +36,6 @@ public:
   std::string classifyFile(const std::string &file_path) {
     return static_cast<Derived *>(this)->classifyFile(file_path);
   }
-
-  void recordSearchQuery(const std::string &query) {
-    static_cast<Derived *>(this)->recordSearchQuery(query);
-  }
 };
 
 } // namespace owl::vectorfs

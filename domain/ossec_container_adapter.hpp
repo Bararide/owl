@@ -454,21 +454,6 @@ public:
     }
   }
 
-  void recordSearchQuery(const std::string &query) {
-    auto recent_queries = search_->getRecentQueriesImpl();
-    if (recent_queries.is_ok()) {
-      spdlog::trace("Recorded search query: {}", query);
-    }
-  }
-
-  bool ensure_running() {
-    if (!container_->is_running()) {
-      auto result = container_->start();
-      return result.is_ok();
-    }
-    return true;
-  }
-
   bool updateAllEmbeddings() {
     auto files = listFiles(container_->get_container().data_path.string());
     size_t updated_count = 0;
@@ -494,7 +479,7 @@ public:
     search_->updateSemanticRelationships();
     return updated_count > 0;
   }
-  
+
   bool isAvailable() const {
     return container_ && container_->is_running();
   }
