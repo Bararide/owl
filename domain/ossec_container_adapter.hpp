@@ -252,8 +252,6 @@ public:
   }
 
   void initializeSearch() {
-    spdlog::info("Initializing search for container: {}", getId());
-
     auto files = listFiles("/");
     size_t indexed_count = 0;
 
@@ -280,14 +278,9 @@ public:
       spdlog::warn("Failed to rebuild index after initialization: {}",
                    rebuild_result.error().what());
     }
-
-    spdlog::info("Search initialized for container {} with {}/{} files indexed",
-                 getId(), indexed_count, files.size());
   }
 
   void initialize_markov_recommend_chain() {
-    spdlog::info("Initializing Markov chain for container: {}", getId());
-
     auto semantic_graph = search_->getSemanticGraph();
     auto hmm_model = search_->getHiddenModel();
 
@@ -326,10 +319,6 @@ public:
 
     auto hubs = semantic_graph->random_walk_ranking(1000);
 
-    spdlog::info("Markov chain initialized: {} states, {} edges",
-                 hmm_model->get_state_count(),
-                 semantic_graph->get_edge_count());
-
     if (!hubs.empty()) {
       spdlog::info("Top semantic hub: {} (score: {:.3f})", hubs[0].first,
                    hubs[0].second);
@@ -338,8 +327,6 @@ public:
 
   std::vector<std::pair<std::string, float>>
   semanticSearch(const std::string &query, int limit = 10) {
-    spdlog::debug("Semantic search in container {}: '{}'", getId(), query);
-
     recordFileAccess(query);
 
     auto result = search_->semanticSearchImpl(query, limit);
@@ -356,14 +343,11 @@ public:
       recordFileAccess(file_path, "semantic_search");
     }
 
-    spdlog::debug("Semantic search found {} results", file_paths.size());
     return file_paths;
   }
 
   std::vector<std::string>
   searchFiles(const std::string &pattern) const {
-    spdlog::debug("Pattern search in container {}: '{}'", getId(), pattern);
-
     std::vector<std::string> results;
     auto data_path = container_->get_container().data_path;
 
@@ -383,7 +367,6 @@ public:
       spdlog::error("File search error: {}", e.what());
     }
 
-    spdlog::debug("Pattern search found {} results", results.size());
     return results;
   }
 
@@ -397,8 +380,6 @@ public:
     auto result = search_->enhancedSemanticSearchImpl(query, limit);
 
     if (!result.is_ok()) {
-      spdlog::warn("Enhanced search failed, falling back to basic search: {}",
-                   result.error().what());
       return semanticSearch(query, limit);
     }
 
@@ -408,22 +389,16 @@ public:
       recordFileAccess(file_path, "enhanced_search");
     }
 
-    spdlog::debug("Enhanced semantic search found {} results",
-                  file_paths.size());
     return file_paths;
   }
 
   std::vector<std::string> getRecommendations(const std::string &current_file,
                                                int limit) {
-    spdlog::debug("Getting recommendations for file: {}", current_file);
-
     recordFileAccess(current_file, "recommendation_request");
 
     auto result = search_->getRecommendationsImpl(current_file);
 
     if (!result.is_ok()) {
-      spdlog::debug("Failed to get recommendations: {}", result.error().what());
-
       auto predictions = search_->predictNextFilesImpl();
       if (predictions.is_ok()) {
         return predictions.value();
@@ -438,7 +413,6 @@ public:
       recommendations.resize(limit);
     }
 
-    spdlog::debug("Found {} recommendations", recommendations.size());
     return recommendations;
   }
 
@@ -446,12 +420,10 @@ public:
     auto result = search_->predictNextFilesImpl();
 
     if (!result.is_ok()) {
-      spdlog::debug("Failed to predict next files: {}", result.error().what());
       return {};
     }
 
     auto predictions = result.value();
-    spdlog::debug("Markov chain predicted {} next files", predictions.size());
     return predictions;
   }
 
@@ -459,18 +431,15 @@ public:
     auto result = search_->getSemanticHubsImpl(count);
 
     if (!result.is_ok()) {
-      spdlog::debug("Failed to get semantic hubs: {}", result.error().what());
       return {};
     }
 
     auto hubs = result.value();
-    spdlog::debug("Found {} semantic hubs", hubs.size());
     return hubs;
   }
 
   std::string classifyFile(const std::string &file_path) {
     std::string category = search_->classifyFileCategoryImpl(file_path);
-    spdlog::debug("File {} classified as: {}", file_path, category);
     return category;
   }
 
@@ -501,8 +470,6 @@ public:
   }
 
   bool updateAllEmbeddings() {
-    spdlog::info("Updating embeddings for all files in container: {}", getId());
-
     auto files = listFiles(container_->get_container().data_path.string());
     size_t updated_count = 0;
 
@@ -525,27 +492,9 @@ public:
     }
 
     search_->updateSemanticRelationships();
-
-    spdlog::info("Updated embeddings for {}/{} files", updated_count,
-                 files.size());
     return updated_count > 0;
   }
-
-  std::string getSearchInfo() const {
-    auto file_count = search_->getIndexedFilesCountImpl();
-    auto recent_queries = search_->getRecentQueriesCountImpl();
-
-    std::stringstream ss;
-    ss << "Search Info for Container " << getId() << ":\n";
-    ss << "  Indexed Files: " << (file_count.is_ok() ? file_count.value() : 0)
-       << "\n";
-    ss << "  Recent Queries: "
-       << (recent_queries.is_ok() ? recent_queries.value() : 0) << "\n";
-    ss << "  Embedder: " << search_->getEmbedderInfoImpl() << "\n";
-
-    return ss.str();
-  }
-
+  
   bool isAvailable() const {
     return container_ && container_->is_running();
   }

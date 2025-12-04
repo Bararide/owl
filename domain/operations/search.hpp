@@ -40,10 +40,6 @@ public:
   void recordSearchQuery(const std::string &query) {
     static_cast<Derived *>(this)->recordSearchQuery(query);
   }
-
-  std::string getSearchInfo() const {
-    return static_cast<const Derived *>(this)->getSearchInfo();
-  }
 };
 
 } // namespace owl::vectorfs
