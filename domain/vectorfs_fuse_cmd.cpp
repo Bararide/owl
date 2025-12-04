@@ -388,9 +388,6 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi) {
-
-  spdlog::info("📖 READ called for: {}", path);
-
   if (strcmp(path, "/.containers/.all") == 0) {
     std::string content = generate_container_listing();
     if (offset >= static_cast<off_t>(content.size())) {
@@ -464,31 +461,18 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           path_str.substr(container_start, container_end - container_start);
       std::string item_path = path_str.substr(container_end);
 
-      spdlog::info("📖 Reading from container: {} -> {}", container_id,
-                   item_path);
-
-      spdlog::info("📖 Container start: {}, end: {}", container_start,
-                   container_end);
-
       auto container =
           state_.getContainerManager().get_container(container_id);
       if (!container) {
-        spdlog::error("❌ Container not found: {}", container_id);
+        spdlog::error("Container not found: {}", container_id);
         return -ENOENT;
       }
 
       if (strncmp(item_path.c_str(), "/.search/", 9) == 0) {
         std::string query = item_path.substr(9);
-        spdlog::info("🎯 SEARCH REQUEST DETECTED! Container: {}, Query: '{}'",
-                     container_id, query);
 
         query = url_decode(query);
         std::replace(query.begin(), query.end(), '_', ' ');
-
-        spdlog::info("🎯 Decoded query: '{}'", query);
-
-        spdlog::info("🔍 Performing search in container {}: '{}'", container_id,
-                     query);
 
         auto search_results = container->enhancedSemanticSearch(query, 10);
 
@@ -634,20 +618,13 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         return len;
       }
 
-      spdlog::info("🔍 Checking if this is a regular container file: {}",
-                   item_path);
-
       std::string file_path = item_path;
       if (file_path[0] == '/') {
         file_path = file_path.substr(1);
       }
 
-      spdlog::info("📖 Attempting to read container file: '{}'", file_path);
-
       if (container->fileExists(file_path)) {
         std::string content = container->getFileContent(file_path);
-        spdlog::info("✅ File content retrieved, size: {} bytes",
-                     content.size());
 
         if (offset >= static_cast<off_t>(content.size())) {
           spdlog::info("📖 Offset beyond file size");
@@ -656,10 +633,9 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
 
         size_t len = std::min(content.size() - offset, size);
         memcpy(buf, content.c_str() + offset, len);
-        spdlog::info("✅ Successfully read {} bytes from {}", len, file_path);
         return len;
       } else {
-        spdlog::error("❌ File not found in container: {}", file_path);
+        spdlog::error("File not found in container: {}", file_path);
         return -ENOENT;
       }
     }
