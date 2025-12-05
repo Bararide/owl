@@ -4,17 +4,209 @@ namespace owl::vectorfs {
 
 void VectorFS::initialize_zeromq() {
   try {
-    zmq_subscriber_ = std::make_unique<zmq::socket_t>(zmq_context_, ZMQ_REP);
+    zmq_subscriber_ = std::make_unique<zmq::socket_t>(zmq_context_, ZMQ_SUB);
     zmq_subscriber_->bind("tcp://*:5555");
+    zmq_subscriber_->setsockopt(ZMQ_SUBSCRIBE, "", 0);
+
+    zmq_publisher_ = std::make_unique<zmq::socket_t>(zmq_context_, ZMQ_PUB);
+    zmq_publisher_->bind("tcp://*:5556");
 
     running_ = true;
     message_thread_ = std::thread(&VectorFS::process_messages, this);
 
-    parse_base_dir();
+    spdlog::info("VectorFS ZeroMQ initialized:");
+    spdlog::info("  Subscriber (commands from API): tcp://*:5555");
+    spdlog::info("  Publisher (events to API): tcp://*:5556");
 
-    spdlog::info("ZeroMQ server started on tcp://*:5555");
   } catch (const zmq::error_t &e) {
     spdlog::error("Failed to initialize ZeroMQ: {}", e.what());
+  }
+}
+
+void VectorFS::process_messages() {
+  while (running_) {
+    try {
+      zmq::message_t message;
+      auto result = zmq_subscriber_->recv(message, zmq::recv_flags::dontwait);
+
+      if (result && message.size() > 0) {
+        std::string message_str(static_cast<char *>(message.data()),
+                                message.size());
+
+        try {
+          auto json_msg = nlohmann::json::parse(message_str);
+          std::string message_type = json_msg.value("type", "");
+          std::string request_id = json_msg.value("request_id", "");
+
+          spdlog::info("VectorFS received message: {}", message_type);
+
+          if (message_type == "container_create") {
+            handleContainerCreate(json_msg);
+          } else if (message_type == "file_create") {
+            handleFileCreate(json_msg);
+          } else if (message_type == "file_delete") {
+            handleFileDelete(json_msg);
+          } else if (message_type == "container_delete") {
+            handleContainerDelete(json_msg);
+          } else if (message_type == "container_stop") {
+            handleContainerStop(json_msg);
+          } else if (message_type == "get_container_metrics") {
+            auto result = handle_get_container_metrics(json_msg);
+            send_response(request_id, true, result);
+          } else if (message_type == "get_container_files") {
+            auto result = handle_get_container_files(json_msg);
+            send_response(request_id, true, result);
+          } else if (message_type == "semantic_search_in_container") {
+            auto result = handle_semantic_search_in_container(json_msg);
+            send_response(request_id, true, result);
+          } else {
+            spdlog::warn("Unknown message type: {}", message_type);
+            send_error(request_id, "Unknown message type: " + message_type);
+          }
+
+        } catch (const nlohmann::json::exception &e) {
+          spdlog::error("JSON parse error: {}", e.what());
+        }
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    } catch (const zmq::error_t &e) {
+      spdlog::error("ZeroMQ error: {}", e.what());
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    } catch (const std::exception &e) {
+      spdlog::error("Error in process_messages: {}", e.what());
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }
+}
+
+void VectorFS::send_response(const std::string &request_id, bool success,
+                             const nlohmann::json &data) {
+  if (!zmq_publisher_)
+    return;
+
+  try {
+    nlohmann::json response = {{"request_id", request_id},
+                               {"success", success},
+                               {"timestamp", std::time(nullptr)}};
+
+    if (success && !data.empty()) {
+      response["data"] = data;
+    }
+
+    std::string response_str = response.dump();
+    zmq::message_t msg(response_str.size());
+    memcpy(msg.data(), response_str.data(), response_str.size());
+
+    zmq_publisher_->send(msg, zmq::send_flags::dontwait);
+    spdlog::debug("Sent response for request: {}", request_id);
+
+  } catch (const std::exception &e) {
+    spdlog::error("Error sending response: {}", e.what());
+  }
+}
+
+void VectorFS::send_error(const std::string &request_id,
+                          const std::string &error) {
+  nlohmann::json error_response = {{"request_id", request_id},
+                                   {"success", false},
+                                   {"error", error},
+                                   {"timestamp", std::time(nullptr)}};
+
+  send_response(request_id, false, error_response);
+}
+
+nlohmann::json
+VectorFS::handle_get_container_files(const nlohmann::json &message) {
+  try {
+    std::string container_id = message["container_id"];
+    std::string user_id = message["user_id"];
+
+    spdlog::info("Getting files for container: {}", container_id);
+
+    auto container = get_unified_container(container_id);
+    if (!container) {
+      throw std::runtime_error("Container not found: " + container_id);
+    }
+
+    if (container->getOwner() != user_id) {
+      throw std::runtime_error("Access denied for user: " + user_id);
+    }
+
+    auto files = container->listFiles("/");
+    nlohmann::json files_array = nlohmann::json::array();
+
+    for (const auto &file_name : files) {
+      std::string file_path = file_name;
+      if (file_path[0] != '/') {
+        file_path = "/" + file_path;
+      }
+
+      nlohmann::json file_info = {
+          {"name", file_name},
+          {"path", file_path},
+          {"exists", container->fileExists(file_path)},
+          {"is_directory", container->isDirectory(file_path)},
+          {"category", container->classifyFile(file_path)}};
+
+      try {
+        std::string content = container->getFileContent(file_path);
+        file_info["content"] = content;
+        file_info["size"] = content.size();
+      } catch (...) {
+        file_info["content"] = "";
+        file_info["size"] = 0;
+      }
+
+      files_array.push_back(file_info);
+    }
+
+    return {{"files", files_array}, {"count", files_array.size()}};
+
+  } catch (const std::exception &e) {
+    spdlog::error("Error getting container files: {}", e.what());
+    throw;
+  }
+}
+
+nlohmann::json
+VectorFS::handle_semantic_search_in_container(const nlohmann::json &message) {
+  try {
+    std::string query = message["query"];
+    int limit = message.value("limit", 10);
+    std::string user_id = message["user_id"];
+    std::string container_id = message["container_id"];
+
+    spdlog::info("Semantic search in container {}: '{}'", container_id, query);
+
+    auto container = get_unified_container(container_id);
+    if (!container) {
+      throw std::runtime_error("Container not found: " + container_id);
+    }
+
+    if (container->getOwner() != user_id) {
+      throw std::runtime_error("Access denied for user: " + user_id);
+    }
+
+    auto results = container->semanticSearch(query, limit);
+    nlohmann::json results_array = nlohmann::json::array();
+
+    for (const auto &[file_path, score] : results) {
+      if (score < 1.0) {
+        nlohmann::json result_item = {{"path", file_path}, {"score", score}};
+        results_array.push_back(result_item);
+      }
+    }
+
+    return {{"query", query},
+            {"container_id", container_id},
+            {"results", results_array},
+            {"count", results_array.size()}};
+
+  } catch (const std::exception &e) {
+    spdlog::error("Error in semantic search: {}", e.what());
+    throw;
   }
 }
 
@@ -294,110 +486,112 @@ bool VectorFS::load_container_adapter(const std::string &container_id,
   }
 }
 
-void VectorFS::process_messages() {
-  while (running_) {
-    try {
-      zmq::message_t message;
-      auto result = zmq_subscriber_->recv(message);
+// void VectorFS::process_messages() {
+//   while (running_) {
+//     try {
+//       zmq::message_t message;
+//       auto result = zmq_subscriber_->recv(message);
 
-      if (result && message.size() > 0) {
-        std::string message_str(static_cast<char *>(message.data()),
-                              message.size());
+//       if (result && message.size() > 0) {
+//         std::string message_str(static_cast<char *>(message.data()),
+//                                 message.size());
 
-        try {
-          auto json_msg = nlohmann::json::parse(message_str);
-          std::string message_type = json_msg.value("type", "");
+//         try {
+//           auto json_msg = nlohmann::json::parse(message_str);
+//           std::string message_type = json_msg.value("type", "");
 
-          spdlog::info("Received ZeroMQ message type: {}", message_type);
+//           spdlog::info("Received ZeroMQ message type: {}", message_type);
 
-          nlohmann::json response;
-          
-          if (message_type == "get_container_metrics") {
-            response = handle_get_container_metrics(json_msg);
-          } else if (message_type == "container_create") {
-            handleContainerCreate(json_msg);
-            response["success"] = true;
-          } else if (message_type == "file_create") {
-            bool success = handleFileCreate(json_msg);
-            response["success"] = success;
-          } else if (message_type == "file_delete") {
-            bool success = handleFileDelete(json_msg);
-            response["success"] = success;
-          } else if (message_type == "container_stop") {
-            bool success = handleContainerStop(json_msg);
-            response["success"] = success;
-          } else if (message_type == "container_delete") {
-            bool success = handleContainerDelete(json_msg);
-            response["success"] = success;
-          } else {
-            spdlog::warn("Unknown message type: {}", message_type);
-            response["success"] = false;
-            response["error"] = "Unknown message type";
-          }
-          
-          std::string response_str = response.dump();
-          zmq::message_t reply(response_str.size());
-          memcpy(reply.data(), response_str.data(), response_str.size());
-          zmq_subscriber_->send(reply, zmq::send_flags::none);
-          
-        } catch (const nlohmann::json::exception &e) {
-          spdlog::error("Failed to parse JSON message: {}", e.what());
-          
-          nlohmann::json error_response;
-          error_response["success"] = false;
-          error_response["error"] = std::string("JSON parsing error: ") + e.what();
-          
-          std::string error_str = error_response.dump();
-          zmq::message_t reply(error_str.size());
-          memcpy(reply.data(), error_str.data(), error_str.size());
-          zmq_subscriber_->send(reply, zmq::send_flags::none);
-        }
-      }
-    } catch (const zmq::error_t &e) {
-      spdlog::error("ZeroMQ error: {}", e.what());
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    } catch (const std::exception &e) {
-      spdlog::error("Exception in ZeroMQ processing: {}", e.what());
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-  }
-}
+//           nlohmann::json response;
 
-nlohmann::json VectorFS::handle_get_container_metrics(const nlohmann::json &message) {
+//           if (message_type == "get_container_metrics") {
+//             response = handle_get_container_metrics(json_msg);
+//           } else if (message_type == "container_create") {
+//             handleContainerCreate(json_msg);
+//             response["success"] = true;
+//           } else if (message_type == "file_create") {
+//             bool success = handleFileCreate(json_msg);
+//             response["success"] = success;
+//           } else if (message_type == "file_delete") {
+//             bool success = handleFileDelete(json_msg);
+//             response["success"] = success;
+//           } else if (message_type == "container_stop") {
+//             bool success = handleContainerStop(json_msg);
+//             response["success"] = success;
+//           } else if (message_type == "container_delete") {
+//             bool success = handleContainerDelete(json_msg);
+//             response["success"] = success;
+//           } else {
+//             spdlog::warn("Unknown message type: {}", message_type);
+//             response["success"] = false;
+//             response["error"] = "Unknown message type";
+//           }
+
+//           std::string response_str = response.dump();
+//           zmq::message_t reply(response_str.size());
+//           memcpy(reply.data(), response_str.data(), response_str.size());
+//           zmq_subscriber_->send(reply, zmq::send_flags::none);
+
+//         } catch (const nlohmann::json::exception &e) {
+//           spdlog::error("Failed to parse JSON message: {}", e.what());
+
+//           nlohmann::json error_response;
+//           error_response["success"] = false;
+//           error_response["error"] =
+//               std::string("JSON parsing error: ") + e.what();
+
+//           std::string error_str = error_response.dump();
+//           zmq::message_t reply(error_str.size());
+//           memcpy(reply.data(), error_str.data(), error_str.size());
+//           zmq_subscriber_->send(reply, zmq::send_flags::none);
+//         }
+//       }
+//     } catch (const zmq::error_t &e) {
+//       spdlog::error("ZeroMQ error: {}", e.what());
+//       std::this_thread::sleep_for(std::chrono::milliseconds(100));
+//     } catch (const std::exception &e) {
+//       spdlog::error("Exception in ZeroMQ processing: {}", e.what());
+//       std::this_thread::sleep_for(std::chrono::milliseconds(100));
+//     }
+//   }
+// }
+
+nlohmann::json
+VectorFS::handle_get_container_metrics(const nlohmann::json &message) {
   nlohmann::json response;
   try {
     std::string container_id = message["container_id"];
     std::string user_id = message["user_id"];
-    
+
     spdlog::info("Getting metrics for container: {}", container_id);
-    
+
     auto container = state_.getContainerManager().get_container(container_id);
     if (!container) {
       response["success"] = false;
       response["error"] = "Container not found: " + container_id;
       return response;
     }
-    
+
     if (container->getOwner() != user_id) {
       response["success"] = false;
-      response["error"] = "Access denied: User " + user_id + 
+      response["error"] = "Access denied: User " + user_id +
                           " doesn't have access to container " + container_id;
       return response;
     }
-    
+
     uint16_t memory_limit = 100;
     uint16_t cpu_limit = 100;
-    
+
     response["success"] = true;
     response["memory_limit"] = memory_limit;
     response["cpu_limit"] = cpu_limit;
-    
+
   } catch (const std::exception &e) {
     spdlog::error("Error getting container metrics: {}", e.what());
     response["success"] = false;
     response["error"] = std::string("Error: ") + e.what();
   }
-  
+
   return response;
 }
 

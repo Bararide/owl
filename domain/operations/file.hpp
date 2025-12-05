@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace owl::vectorfs {
+namespace owl {
 
 template <typename Derived> class FileOperations {
 public:
@@ -37,6 +37,6 @@ public:
   }
 };
 
-} // namespace owl::vectorfs
+} // namespace owl
 
 #endif // CONTAINER_FILE_OPERATIONS_HPP

@@ -24,6 +24,32 @@ public:
     }
   }
 
+  bool sendMessage(const std::string &message) {
+    if (!connected_) {
+      spdlog::warn("Not connected to ZeroMQ server");
+      return false;
+    }
+
+    try {
+      zmq::message_t zmq_msg(message.size());
+      memcpy(zmq_msg.data(), message.data(), message.size());
+
+      auto result = socket_.send(zmq_msg, zmq::send_flags::dontwait);
+      if (result) {
+        spdlog::debug("Sent message to ZeroMQ server: {} bytes",
+                      message.size());
+        return true;
+      } else {
+        spdlog::warn("Failed to send message to ZeroMQ server");
+        return false;
+      }
+    } catch (const zmq::error_t &e) {
+      spdlog::error("Error sending message: {}", e.what());
+      connected_ = false;
+      return false;
+    }
+  }
+
   bool sendContainerMetrics(const std::string &user_id,
                             const std::string &container_id,
                             validate::GetContainerMetrics &metrics) {
@@ -160,32 +186,6 @@ private:
     return std::to_string(counter++) + "-" +
            std::to_string(
                std::chrono::system_clock::now().time_since_epoch().count());
-  }
-
-  bool sendMessage(const std::string &message) {
-    if (!connected_) {
-      spdlog::warn("Not connected to ZeroMQ server");
-      return false;
-    }
-
-    try {
-      zmq::message_t zmq_msg(message.size());
-      memcpy(zmq_msg.data(), message.data(), message.size());
-
-      auto result = socket_.send(zmq_msg, zmq::send_flags::dontwait);
-      if (result) {
-        spdlog::debug("Sent message to ZeroMQ server: {} bytes",
-                      message.size());
-        return true;
-      } else {
-        spdlog::warn("Failed to send message to ZeroMQ server");
-        return false;
-      }
-    } catch (const zmq::error_t &e) {
-      spdlog::error("Error sending message: {}", e.what());
-      connected_ = false;
-      return false;
-    }
   }
 
   zmq::context_t context_;

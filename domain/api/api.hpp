@@ -4,19 +4,42 @@
 #include "publisher.hpp"
 #include "requests.hpp"
 #include "responses.hpp"
+#include "subscriber.hpp"
 #include "validate.hpp"
+#include <condition_variable>
+#include <future>
+#include <mutex>
+#include <random>
+#include <unordered_map>
 
 namespace owl::api {
 
 template <typename EmbeddedModel> class VectorFSApi {
+private:
+  struct PendingRequest {
+    std::promise<nlohmann::json> promise;
+    std::chrono::steady_clock::time_point timestamp;
+  };
+
+  std::unordered_map<std::string, PendingRequest> pending_requests_;
+  std::mutex requests_mutex_;
+  std::thread cleanup_thread_;
+  std::atomic<bool> running_{false};
+
 public:
   VectorFSApi()
       : httpEndpoint(std::make_unique<Pistache::Http::Endpoint>(
             Pistache::Address("0.0.0.0", 9999))),
-        publisher_(std::make_unique<pub::MessagePublisher>()) {}
+        publisher_(
+            std::make_unique<pub::MessagePublisher>("tcp://localhost:5555")),
+        subscriber_(
+            std::make_unique<sub::MessageSubscriber>("tcp://localhost:5556")) {}
 
   void init() {
     spdlog::info("Initializing Pistache API...");
+
+    initSubscriber();
+    startCleanupThread();
 
     auto opts = Pistache::Http::Endpoint::options()
                     .threads(std::thread::hardware_concurrency())
@@ -37,10 +60,151 @@ public:
 
   void shutdown() {
     spdlog::info("Shutting down Pistache server");
+    running_ = false;
+
+    if (cleanup_thread_.joinable()) {
+      cleanup_thread_.join();
+    }
+
+    subscriber_->stop();
     httpEndpoint->shutdown();
   }
 
 private:
+  void initSubscriber() {
+    subscriber_->registerHandler(
+        [this](const nlohmann::json &msg) { handleResponse(msg); });
+
+    subscriber_->start();
+  }
+
+  void startCleanupThread() {
+    running_ = true;
+    cleanup_thread_ = std::thread([this]() {
+      while (running_) {
+        cleanupExpiredRequests();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+      }
+    });
+  }
+
+  void cleanupExpiredRequests() {
+    std::lock_guard<std::mutex> lock(requests_mutex_);
+    auto now = std::chrono::steady_clock::now();
+
+    auto it = pending_requests_.begin();
+    while (it != pending_requests_.end()) {
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+          now - it->second.timestamp);
+
+      if (duration.count() > 30) {
+        it->second.promise.set_value(
+            {{"success", false}, {"error", "Request timeout"}});
+        it = pending_requests_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  void handleResponse(const nlohmann::json &response) {
+    std::string request_id = response.value("request_id", "");
+
+    if (request_id.empty()) {
+      spdlog::warn("Received response without request_id");
+      return;
+    }
+
+    std::lock_guard<std::mutex> lock(requests_mutex_);
+    auto it = pending_requests_.find(request_id);
+
+    if (it != pending_requests_.end()) {
+      it->second.promise.set_value(response);
+      pending_requests_.erase(it);
+      spdlog::debug("Response handled for request: {}", request_id);
+    } else {
+      spdlog::warn("No pending request found for id: {}", request_id);
+    }
+  }
+
+  nlohmann::json sendRequestToVectorFS(const nlohmann::json &request) {
+    std::string request_id = generate_uuid();
+
+    nlohmann::json full_request = request;
+    full_request["request_id"] = request_id;
+    full_request["timestamp"] = std::time(nullptr);
+
+    std::promise<nlohmann::json> promise;
+    auto future = promise.get_future();
+
+    {
+      std::lock_guard<std::mutex> lock(requests_mutex_);
+      pending_requests_[request_id] = {std::move(promise),
+                                       std::chrono::steady_clock::now()};
+    }
+
+    if (!publisher_->sendMessage(full_request)) {
+      std::lock_guard<std::mutex> lock(requests_mutex_);
+      pending_requests_.erase(request_id);
+      throw std::runtime_error("Failed to send request to VectorFS");
+    }
+
+    auto status = future.wait_for(std::chrono::seconds(10));
+
+    if (status == std::future_status::timeout) {
+      std::lock_guard<std::mutex> lock(requests_mutex_);
+      pending_requests_.erase(request_id);
+      throw std::runtime_error("Request timeout");
+    }
+
+    return future.get();
+  }
+
+  std::string generate_uuid() {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(0, 15);
+
+    const char *hex_chars = "0123456789abcdef";
+    std::string uuid;
+
+    for (int i = 0; i < 32; ++i) {
+      uuid += hex_chars[dis(gen)];
+      if (i == 7 || i == 11 || i == 15 || i == 19) {
+        uuid += '-';
+      }
+    }
+
+    return uuid;
+  }
+
+  Json::Value convertToJsonValue(const nlohmann::json &nj) {
+    Json::Value result;
+
+    if (nj.is_object()) {
+      for (auto it = nj.begin(); it != nj.end(); ++it) {
+        result[it.key()] = convertToJsonValue(it.value());
+      }
+    } else if (nj.is_array()) {
+      result = Json::Value(Json::arrayValue);
+      for (const auto &item : nj) {
+        result.append(convertToJsonValue(item));
+      }
+    } else if (nj.is_string()) {
+      result = nj.get<std::string>();
+    } else if (nj.is_number_integer()) {
+      result = nj.get<int64_t>();
+    } else if (nj.is_number_float()) {
+      result = nj.get<double>();
+    } else if (nj.is_boolean()) {
+      result = nj.get<bool>();
+    } else if (nj.is_null()) {
+      result = Json::Value();
+    }
+
+    return result;
+  }
+
   void setupRoutes() {
     using namespace Pistache::Rest;
 
@@ -79,14 +243,8 @@ private:
 
   void handleRoot(const Pistache::Rest::Request &request,
                   Pistache::Http::ResponseWriter response) {
-    spdlog::info("=== ROOT HANDLER CALLED ===");
-    spdlog::info("Path: {}", request.resource());
-    spdlog::info("Client: {}", request.address().host());
-
     responses::addCorsHeaders(response);
     response.send(Pistache::Http::Code::Ok, "OK");
-
-    spdlog::info("=== ROOT HANDLER COMPLETED ===");
   }
 
   void handleGetContainerMetrics(const Pistache::Rest::Request &request,
@@ -99,60 +257,26 @@ private:
             .and_then([this](validate::Container params) {
               auto [user_id, container_id] = params;
 
-              validate::GetContainerMetrics metrics{};
+              nlohmann::json request_msg = {{"type", "get_container_metrics"},
+                                            {"user_id", user_id},
+                                            {"container_id", container_id}};
 
-              if (publisher_->sendContainerMetrics(user_id, container_id,
-                                                   metrics)) {
-                return core::Result<validate::GetContainerMetrics,
-                                    std::string>::Ok(metrics);
+              auto zmq_result = sendRequestToVectorFS(request_msg);
+
+              if (zmq_result.value("success", false)) {
+                auto data = zmq_result["data"];
+                return core::Result<nlohmann::json, std::string>::Ok(nlohmann::json(data));
               } else {
-                return core::
-                    Result<validate::GetContainerMetrics, std::string>::Error(
-                        "Failed to get container metrics");
+                return core::Result<nlohmann::json, std::string>::Error(
+                    zmq_result.value("error",
+                                     "Failed to get container metrics"));
               }
             })
-            .map([](validate::GetContainerMetrics result) -> Json::Value {
-              auto [memory_limit, cpu_limit] = result;
-
-              auto response_json = utils::create_success_response(
-                  {"memory_limit", "cpu_limit"}, memory_limit, cpu_limit);
-
-              return response_json;
-            });
-
-    response.headers().add<Pistache::Http::Header::ContentType>(
-        MIME(Application, Json));
-    responses::handleJsonResult(result, response);
-  }
-
-  void handleFileCreate(const Pistache::Rest::Request &request,
-                        Pistache::Http::ResponseWriter response) {
-    auto result =
-        responses::parseJsonBody(request.body())
-            .and_then([](Json::Value json) {
-              return validate::Validator::validate<validate::CreateFile>(json);
-            })
-            .and_then([this](validate::CreateFile params) {
-              auto [path, content, user_id, container_id] = params;
-
-              if (publisher_->sendFileCreate(path, content, user_id,
-                                             container_id)) {
-                return core::
-                    Result<std::pair<std::string, size_t>, std::string>::Ok(
-                        std::make_pair(path, content.size()));
-              } else {
-                return core::
-                    Result<std::pair<std::string, size_t>, std::string>::Error(
-                        "Failed to send file creation message");
-              }
-            })
-            .map([](std::pair<std::string, size_t> result) -> Json::Value {
-              auto [path, size] = result;
+            .map([](nlohmann::json data) -> Json::Value {
               return utils::create_success_response(
-                  {"path", "size", "created", "container_id", "message"}, path,
-                  static_cast<Json::UInt64>(size), true,
-                  "container_id_placeholder",
-                  "File creation request sent to FUSE process");
+                  {"memory_limit", "cpu_limit"},
+                  data.value("memory_limit", 100),
+                  data.value("cpu_limit", 100));
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -170,85 +294,111 @@ private:
             .and_then([this](validate::Container params) {
               auto [user_id, container_id] = params;
 
-              auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-              auto &state = vfs.get_state();
-              auto &container_manager = state.getContainerManager();
+              nlohmann::json request_msg = {{"type", "get_container_files"},
+                                            {"user_id", user_id},
+                                            {"container_id", container_id}};
 
-              auto container = container_manager.get_container(container_id);
+              auto zmq_result = sendRequestToVectorFS(request_msg);
 
-              if (!container) {
-                auto &fuse_instance =
-                    owl::instance::VFSInstance<EmbeddedModel>::getInstance()
-                        .get_vector_fs();
-                auto fuse_container =
-                    fuse_instance.get_container_adapter(container_id);
-
-                if (fuse_container) {
-                  container = fuse_container;
-                }
+              if (zmq_result.value("success", false)) {
+                auto data = zmq_result["data"];
+                return core::Result<nlohmann::json, std::string>::Ok(nlohmann::json(data));
+              } else {
+                return core::Result<nlohmann::json, std::string>::Error(
+                    zmq_result.value("error", "Failed to get container files"));
               }
-
-              if (!container) {
-                spdlog::warn("Container not found: {}", container_id);
-                return core::Result<validate::Container, std::string>::Error(
-                    "Container not found: " + container_id);
-              }
-
-              if (container->getOwner() != user_id) {
-                spdlog::warn("User {} doesn't have permission for container {} "
-                             "owned by {}",
-                             user_id, container_id, container->getOwner());
-                return core::Result<validate::Container, std::string>::Error(
-                    "Access denied");
-              }
-
-              return core::Result<validate::Container, std::string>::Ok(params);
             })
-            .and_then([this](validate::Container params) {
-              auto [user_id, container_id] = params;
-
-              auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-              auto &state = vfs.get_state();
-              auto &container_manager = state.getContainerManager();
-
-              auto container =
-                  vfs.get_vector_fs().get_unified_container(container_id);
-              if (!container) {
-                return core::Result<Json::Value, std::string>::Error(
-                    "Container not found after validation: " + container_id);
-              }
-
-              auto files = container->listFiles("/");
-              Json::Value filesArray(Json::arrayValue);
-
-              for (const auto &file_name : files) {
-                std::string file_path = file_name;
-                if (file_path[0] != '/') {
-                  file_path = "/" + file_path;
-                }
-
-                Json::Value fileInfo;
-                fileInfo["name"] = file_name;
-                fileInfo["path"] = file_path;
-
-                std::string content = container->getFileContent(file_path);
-                fileInfo["content"] = content;
-                fileInfo["size"] = static_cast<Json::UInt64>(content.size());
-                fileInfo["exists"] = container->fileExists(file_path);
-                fileInfo["is_directory"] = container->isDirectory(file_path);
-                fileInfo["category"] = container->classifyFile(file_path);
-
-                filesArray.append(fileInfo);
-              }
-              
-              return core::Result<Json::Value, std::string>::Ok(filesArray);
-            })
-            .map([this](Json::Value filesArray) -> Json::Value {
+            .map([this](nlohmann::json data) -> Json::Value {
               return utils::create_success_response(
-                  {"files", "count"}, filesArray,
-                  static_cast<int>(filesArray.size()));
+                  {"files", "count"}, convertToJsonValue(data["files"]),
+                  static_cast<int>(data.value("count", 0)));
+            });
+
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
+    responses::handleJsonResult(result, response);
+  }
+
+  void
+  handleSemanticSearchInContainer(const Pistache::Rest::Request &request,
+                                  Pistache::Http::ResponseWriter response) {
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<
+                  validate::SemanticSearchInContainer>(json);
+            })
+            .and_then([this](validate::SemanticSearchInContainer params) {
+              auto [query, limit, user_id, container_id] = params;
+
+              nlohmann::json request_msg = {
+                  {"type", "semantic_search_in_container"},
+                  {"query", query},
+                  {"limit", limit},
+                  {"user_id", user_id},
+                  {"container_id", container_id}};
+
+              auto zmq_result = sendRequestToVectorFS(request_msg);
+
+              if (zmq_result.value("success", false)) {
+                if (zmq_result.value("success", false)) {
+                  auto data = zmq_result["data"];
+                  return core::Result<nlohmann::json, std::string>::Ok(
+                      nlohmann::json(data));
+                }
+              } else {
+                return core::Result<nlohmann::json, std::string>::Error(
+                    zmq_result.value("error",
+                                     "Failed to perform semantic search"));
+              }
+            })
+            .map([this](nlohmann::json data) -> Json::Value {
+              return utils::create_success_response(
+                  {"query", "container_id", "results", "count"},
+                  data.value("query", ""), data.value("container_id", ""),
+                  convertToJsonValue(data["results"]),
+                  static_cast<int>(data.value("count", 0)));
+            });
+
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
+    responses::handleJsonResult(result, response);
+  }
+
+  void handleFileCreate(const Pistache::Rest::Request &request,
+                        Pistache::Http::ResponseWriter response) {
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              return validate::Validator::validate<validate::CreateFile>(json);
+            })
+            .and_then([this](validate::CreateFile params) {
+              auto [path, content, user_id, container_id] = params;
+
+              nlohmann::json request_msg = {{"type", "file_create"},
+                                            {"path", path},
+                                            {"content", content},
+                                            {"user_id", user_id},
+                                            {"container_id", container_id}};
+
+              auto zmq_result = sendRequestToVectorFS(request_msg);
+
+              if (zmq_result.value("success", false)) {
+                return core::
+                    Result<std::pair<std::string, size_t>, std::string>::Ok(
+                        std::make_pair(path, content.size()));
+              } else {
+                return core::
+                    Result<std::pair<std::string, size_t>, std::string>::Error(
+                        zmq_result.value("error", "Failed to create file"));
+              }
+            })
+            .map([](std::pair<std::string, size_t> result) -> Json::Value {
+              auto [path, size] = result;
+              return utils::create_success_response(
+                  {"path", "size", "created", "container_id", "message"}, path,
+                  static_cast<Json::UInt64>(size), true,
+                  "container_id_placeholder", "File created successfully");
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -258,95 +408,38 @@ private:
 
   void handleContainerDelete(const Pistache::Rest::Request &request,
                              Pistache::Http::ResponseWriter response) {
-    spdlog::info("=== Container Deletion Request ===");
-    spdlog::info("Client IP: {}", request.address().host());
-    spdlog::info("URL: {}", request.resource());
-
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
               return validate::Validator::validate<validate::DeleteContainer>(
                   json);
             })
-            .and_then([&request](validate::DeleteContainer params) {
-              auto [user_id, container_id] = params;
-
-              if (container_id.empty()) {
-                return core::Result<validate::DeleteContainer, std::string>::
-                    Error("Container ID is required");
-              }
-
-              spdlog::info("Deleting container: {} for user: {}", container_id,
-                           user_id);
-              return core::Result<validate::DeleteContainer, std::string>::Ok(
-                  params);
-            })
             .and_then([this](validate::DeleteContainer params) {
               auto [user_id, container_id] = params;
 
-              auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-              auto &state = vfs.get_state();
-              auto &container_manager = state.getContainerManager();
+              nlohmann::json request_msg = {{"type", "container_delete"},
+                                            {"user_id", user_id},
+                                            {"container_id", container_id}};
 
-              auto container = container_manager.get_container(container_id);
-              if (!container) {
-                spdlog::warn("Container not found: {}", container_id);
-                return core::Result<validate::DeleteContainer, std::string>::
-                    Error("Container not found: " + container_id);
-              }
+              auto zmq_result = sendRequestToVectorFS(request_msg);
 
-              if (container->getOwner() != user_id) {
-                spdlog::warn("User {} does not have permission to delete "
-                             "container {} owned by {}",
-                             user_id, container_id, container->getOwner());
-                return core::Result<validate::DeleteContainer, std::string>::
-                    Error("Access denied: you don't have permission to delete "
-                          "this container");
-              }
-
-              return core::Result<validate::DeleteContainer, std::string>::Ok(
-                  params);
-            })
-            .and_then([this](validate::DeleteContainer params) {
-              auto [user_id, container_id] = params;
-
-              if (publisher_->sendContainerDelete(container_id, user_id)) {
-
-                auto &vfs =
-                    owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-                auto &state = vfs.get_state();
-                auto &container_manager = state.getContainerManager();
-
-                bool unregistered =
-                    container_manager.unregister_container(container_id);
-                if (unregistered) {
-                  spdlog::info(
-                      "Container unregistered from container manager: {}",
-                      container_id);
-                } else {
-                  spdlog::warn("Container not found in container manager "
-                               "during unregistration: {}",
-                               container_id);
-                }
-
+              if (zmq_result.value("success", false)) {
                 return core::Result<
                     std::pair<std::string, std::string>,
                     std::string>::Ok(std::make_pair(container_id, user_id));
               } else {
                 return core::Result<std::pair<std::string, std::string>,
                                     std::string>::
-                    Error(
-                        "Failed to send container deletion message via ZeroMQ");
+                    Error(zmq_result.value("error",
+                                           "Failed to delete container"));
               }
             })
             .map([](std::pair<std::string, std::string> result) -> Json::Value {
               auto [container_id, user_id] = result;
-
               return utils::create_success_response(
                   {"container_id", "user_id", "status", "message"},
-                  container_id, user_id, "deletion_pending",
-                  "Container deletion request sent to FUSE process");
+                  container_id, user_id, "deleted",
+                  "Container deleted successfully");
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -364,69 +457,14 @@ private:
             .and_then([this](validate::DeleteFile params) {
               auto [user_id, container_id, file_path] = params;
 
-              if (file_path.empty()) {
-                return core::Result<validate::DeleteFile, std::string>::Error(
-                    "File path is required");
-              }
+              nlohmann::json request_msg = {{"type", "file_delete"},
+                                            {"user_id", user_id},
+                                            {"container_id", container_id},
+                                            {"path", file_path}};
 
-              if (container_id.empty()) {
-                return core::Result<validate::DeleteFile, std::string>::Error(
-                    "Container ID is required");
-              }
+              auto zmq_result = sendRequestToVectorFS(request_msg);
 
-              auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-              auto &state = vfs.get_state();
-              auto &container_manager = state.getContainerManager();
-
-              auto container = container_manager.get_container(container_id);
-              if (!container) {
-                spdlog::warn("Container not found: {}", container_id);
-                return core::Result<validate::DeleteFile, std::string>::Error(
-                    "Container not found: " + container_id);
-              }
-
-              if (container->getOwner() != user_id) {
-                spdlog::warn("User {} does not have permission to delete files "
-                             "from container {} owned by {}",
-                             user_id, container_id, container->getOwner());
-                return core::Result<validate::DeleteFile, std::string>::Error(
-                    "Access denied: you don't have permission to delete files "
-                    "from this container");
-              }
-
-              if (!container->fileExists(file_path)) {
-                spdlog::warn("File not found in container: {}", file_path);
-                return core::Result<validate::DeleteFile, std::string>::Error(
-                    "File not found: " + file_path);
-              }
-
-              return core::Result<validate::DeleteFile, std::string>::Ok(
-                  params);
-            })
-            .and_then([this](validate::DeleteFile params) {
-              auto [user_id, container_id, file_path] = params;
-
-              if (publisher_->sendFileDelete(file_path, user_id,
-                                             container_id)) {
-
-                auto &vfs =
-                    owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-                auto &state = vfs.get_state();
-                auto &container_manager = state.getContainerManager();
-
-                auto container = container_manager.get_container(container_id);
-                if (container) {
-                  bool deleted = container->removeFile(file_path);
-                  if (deleted) {
-                    spdlog::info("File successfully deleted from container: {}",
-                                 file_path);
-                  } else {
-                    spdlog::warn("Failed to delete file from container: {}",
-                                 file_path);
-                  }
-                }
-
+              if (zmq_result.value("success", false)) {
                 return core::Result<
                     std::tuple<std::string, std::string, std::string>,
                     std::string>::Ok(std::make_tuple(file_path, container_id,
@@ -434,21 +472,18 @@ private:
               } else {
                 return core::Result<
                     std::tuple<std::string, std::string, std::string>,
-                    std::string>::
-                    Error("Failed to send file deletion message via ZeroMQ");
+                    std::string>::Error(zmq_result
+                                            .value("error",
+                                                   "Failed to delete file"));
               }
             })
             .map([](std::tuple<std::string, std::string, std::string> result)
                      -> Json::Value {
               auto [file_path, container_id, user_id] = result;
-              spdlog::info("File deletion request processed successfully: "
-                           "{} from container {} for user: {}",
-                           file_path, container_id, user_id);
-
               return utils::create_success_response(
                   {"file_path", "container_id", "user_id", "status", "message"},
                   file_path, container_id, user_id, "deleted",
-                  "File deletion request sent to FUSE process");
+                  "File deleted successfully");
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -458,37 +493,45 @@ private:
 
   void handleContainerCreate(const Pistache::Rest::Request &request,
                              Pistache::Http::ResponseWriter response) {
-    spdlog::info("=== Container Creation Request ===");
-    spdlog::info("Client IP: {}", request.address().host());
-
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
               return validate::Validator::validate<validate::CreateContainer>(
                   json);
             })
-            .map([this](validate::CreateContainer params) -> Json::Value {
-              if (publisher_->sendContainerCreate(
-                      params.container_id, params.user_id, params.memory_limit,
-                      params.storage_quota, params.file_limit,
-                      params.privileged, params.env_label.second,
-                      params.type_label.second, params.commands)) {
+            .and_then([this](validate::CreateContainer params) {
+              nlohmann::json request_msg = {
+                  {"type", "container_create"},
+                  {"container_id", params.container_id},
+                  {"user_id", params.user_id},
+                  {"memory_limit", params.memory_limit},
+                  {"storage_quota", params.storage_quota},
+                  {"file_limit", params.file_limit},
+                  {"privileged", params.privileged},
+                  {"env_label", params.env_label.second},
+                  {"type_label", params.type_label.second},
+                  {"commands", params.commands}};
 
-                spdlog::info("Container creation message sent via ZeroMQ: {}",
-                             params.container_id);
+              auto zmq_result = sendRequestToVectorFS(request_msg);
 
-                return utils::create_success_response(
-                    {"container_id", "status", "memory_limit", "storage_quota",
-                     "file_limit", "message"},
-                    params.container_id, "pending",
-                    static_cast<Json::UInt64>(params.memory_limit),
-                    static_cast<Json::UInt64>(params.storage_quota),
-                    static_cast<Json::UInt64>(params.file_limit),
-                    "Container creation request sent to FUSE process");
+              if (zmq_result.value("success", false)) {
+                return core::Result<validate::CreateContainer, std::string>::Ok(
+                    params);
               } else {
-                throw std::runtime_error(
-                    "Failed to send container creation message");
+                return core::Result<validate::CreateContainer, std::string>::
+                    Error(zmq_result.value("error",
+                                           "Failed to create container"));
               }
+            })
+            .map([](validate::CreateContainer params) -> Json::Value {
+              return utils::create_success_response(
+                  {"container_id", "status", "memory_limit", "storage_quota",
+                   "file_limit", "message"},
+                  params.container_id, "created",
+                  static_cast<Json::UInt64>(params.memory_limit),
+                  static_cast<Json::UInt64>(params.storage_quota),
+                  static_cast<Json::UInt64>(params.file_limit),
+                  "Container created successfully");
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -504,85 +547,28 @@ private:
               return validate::Validator::validate<validate::ReadFileByIdBody>(
                   json);
             })
-            .map([this](validate::ReadFileByIdBody params) -> Json::Value {
+            .and_then([this](validate::ReadFileByIdBody params) {
               auto [file_id, container_id] = params;
 
-              spdlog::info("file_id: {}", file_id);
-              spdlog::info("container_id, {}", container_id);
+              nlohmann::json request_msg = {{"type", "get_file_content"},
+                                            {"file_id", file_id},
+                                            {"container_id", container_id}};
 
-              auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-              auto &state = vfs.get_state();
-              auto &container_manager = state.getContainerManager();
+              auto zmq_result = sendRequestToVectorFS(request_msg);
 
-              auto container = container_manager.get_container(container_id);
-
-              if (!container) {
-                throw std::runtime_error("Container not found: " +
-                                         container_id);
+              if (zmq_result.value("success", false)) {
+                auto content = zmq_result["data"].value("content", "");
+                return core::Result<std::string, std::string>::Ok(content);
+              } else {
+                return core::Result<std::string, std::string>::Error(
+                    zmq_result.value("error", "Failed to get file content"));
               }
-
-              auto content = container->getFileContent(file_id);
-
-              return content;
-
-              Json::Value result_json;
-              result_json["content"] = content;
-
-              return utils::create_success_response({"content"}, content);
-            });
-
-    response.headers().add<Pistache::Http::Header::ContentType>(
-        MIME(Application, Json));
-    responses::handleJsonResult(result, response);
-  }
-
-  void
-  handleSemanticSearchInContainer(const Pistache::Rest::Request &request,
-                                  Pistache::Http::ResponseWriter response) {
-    auto result =
-        responses::parseJsonBody(request.body())
-            .and_then([](Json::Value json) {
-              return validate::Validator::validate<
-                  validate::SemanticSearchInContainer>(json);
             })
-            .map([this](validate::SemanticSearchInContainer params)
-                     -> Json::Value {
-              auto [query, limit, user_id, container_id] = params;
-
-              spdlog::debug("Semantic search in container {}: '{}'",
-                            container_id, query);
-
-              auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance();
-
-              auto &state = vfs.get_state();
-              auto &container_manager = state.getContainerManager();
-
-              auto container = container_manager.get_container(container_id);
-              if (!container) {
-                spdlog::error("container with id: {} not found", container_id);
-                throw std::runtime_error("Container not found: " +
-                                         container_id);
-              }
-
-              auto results = container->semanticSearch(query, limit);
-
-              spdlog::debug("Semantic search found {} results", results.size());
-
-              Json::Value resultsJson(Json::arrayValue);
-              for (const auto &[file_path, score] : results) {
-                if (score < 1.0) {
-                  Json::Value resultJson;
-                  resultJson["path"] = file_path;
-                  resultJson["score"] = score;
-                  resultsJson.append(resultJson);
-                }
-              }
-
-              return utils::create_success_response(
-                  {"query", "container_id", "results", "count"}, query,
-                  container_id, resultsJson, static_cast<int>(results.size()));
+            .map([](std::string content) -> Json::Value {
+              Json::Value response_json;
+              response_json["content"] = content;
+              response_json["success"] = true;
+              return response_json;
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -598,43 +584,67 @@ private:
               return validate::Validator::validate<validate::SemanticSearch>(
                   json);
             })
-            .map([this](validate::SemanticSearch params) -> Json::Value {
+            .and_then([this](validate::SemanticSearch params) {
               auto [query, limit] = params;
 
-              auto &vfs =
-                  owl::instance::VFSInstance<EmbeddedModel>::getInstance()
-                      .get_vector_fs();
-              auto results = vfs.getSearch().semanticSearchImpl(query, limit);
+              nlohmann::json request_msg = {{"type", "semantic_search"},
+                                            {"query", query},
+                                            {"limit", limit}};
 
-              Json::Value resultsJson(Json::arrayValue);
-              for (const auto &[path, score] : results) {
-                Json::Value resultJson;
-                resultJson["path"] = path;
-                resultJson["score"] = score;
-                resultsJson.append(resultJson);
+              auto zmq_result = sendRequestToVectorFS(request_msg);
+
+              if (zmq_result.value("success", false)) {
+                if (zmq_result.value("success", false)) {
+                  auto data = zmq_result["data"];
+                  return core::Result<nlohmann::json, std::string>::Ok(
+                      nlohmann::json(data));
+                }
+              } else {
+                return core::Result<nlohmann::json, std::string>::Error(
+                    zmq_result.value("error",
+                                     "Failed to perform semantic search"));
               }
-
+            })
+            .map([this](nlohmann::json data) -> Json::Value {
               return utils::create_success_response(
-                  {"query", "results", "count"}, query, resultsJson,
-                  static_cast<int>(results.size()));
+                  {"query", "results", "count"}, data.value("query", ""),
+                  convertToJsonValue(data["results"]),
+                  static_cast<int>(data.value("count", 0)));
             });
 
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
     responses::handleJsonResult(result, response);
   }
 
   void handleRebuild(const Pistache::Rest::Request &request,
                      Pistache::Http::ResponseWriter response) {
-    auto response_data =
-        utils::create_success_response({"message"}, "Rebuild completed");
-    responses::sendSuccess(response, response_data);
+    auto result =
+        responses::parseJsonBody(request.body())
+            .map([this](Json::Value json) -> Json::Value {
+              nlohmann::json request_msg = {{"type", "rebuild_index"}};
+
+              auto zmq_result = sendRequestToVectorFS(request_msg);
+
+              if (zmq_result.value("success", false)) {
+                return utils::create_success_response(
+                    {"message"}, "Rebuild completed successfully");
+              } else {
+                throw std::runtime_error(
+                    zmq_result.value("error", "Failed to rebuild index"));
+              }
+            });
+
+    responses::handleJsonResult(result, response);
   }
 
 private:
   std::unique_ptr<Pistache::Http::Endpoint> httpEndpoint;
   Pistache::Rest::Router router;
   std::unique_ptr<pub::MessagePublisher> publisher_;
+  std::unique_ptr<sub::MessageSubscriber> subscriber_;
 };
 
 } // namespace owl::api
 
-#endif // VECTORFS_PISTACHE_API_HPP
+#endif

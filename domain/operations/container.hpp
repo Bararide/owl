@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace owl::vectorfs {
+namespace owl {
 
 template <typename Derived> class ContainerManagement {
 public:
@@ -26,6 +26,6 @@ public:
   }
 };
 
-} // namespace owl::vectorfs
+} // namespace owl
 
 #endif // CONTAINER_MANAGEMENT_HPP

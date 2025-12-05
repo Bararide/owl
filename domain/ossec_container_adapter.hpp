@@ -1,13 +1,9 @@
 #ifndef VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
 #define VECTORFS_OSSEC_CONTAINER_ADAPTER_HPP
 
-#include "knowledge_container.hpp"
+#include "operations/knowledge_container.hpp"
 #include "search.hpp"
-#include <filesystem>
-#include <fstream>
 #include <memory/pid_container.hpp>
-#include <set>
-#include <spdlog/spdlog.h>
 
 namespace owl::vectorfs {
 

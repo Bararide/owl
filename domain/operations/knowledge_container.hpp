@@ -1,12 +1,15 @@
 #ifndef KNOWLEDGE_CONTAINER_HPP
 #define KNOWLEDGE_CONTAINER_HPP
 
-#include "operations/container.hpp"
-#include "operations/file.hpp"
-#include "operations/owner.hpp"
-#include "operations/search.hpp"
+#include "container.hpp"
+#include "file.hpp"
+#include "owner.hpp"
+#include "search.hpp"
 
-namespace owl::vectorfs {
+#include <filesystem>
+#include <fstream>
+
+namespace owl {
 
 template <typename Derived>
 class KnowledgeContainer : public FileOperations<Derived>,
@@ -23,6 +26,6 @@ public:
   virtual ~KnowledgeContainer() = default;
 };
 
-} // namespace owl::vectorfs
+} // namespace owl
 
 #endif

@@ -12,7 +12,7 @@
 #include <thread>
 
 #include "file/fileinfo.hpp"
-#include "knowledge_container.hpp"
+#include "operations/knowledge_container.hpp"
 #include "state.hpp"
 #include <spdlog/spdlog.h>
 
@@ -29,7 +29,10 @@ private:
   State &state_;
 
   zmq::context_t zmq_context_;
+
   std::unique_ptr<zmq::socket_t> zmq_subscriber_;
+  std::unique_ptr<zmq::socket_t> zmq_publisher_;
+
   std::thread message_thread_;
   std::atomic<bool> running_{false};
 
@@ -62,6 +65,9 @@ private:
   std::string generate_markov_test_result();
 
   nlohmann::json handle_get_container_metrics(const nlohmann::json &message);
+  nlohmann::json handle_get_container_files(const nlohmann::json &message);
+  nlohmann::json
+  handle_semantic_search_in_container(const nlohmann::json &message);
 
   void initialize_zeromq();
   void process_messages();
@@ -83,6 +89,10 @@ private:
   bool deleteFileFromMessage(const nlohmann::json &message);
   bool stopContainerFromMessage(const nlohmann::json &message);
   bool deleteContainerFromMessage(const nlohmann::json &message);
+
+  void send_response(const std::string &request_id, bool success,
+                     const nlohmann::json &data = {});
+  void send_error(const std::string &request_id, const std::string &error);
 
 public:
   VectorFS(State &state) : state_{state}, zmq_context_(1) {
@@ -194,8 +204,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->getattr(path, stbuf, fi);
   }
 
@@ -206,8 +216,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->readdir(path, buf, filler, offset, fi, flags);
   }
 
@@ -215,8 +225,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->open(path, fi);
   }
 
@@ -225,8 +235,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->read(path, buf, size, offset, fi);
   }
 
@@ -236,8 +246,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->write(path, buf, size, offset, fi);
   }
 
@@ -245,8 +255,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->mkdir(path, mode);
   }
 
@@ -255,8 +265,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->create(path, mode, fi);
   }
 
@@ -266,8 +276,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->utimens(path, tv, fi);
   }
 
@@ -275,8 +285,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->rmdir(path);
   }
 
@@ -284,8 +294,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->unlink(path);
   }
 
@@ -294,8 +304,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->getxattr(path, name, value, size);
   }
 
@@ -305,8 +315,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->setxattr(path, name, value, size, flags);
   }
 
@@ -315,8 +325,8 @@ public:
     struct fuse_context *context = fuse_get_context();
     if (!context || !context->private_data)
       return -ENOENT;
-    
-    VectorFS *fs = static_cast<VectorFS*>(context->private_data);
+
+    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
     return fs->listxattr(path, list, size);
   }
 

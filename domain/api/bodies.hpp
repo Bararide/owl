@@ -1,5 +1,5 @@
-#ifndef OWL_API_BODIES
-#define OWL_API_BODIES
+#ifndef OWL_API_BODIES_HPP
+#define OWL_API_BODIES_HPP
 
 #include <boost/hana.hpp>
 #include <string>
@@ -62,6 +62,11 @@ struct ReadFileByIdBody {
   std::string container_id;
 };
 
+struct GetContainerFiles {
+  std::string user_id;
+  std::string container_id;
+};
+
 } // namespace owl::api::validate
 
 BOOST_HANA_ADAPT_STRUCT(owl::api::validate::SemanticSearch, query, limit);
@@ -79,5 +84,7 @@ BOOST_HANA_ADAPT_STRUCT(owl::api::validate::DeleteContainer, user_id,
 BOOST_HANA_ADAPT_STRUCT(owl::api::validate::Container, user_id, container_id);
 BOOST_HANA_ADAPT_STRUCT(owl::api::validate::DeleteFile, user_id, container_id,
                         file_id);
+BOOST_HANA_ADAPT_STRUCT(owl::api::validate::GetContainerFiles, user_id,
+                        container_id);
 
-#endif // OWL_API_BODIES
+#endif // OWL_API_BODIES_HPP

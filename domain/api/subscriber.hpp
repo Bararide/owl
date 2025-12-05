@@ -1,5 +1,5 @@
-#ifndef OWL_API_SUBSCRIBER
-#define OWL_API_SUBSCRIBER
+#ifndef OWL_API_SUBSCRIBER_HPP
+#define OWL_API_SUBSCRIBER_HPP
 
 #include <atomic>
 #include <functional>
@@ -14,16 +14,24 @@ class MessageSubscriber {
 public:
   using MessageHandler = std::function<void(const nlohmann::json &)>;
 
-  MessageSubscriber(const std::string &address = "tcp://*:5555")
+  MessageSubscriber(const std::string &address = "tcp://localhost:5556")
       : context_(1), address_(address), running_(false) {}
 
-  void setMessageHandler(MessageHandler handler) { message_handler_ = handler; }
+  ~MessageSubscriber() { stop(); }
+
+  void registerHandler(MessageHandler handler) { message_handler_ = handler; }
 
   void start() {
+    if (running_) {
+      spdlog::warn("Subscriber already running");
+      return;
+    }
+
     try {
       socket_ = zmq::socket_t(context_, ZMQ_SUB);
-      socket_.bind(address_);
-      socket_.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+      socket_.connect(address_);
+      socket_.set(zmq::sockopt::subscribe,
+                  "");
 
       running_ = true;
       subscriber_thread_ = std::thread(&MessageSubscriber::run, this);
@@ -40,7 +48,9 @@ public:
     if (subscriber_thread_.joinable()) {
       subscriber_thread_.join();
     }
-    socket_.close();
+    if (socket_.handle() != nullptr) {
+      socket_.close();
+    }
     spdlog::info("ZeroMQ subscriber stopped");
   }
 
@@ -75,9 +85,6 @@ private:
     try {
       auto json_msg = nlohmann::json::parse(message);
 
-      spdlog::info("Received message type: {}",
-                   json_msg.value("type", "unknown"));
-
       if (message_handler_) {
         message_handler_(json_msg);
       }
@@ -98,4 +105,4 @@ private:
 
 } // namespace owl::api::sub
 
-#endif // OWL_API_SUBSCRIBER
+#endif // OWL_API_SUBSCRIBER_HPP
