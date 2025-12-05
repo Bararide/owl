@@ -12,7 +12,7 @@
 #include <thread>
 
 #include "file/fileinfo.hpp"
-#include "operations/knowledge_container.hpp"
+#include "knowledge_container.hpp"
 #include "state.hpp"
 #include <spdlog/spdlog.h>
 
@@ -27,12 +27,11 @@ private:
   std::set<std::string> virtual_dirs;
 
   State &state_;
+  static VectorFS *instance_;
 
   zmq::context_t zmq_context_;
-
   std::unique_ptr<zmq::socket_t> zmq_subscriber_;
   std::unique_ptr<zmq::socket_t> zmq_publisher_;
-
   std::thread message_thread_;
   std::atomic<bool> running_{false};
 
@@ -48,26 +47,20 @@ private:
   };
 
   std::map<std::string, ContainerInfo> containers_;
-  std::map<std::string,
-           std::shared_ptr<KnowledgeContainer<OssecContainerAdapter>>>
+  std::map<std::string, std::shared_ptr<IKnowledgeContainer>>
       container_adapters_;
 
   void initialize_container_paths();
-  std::shared_ptr<KnowledgeContainer<OssecContainerAdapter>>
+  std::shared_ptr<IKnowledgeContainer>
   get_container_for_path(const std::string &path);
   std::string generateContainerListing();
-  std::string generateContainerContent(const std::string &container_id);
+  std::string generate_container_content(const std::string &container_id);
   std::string handle_container_search(const std::string &container_id,
                                       const std::string &query);
 
   std::string generate_enhanced_search_result(const std::string &query);
   std::string generate_search_result(const std::string &query);
   std::string generate_markov_test_result();
-
-  nlohmann::json handle_get_container_metrics(const nlohmann::json &message);
-  nlohmann::json handle_get_container_files(const nlohmann::json &message);
-  nlohmann::json
-  handle_semantic_search_in_container(const nlohmann::json &message);
 
   void initialize_zeromq();
   void process_messages();
@@ -78,27 +71,41 @@ private:
                               const std::string &container_path,
                               const nlohmann::json &config);
 
+  nlohmann::json handle_get_container_files(const nlohmann::json &message);
+  nlohmann::json
+  handle_semantic_search_in_container(const nlohmann::json &message);
+  nlohmann::json handle_get_container_metrics(const nlohmann::json &message);
+
   bool handleContainerCreate(const nlohmann::json &message);
   bool handleFileCreate(const nlohmann::json &message);
   bool handleFileDelete(const nlohmann::json &message);
   bool handleContainerStop(const nlohmann::json &message);
   bool handleContainerDelete(const nlohmann::json &message);
 
-  bool createContainerFromMessage(const nlohmann::json &message);
-  bool createFileFromMessage(const nlohmann::json &message);
-  bool deleteFileFromMessage(const nlohmann::json &message);
-  bool stopContainerFromMessage(const nlohmann::json &message);
-  bool deleteContainerFromMessage(const nlohmann::json &message);
+  bool create_container_from_message(const nlohmann::json &message);
+  bool create_file_from_message(const nlohmann::json &message);
+  bool delete_file_from_message(const nlohmann::json &message);
+  bool stop_container_from_message(const nlohmann::json &message);
+  bool delete_container_from_message(const nlohmann::json &message);
 
   void send_response(const std::string &request_id, bool success,
-                     const nlohmann::json &data = {});
+                     const nlohmann::json &data);
+
+  nlohmann::json handle_semantic_search(const nlohmann::json &message);
+  nlohmann::json handle_get_file_content(const nlohmann::json &message);
+  nlohmann::json handle_rebuild_index(const nlohmann::json &message);
+
   void send_error(const std::string &request_id, const std::string &error);
+
+  std::string generateContainerContent(const std::string &container_id);
 
 public:
   VectorFS(State &state) : state_{state}, zmq_context_(1) {
     virtual_dirs.insert("/");
     initialize_container_paths();
+    parse_base_dir();
     initialize_zeromq();
+    instance_ = this;
   }
 
   ~VectorFS() {
@@ -106,12 +113,14 @@ public:
     if (message_thread_.joinable()) {
       message_thread_.join();
     }
+    instance_ = nullptr;
   }
 
   void test_semantic_search();
   void test_markov_chains();
+  void test_container();
 
-  std::shared_ptr<KnowledgeContainer<OssecContainerAdapter>>
+  std::shared_ptr<IKnowledgeContainer>
   get_unified_container(const std::string &container_id) {
     auto container = state_.getContainerManager().get_container(container_id);
     if (container) {
@@ -126,7 +135,7 @@ public:
     return nullptr;
   }
 
-  std::shared_ptr<KnowledgeContainer<OssecContainerAdapter>>
+  std::shared_ptr<IKnowledgeContainer>
   get_container_adapter(const std::string &container_id) {
     auto it = container_adapters_.find(container_id);
     return it != container_adapters_.end() ? it->second : nullptr;
@@ -201,133 +210,94 @@ public:
 
   static inline int getattr_callback(const char *path, struct stat *stbuf,
                                      struct fuse_file_info *fi) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->getattr(path, stbuf, fi);
+    return instance_->getattr(path, stbuf, fi);
   }
 
   static inline int readdir_callback(const char *path, void *buf,
                                      fuse_fill_dir_t filler, off_t offset,
                                      struct fuse_file_info *fi,
                                      enum fuse_readdir_flags flags) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->readdir(path, buf, filler, offset, fi, flags);
+    return instance_->readdir(path, buf, filler, offset, fi, flags);
   }
 
   static inline int open_callback(const char *path, struct fuse_file_info *fi) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->open(path, fi);
+    return instance_->open(path, fi);
   }
 
   static inline int read_callback(const char *path, char *buf, size_t size,
                                   off_t offset, struct fuse_file_info *fi) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->read(path, buf, size, offset, fi);
+    return instance_->read(path, buf, size, offset, fi);
   }
 
   static inline int write_callback(const char *path, const char *buf,
                                    size_t size, off_t offset,
                                    struct fuse_file_info *fi) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->write(path, buf, size, offset, fi);
+    return instance_->write(path, buf, size, offset, fi);
   }
 
   static inline int mkdir_callback(const char *path, mode_t mode) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->mkdir(path, mode);
+    return instance_->mkdir(path, mode);
   }
 
   static inline int create_callback(const char *path, mode_t mode,
                                     struct fuse_file_info *fi) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->create(path, mode, fi);
+    return instance_->create(path, mode, fi);
   }
 
   static inline int utimens_callback(const char *path,
                                      const struct timespec tv[2],
                                      struct fuse_file_info *fi) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->utimens(path, tv, fi);
+    return instance_->utimens(path, tv, fi);
   }
 
   static inline int rmdir_callback(const char *path) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->rmdir(path);
+    return instance_->rmdir(path);
   }
 
   static inline int unlink_callback(const char *path) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->unlink(path);
+    return instance_->unlink(path);
   }
 
   static inline int getxattr_callback(const char *path, const char *name,
                                       char *value, size_t size) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->getxattr(path, name, value, size);
+    return instance_->getxattr(path, name, value, size);
   }
 
   static inline int setxattr_callback(const char *path, const char *name,
                                       const char *value, size_t size,
                                       int flags) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->setxattr(path, name, value, size, flags);
+    return instance_->setxattr(path, name, value, size, flags);
   }
 
   static inline int listxattr_callback(const char *path, char *list,
                                        size_t size) {
-    struct fuse_context *context = fuse_get_context();
-    if (!context || !context->private_data)
+    if (!instance_)
       return -ENOENT;
-
-    VectorFS *fs = static_cast<VectorFS *>(context->private_data);
-    return fs->listxattr(path, list, size);
+    return instance_->listxattr(path, list, size);
   }
 
   static struct fuse_operations &get_operations() {

@@ -128,36 +128,51 @@ private:
   }
 
   nlohmann::json sendRequestToVectorFS(const nlohmann::json &request) {
-    std::string request_id = generate_uuid();
+    try {
+      std::string request_id = generate_uuid();
 
-    nlohmann::json full_request = request;
-    full_request["request_id"] = request_id;
-    full_request["timestamp"] = std::time(nullptr);
+      nlohmann::json full_request = request;
+      full_request["request_id"] = request_id;
+      full_request["timestamp"] = std::time(nullptr);
 
-    std::promise<nlohmann::json> promise;
-    auto future = promise.get_future();
+      spdlog::critical("Sending request: {}", full_request.dump());
 
-    {
-      std::lock_guard<std::mutex> lock(requests_mutex_);
-      pending_requests_[request_id] = {std::move(promise),
-                                       std::chrono::steady_clock::now()};
+      std::promise<nlohmann::json> promise;
+      auto future = promise.get_future();
+
+      {
+        std::lock_guard<std::mutex> lock(requests_mutex_);
+        pending_requests_[request_id] = {std::move(promise),
+                                         std::chrono::steady_clock::now()};
+      }
+
+      if (!publisher_->sendMessage(full_request.dump())) {
+        std::lock_guard<std::mutex> lock(requests_mutex_);
+        pending_requests_.erase(request_id);
+        return {{"success", false},
+                {"error", "Failed to send request to VectorFS"}};
+      }
+
+      spdlog::critical("Message sent, waiting for response...");
+
+      auto status = future.wait_for(std::chrono::seconds(10));
+
+      if (status == std::future_status::timeout) {
+        spdlog::critical("Request timeout");
+        std::lock_guard<std::mutex> lock(requests_mutex_);
+        pending_requests_.erase(request_id);
+        return {{"success", false}, {"error", "Request timeout"}};
+      }
+
+      auto result = future.get();
+      spdlog::critical("Response received: {}", result.dump());
+      return result;
+
+    } catch (const std::exception &e) {
+      spdlog::critical("Exception in sendRequestToVectorFS: {}", e.what());
+      return {{"success", false},
+              {"error", std::string("Exception: ") + e.what()}};
     }
-
-    if (!publisher_->sendMessage(full_request)) {
-      std::lock_guard<std::mutex> lock(requests_mutex_);
-      pending_requests_.erase(request_id);
-      throw std::runtime_error("Failed to send request to VectorFS");
-    }
-
-    auto status = future.wait_for(std::chrono::seconds(10));
-
-    if (status == std::future_status::timeout) {
-      std::lock_guard<std::mutex> lock(requests_mutex_);
-      pending_requests_.erase(request_id);
-      throw std::runtime_error("Request timeout");
-    }
-
-    return future.get();
   }
 
   std::string generate_uuid() {
@@ -257,19 +272,34 @@ private:
             .and_then([this](validate::Container params) {
               auto [user_id, container_id] = params;
 
-              nlohmann::json request_msg = {{"type", "get_container_metrics"},
+              nlohmann::json request_msg = {{"type", "get_container_files"},
                                             {"user_id", user_id},
                                             {"container_id", container_id}};
 
+              spdlog::info("Sending request to VectorFS: {}",
+                           request_msg.dump());
+
               auto zmq_result = sendRequestToVectorFS(request_msg);
 
+              spdlog::info("Received from VectorFS: {}", zmq_result.dump());
+
               if (zmq_result.value("success", false)) {
+                if (!zmq_result.contains("data")) {
+                  spdlog::error("VectorFS response missing 'data' field");
+                  return core::Result<nlohmann::json, std::string>::Error(
+                      "No data in response");
+                }
+
                 auto data = zmq_result["data"];
-                return core::Result<nlohmann::json, std::string>::Ok(nlohmann::json(data));
+                spdlog::info("Data type: {}", data.type_name());
+                spdlog::info("Data value: {}", data.dump());
+
+                return core::Result<nlohmann::json, std::string>(data);
               } else {
+                spdlog::error("VectorFS error: {}",
+                              zmq_result.value("error", "Unknown error"));
                 return core::Result<nlohmann::json, std::string>::Error(
-                    zmq_result.value("error",
-                                     "Failed to get container metrics"));
+                    zmq_result.value("error", "Failed to get container files"));
               }
             })
             .map([](nlohmann::json data) -> Json::Value {
@@ -286,36 +316,89 @@ private:
 
   void handleContainerFilesGet(const Pistache::Rest::Request &request,
                                Pistache::Http::ResponseWriter response) {
+    spdlog::info("=== Container Files Get Request ===");
+
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {
+              spdlog::debug("Parsed request body: {}", json.toStyledString());
               return validate::Validator::validate<validate::Container>(json);
             })
             .and_then([this](validate::Container params) {
               auto [user_id, container_id] = params;
+              spdlog::info("Getting files for container: {} for user: {}",
+                           container_id, user_id);
 
               nlohmann::json request_msg = {{"type", "get_container_files"},
                                             {"user_id", user_id},
                                             {"container_id", container_id}};
 
               auto zmq_result = sendRequestToVectorFS(request_msg);
+              spdlog::debug("ZeroMQ response: {}", zmq_result.dump());
 
               if (zmq_result.value("success", false)) {
-                auto data = zmq_result["data"];
-                return core::Result<nlohmann::json, std::string>::Ok(nlohmann::json(data));
+                if (zmq_result.contains("data")) {
+                  auto data = zmq_result["data"];
+
+                  Json::Value json_result;
+
+                  Json::Value files_array(Json::arrayValue);
+                  if (data.contains("files") && data["files"].is_array()) {
+                    for (const auto &file : data["files"]) {
+                      Json::Value file_obj;
+
+                      if (file.contains("name"))
+                        file_obj["name"] =
+                            file["name"].template get<std::string>();
+                      if (file.contains("path"))
+                        file_obj["path"] =
+                            file["path"].template get<std::string>();
+                      if (file.contains("content"))
+                        file_obj["content"] =
+                            file["content"].template get<std::string>();
+                      if (file.contains("size"))
+                        file_obj["size"] = file["size"].template get<int>();
+                      if (file.contains("exists"))
+                        file_obj["exists"] =
+                            file["exists"].template get<bool>();
+                      if (file.contains("is_directory"))
+                        file_obj["is_directory"] =
+                            file["is_directory"].template get<bool>();
+                      if (file.contains("category"))
+                        file_obj["category"] =
+                            file["category"].template get<std::string>();
+
+                      files_array.append(file_obj);
+                    }
+                  }
+
+                  return core::Result<Json::Value, std::string>::Ok(
+                      files_array);
+
+                } else {
+                  spdlog::error("Response missing 'data' field");
+                  return core::Result<Json::Value, std::string>::Error(
+                      "No data in response");
+                }
               } else {
-                return core::Result<nlohmann::json, std::string>::Error(
-                    zmq_result.value("error", "Failed to get container files"));
+                std::string error = zmq_result.value("error", "Unknown error");
+                spdlog::error("ZeroMQ error: {}", error);
+                return core::Result<Json::Value, std::string>::Error(error);
               }
             })
-            .map([this](nlohmann::json data) -> Json::Value {
+            .map([this](Json::Value files_array) -> Json::Value {
+              Json::Value data;
+              data["files"] = files_array;
+              data["count"] = static_cast<int>(files_array.size());
+
               return utils::create_success_response(
-                  {"files", "count"}, convertToJsonValue(data["files"]),
-                  static_cast<int>(data.value("count", 0)));
+                  {"files", "count"}, files_array,
+                  static_cast<int>(files_array.size()));
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
         MIME(Application, Json));
+
     responses::handleJsonResult(result, response);
   }
 
@@ -341,23 +424,26 @@ private:
               auto zmq_result = sendRequestToVectorFS(request_msg);
 
               if (zmq_result.value("success", false)) {
-                if (zmq_result.value("success", false)) {
-                  auto data = zmq_result["data"];
-                  return core::Result<nlohmann::json, std::string>::Ok(
-                      nlohmann::json(data));
-                }
+                auto data = zmq_result["data"];
+
+                Json::Value data_json = convertToJsonValue(data);
+                return core::Result<Json::Value, std::string>::Ok(data_json);
               } else {
-                return core::Result<nlohmann::json, std::string>::Error(
+                return core::Result<Json::Value, std::string>::Error(
                     zmq_result.value("error",
                                      "Failed to perform semantic search"));
               }
             })
-            .map([this](nlohmann::json data) -> Json::Value {
+            .map([](Json::Value data) -> Json::Value {
+              std::string query = data.get("query", "").asString();
+              std::string container_id =
+                  data.get("container_id", "").asString();
+              Json::Value results = data["results"];
+              int count = data.get("count", 0).asInt();
+
               return utils::create_success_response(
-                  {"query", "container_id", "results", "count"},
-                  data.value("query", ""), data.value("container_id", ""),
-                  convertToJsonValue(data["results"]),
-                  static_cast<int>(data.value("count", 0)));
+                  {"query", "container_id", "results", "count"}, query,
+                  container_id, results, count);
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -375,7 +461,7 @@ private:
             .and_then([this](validate::CreateFile params) {
               auto [path, content, user_id, container_id] = params;
 
-              nlohmann::json request_msg = {{"type", "file_create"},
+              nlohmann::json request_msg = {{"type", "create_file"},
                                             {"path", path},
                                             {"content", content},
                                             {"user_id", user_id},
@@ -557,18 +643,16 @@ private:
               auto zmq_result = sendRequestToVectorFS(request_msg);
 
               if (zmq_result.value("success", false)) {
-                auto content = zmq_result["data"].value("content", "");
-                return core::Result<std::string, std::string>::Ok(content);
+                auto data = zmq_result["data"];
+                Json::Value data_json = convertToJsonValue(data);
+
+                Json::Value result_json;
+                result_json["content"] = data_json["content"];
+                return core::Result<Json::Value, std::string>::Ok(result_json);
               } else {
-                return core::Result<std::string, std::string>::Error(
+                return core::Result<Json::Value, std::string>::Error(
                     zmq_result.value("error", "Failed to get file content"));
               }
-            })
-            .map([](std::string content) -> Json::Value {
-              Json::Value response_json;
-              response_json["content"] = content;
-              response_json["success"] = true;
-              return response_json;
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(
@@ -594,22 +678,26 @@ private:
               auto zmq_result = sendRequestToVectorFS(request_msg);
 
               if (zmq_result.value("success", false)) {
-                if (zmq_result.value("success", false)) {
-                  auto data = zmq_result["data"];
-                  return core::Result<nlohmann::json, std::string>::Ok(
-                      nlohmann::json(data));
-                }
+                auto data = zmq_result["data"];
+
+                Json::Value data_json = convertToJsonValue(data);
+                return core::Result<Json::Value, std::string>::Ok(data_json);
               } else {
-                return core::Result<nlohmann::json, std::string>::Error(
+                return core::Result<Json::Value, std::string>::Error(
                     zmq_result.value("error",
                                      "Failed to perform semantic search"));
               }
             })
-            .map([this](nlohmann::json data) -> Json::Value {
+            .map([](Json::Value data) -> Json::Value {
+              std::string query = data.get("query", "").asString();
+              std::string container_id =
+                  data.get("container_id", "").asString();
+              Json::Value results = data["results"];
+              int count = data.get("count", 0).asInt();
+
               return utils::create_success_response(
-                  {"query", "results", "count"}, data.value("query", ""),
-                  convertToJsonValue(data["results"]),
-                  static_cast<int>(data.value("count", 0)));
+                  {"query", "container_id", "results", "count"}, query,
+                  container_id, results, count);
             });
 
     response.headers().add<Pistache::Http::Header::ContentType>(

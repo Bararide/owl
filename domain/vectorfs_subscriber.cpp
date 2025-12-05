@@ -33,39 +33,169 @@ void VectorFS::process_messages() {
         std::string message_str(static_cast<char *>(message.data()),
                                 message.size());
 
+        auto json_msg = nlohmann::json::parse(message_str);
+
         try {
-          auto json_msg = nlohmann::json::parse(message_str);
           std::string message_type = json_msg.value("type", "");
           std::string request_id = json_msg.value("request_id", "");
 
           spdlog::info("VectorFS received message: {}", message_type);
+          spdlog::debug("Request ID: {}", request_id);
+          spdlog::debug("Message: {}", json_msg.dump());
+
+          nlohmann::json response;
 
           if (message_type == "container_create") {
-            handleContainerCreate(json_msg);
-          } else if (message_type == "file_create") {
-            handleFileCreate(json_msg);
-          } else if (message_type == "file_delete") {
-            handleFileDelete(json_msg);
-          } else if (message_type == "container_delete") {
-            handleContainerDelete(json_msg);
-          } else if (message_type == "container_stop") {
-            handleContainerStop(json_msg);
-          } else if (message_type == "get_container_metrics") {
-            auto result = handle_get_container_metrics(json_msg);
-            send_response(request_id, true, result);
+            bool success = handleContainerCreate(json_msg);
+            response = {{"request_id", request_id},
+                        {"success", success},
+                        {"data",
+                         {{"container_id", json_msg["container_id"]},
+                          {"status", success ? "created" : "failed"}}}};
+
+            if (!success) {
+              response["error"] = "Failed to create container";
+            }
+
           } else if (message_type == "get_container_files") {
-            auto result = handle_get_container_files(json_msg);
-            send_response(request_id, true, result);
+            try {
+              auto data = handle_get_container_files(json_msg);
+              response = {{"request_id", request_id},
+                          {"success", true},
+                          {"data", data}};
+            } catch (const std::exception &e) {
+              response = {{"request_id", request_id},
+                          {"success", false},
+                          {"error", e.what()}};
+            }
+
+          } else if (message_type == "container_delete") {
+            bool success = handleContainerDelete(json_msg);
+            response = {{"request_id", request_id},
+                        {"success", success},
+                        {"data",
+                         {{"container_id", json_msg["container_id"]},
+                          {"status", success ? "deleted" : "failed"}}}};
+
+            if (!success) {
+              response["error"] = "Failed to delete container";
+            }
+
+          } else if (message_type == "file_create" || message_type == "create_file") {
+            // Поддержка обоих вариантов названий
+            bool success = handleFileCreate(json_msg);
+            response = {{"request_id", request_id},
+                        {"success", success},
+                        {"data",
+                         {{"path", json_msg["path"]},
+                          {"container_id", json_msg.value("container_id", "")},
+                          {"status", success ? "created" : "failed"}}}};
+
+            if (!success) {
+              response["error"] = "Failed to create file";
+            }
+
+          } else if (message_type == "file_delete" || message_type == "delete_file") {
+            bool success = handleFileDelete(json_msg);
+            response = {{"request_id", request_id},
+                        {"success", success},
+                        {"data",
+                         {{"path", json_msg["path"]},
+                          {"container_id", json_msg["container_id"]},
+                          {"status", success ? "deleted" : "failed"}}}};
+
+            if (!success) {
+              response["error"] = "Failed to delete file";
+            }
+
+          } else if (message_type == "container_stop") {
+            bool success = handleContainerStop(json_msg);
+            response = {{"request_id", request_id},
+                        {"success", success},
+                        {"data",
+                         {{"container_id", json_msg["container_id"]},
+                          {"status", success ? "stopped" : "failed"}}}};
+
+            if (!success) {
+              response["error"] = "Failed to stop container";
+            }
+
           } else if (message_type == "semantic_search_in_container") {
-            auto result = handle_semantic_search_in_container(json_msg);
-            send_response(request_id, true, result);
+            try {
+              auto data = handle_semantic_search_in_container(json_msg);
+              response = {{"request_id", request_id},
+                          {"success", true},
+                          {"data", data}};
+            } catch (const std::exception &e) {
+              response = {{"request_id", request_id},
+                          {"success", false},
+                          {"error", e.what()}};
+            }
+
+          } else if (message_type == "get_container_metrics") {
+            try {
+              auto data = handle_get_container_metrics(json_msg);
+              response = {{"request_id", request_id},
+                          {"success", true},
+                          {"data", data}};
+            } catch (const std::exception &e) {
+              response = {{"request_id", request_id},
+                          {"success", false},
+                          {"error", e.what()}};
+            }
+
+          } else if (message_type == "get_file_content") {
+            try {
+              auto data = handle_get_file_content(json_msg);
+              response = {{"request_id", request_id},
+                          {"success", true},
+                          {"data", data}};
+            } catch (const std::exception &e) {
+              response = {{"request_id", request_id},
+                          {"success", false},
+                          {"error", e.what()}};
+            }
+
+          } else if (message_type == "semantic_search") {
+            try {
+              auto data = handle_semantic_search(json_msg);
+              response = {{"request_id", request_id},
+                          {"success", true},
+                          {"data", data}};
+            } catch (const std::exception &e) {
+              response = {{"request_id", request_id},
+                          {"success", false},
+                          {"error", e.what()}};
+            }
+
+          } else if (message_type == "rebuild_index") {
+            try {
+              auto data = handle_rebuild_index(json_msg);
+              response = {{"request_id", request_id},
+                          {"success", true},
+                          {"data", data}};
+            } catch (const std::exception &e) {
+              response = {{"request_id", request_id},
+                          {"success", false},
+                          {"error", e.what()}};
+            }
+
           } else {
-            spdlog::warn("Unknown message type: {}", message_type);
-            send_error(request_id, "Unknown message type: " + message_type);
+            response = {{"request_id", request_id},
+                        {"success", false},
+                        {"error", "Unknown message type: " + message_type}};
           }
+
+          spdlog::debug("Sending response: {}", response.dump());
+          send_response(request_id, response.value("success", false),
+                        response["data"]);
 
         } catch (const nlohmann::json::exception &e) {
           spdlog::error("JSON parse error: {}", e.what());
+          if (json_msg.contains("request_id")) {
+            send_error(json_msg["request_id"],
+                       std::string("JSON parsing error: ") + e.what());
+          }
         }
       }
 
@@ -83,24 +213,40 @@ void VectorFS::process_messages() {
 
 void VectorFS::send_response(const std::string &request_id, bool success,
                              const nlohmann::json &data) {
-  if (!zmq_publisher_)
+  if (!zmq_publisher_) {
+    spdlog::error("ZeroMQ publisher not initialized");
     return;
+  }
 
   try {
     nlohmann::json response = {{"request_id", request_id},
                                {"success", success},
                                {"timestamp", std::time(nullptr)}};
 
-    if (success && !data.empty()) {
+    if (success) {
       response["data"] = data;
+    } else {
+      if (data.contains("error")) {
+        response["error"] = data["error"];
+      } else {
+        response["error"] = "Unknown error";
+      }
     }
 
     std::string response_str = response.dump();
     zmq::message_t msg(response_str.size());
     memcpy(msg.data(), response_str.data(), response_str.size());
 
-    zmq_publisher_->send(msg, zmq::send_flags::dontwait);
-    spdlog::debug("Sent response for request: {}", request_id);
+    spdlog::debug("Publishing response ({} bytes): {}", response_str.size(),
+                  response_str);
+
+    auto result = zmq_publisher_->send(msg, zmq::send_flags::dontwait);
+
+    if (result) {
+      spdlog::debug("Response sent successfully");
+    } else {
+      spdlog::error("Failed to send response");
+    }
 
   } catch (const std::exception &e) {
     spdlog::error("Error sending response: {}", e.what());
@@ -125,16 +271,16 @@ VectorFS::handle_get_container_files(const nlohmann::json &message) {
 
     spdlog::info("Getting files for container: {}", container_id);
 
-    auto container = get_unified_container(container_id);
+    auto container = state_.getContainerManager().get_container(container_id);
     if (!container) {
       throw std::runtime_error("Container not found: " + container_id);
     }
 
-    if (container->getOwner() != user_id) {
+    if (container->get_owner() != user_id) {
       throw std::runtime_error("Access denied for user: " + user_id);
     }
 
-    auto files = container->listFiles("/");
+    auto files = container->list_files("/");
     nlohmann::json files_array = nlohmann::json::array();
 
     for (const auto &file_name : files) {
@@ -146,12 +292,12 @@ VectorFS::handle_get_container_files(const nlohmann::json &message) {
       nlohmann::json file_info = {
           {"name", file_name},
           {"path", file_path},
-          {"exists", container->fileExists(file_path)},
-          {"is_directory", container->isDirectory(file_path)},
-          {"category", container->classifyFile(file_path)}};
+          {"exists", container->file_exists(file_path)},
+          {"is_directory", container->is_directory(file_path)},
+          {"category", container->classify_file(file_path)}};
 
       try {
-        std::string content = container->getFileContent(file_path);
+        std::string content = container->get_file_content(file_path);
         file_info["content"] = content;
         file_info["size"] = content.size();
       } catch (...) {
@@ -162,7 +308,14 @@ VectorFS::handle_get_container_files(const nlohmann::json &message) {
       files_array.push_back(file_info);
     }
 
-    return {{"files", files_array}, {"count", files_array.size()}};
+    nlohmann::json result = {{"files", files_array},
+                             {"count", files_array.size()}};
+
+    spdlog::info("Returning {} files for container {}", files_array.size(),
+                 container_id);
+    spdlog::debug("Result: {}", result.dump());
+
+    return result;
 
   } catch (const std::exception &e) {
     spdlog::error("Error getting container files: {}", e.what());
@@ -180,16 +333,16 @@ VectorFS::handle_semantic_search_in_container(const nlohmann::json &message) {
 
     spdlog::info("Semantic search in container {}: '{}'", container_id, query);
 
-    auto container = get_unified_container(container_id);
+    auto container = state_.getContainerManager().get_container(container_id);
     if (!container) {
       throw std::runtime_error("Container not found: " + container_id);
     }
 
-    if (container->getOwner() != user_id) {
+    if (container->get_owner() != user_id) {
       throw std::runtime_error("Access denied for user: " + user_id);
     }
 
-    auto results = container->semanticSearch(query, limit);
+    auto results = container->semantic_search(query, limit);
     nlohmann::json results_array = nlohmann::json::array();
 
     for (const auto &[file_path, score] : results) {
@@ -486,79 +639,8 @@ bool VectorFS::load_container_adapter(const std::string &container_id,
   }
 }
 
-// void VectorFS::process_messages() {
-//   while (running_) {
-//     try {
-//       zmq::message_t message;
-//       auto result = zmq_subscriber_->recv(message);
-
-//       if (result && message.size() > 0) {
-//         std::string message_str(static_cast<char *>(message.data()),
-//                                 message.size());
-
-//         try {
-//           auto json_msg = nlohmann::json::parse(message_str);
-//           std::string message_type = json_msg.value("type", "");
-
-//           spdlog::info("Received ZeroMQ message type: {}", message_type);
-
-//           nlohmann::json response;
-
-//           if (message_type == "get_container_metrics") {
-//             response = handle_get_container_metrics(json_msg);
-//           } else if (message_type == "container_create") {
-//             handleContainerCreate(json_msg);
-//             response["success"] = true;
-//           } else if (message_type == "file_create") {
-//             bool success = handleFileCreate(json_msg);
-//             response["success"] = success;
-//           } else if (message_type == "file_delete") {
-//             bool success = handleFileDelete(json_msg);
-//             response["success"] = success;
-//           } else if (message_type == "container_stop") {
-//             bool success = handleContainerStop(json_msg);
-//             response["success"] = success;
-//           } else if (message_type == "container_delete") {
-//             bool success = handleContainerDelete(json_msg);
-//             response["success"] = success;
-//           } else {
-//             spdlog::warn("Unknown message type: {}", message_type);
-//             response["success"] = false;
-//             response["error"] = "Unknown message type";
-//           }
-
-//           std::string response_str = response.dump();
-//           zmq::message_t reply(response_str.size());
-//           memcpy(reply.data(), response_str.data(), response_str.size());
-//           zmq_subscriber_->send(reply, zmq::send_flags::none);
-
-//         } catch (const nlohmann::json::exception &e) {
-//           spdlog::error("Failed to parse JSON message: {}", e.what());
-
-//           nlohmann::json error_response;
-//           error_response["success"] = false;
-//           error_response["error"] =
-//               std::string("JSON parsing error: ") + e.what();
-
-//           std::string error_str = error_response.dump();
-//           zmq::message_t reply(error_str.size());
-//           memcpy(reply.data(), error_str.data(), error_str.size());
-//           zmq_subscriber_->send(reply, zmq::send_flags::none);
-//         }
-//       }
-//     } catch (const zmq::error_t &e) {
-//       spdlog::error("ZeroMQ error: {}", e.what());
-//       std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//     } catch (const std::exception &e) {
-//       spdlog::error("Exception in ZeroMQ processing: {}", e.what());
-//       std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//     }
-//   }
-// }
-
 nlohmann::json
 VectorFS::handle_get_container_metrics(const nlohmann::json &message) {
-  nlohmann::json response;
   try {
     std::string container_id = message["container_id"];
     std::string user_id = message["user_id"];
@@ -567,32 +649,106 @@ VectorFS::handle_get_container_metrics(const nlohmann::json &message) {
 
     auto container = state_.getContainerManager().get_container(container_id);
     if (!container) {
-      response["success"] = false;
-      response["error"] = "Container not found: " + container_id;
-      return response;
+      throw std::runtime_error("Container not found: " + container_id);
     }
 
-    if (container->getOwner() != user_id) {
-      response["success"] = false;
-      response["error"] = "Access denied: User " + user_id +
-                          " doesn't have access to container " + container_id;
-      return response;
+    if (container->get_owner() != user_id) {
+      throw std::runtime_error("Access denied for user: " + user_id);
     }
 
     uint16_t memory_limit = 100;
     uint16_t cpu_limit = 100;
 
-    response["success"] = true;
-    response["memory_limit"] = memory_limit;
-    response["cpu_limit"] = cpu_limit;
+    return {
+        {"memory_limit", memory_limit},
+        {"cpu_limit", cpu_limit}
+    };
 
   } catch (const std::exception &e) {
     spdlog::error("Error getting container metrics: {}", e.what());
-    response["success"] = false;
-    response["error"] = std::string("Error: ") + e.what();
+    throw;
   }
+}
 
-  return response;
+nlohmann::json
+VectorFS::handle_get_file_content(const nlohmann::json &message) {
+  try {
+    std::string file_id = message["file_id"];
+    std::string container_id = message["container_id"];
+
+    spdlog::info("Getting file content: {} from container: {}", file_id, container_id);
+
+    auto container = state_.getContainerManager().get_container(container_id);
+    if (!container) {
+      throw std::runtime_error("Container not found: " + container_id);
+    }
+
+    if (!container->file_exists(file_id)) {
+      throw std::runtime_error("File not found: " + file_id);
+    }
+
+    std::string content = container->get_file_content(file_id);
+
+    return {
+        {"file_id", file_id},
+        {"container_id", container_id},
+        {"content", content},
+        {"size", content.size()}
+    };
+
+  } catch (const std::exception &e) {
+    spdlog::error("Error getting file content: {}", e.what());
+    throw;
+  }
+}
+
+nlohmann::json
+VectorFS::handle_semantic_search(const nlohmann::json &message) {
+  try {
+    std::string query = message["query"];
+    int limit = message.value("limit", 10);
+
+    spdlog::info("Semantic search: '{}'", query);
+
+    auto results = state_.getSearch().semanticSearchImpl(query, limit);
+    nlohmann::json results_array = nlohmann::json::array();
+
+    for (const auto &[file_path, score] : results) {
+      nlohmann::json result_item = {
+          {"path", file_path},
+          {"score", score}
+      };
+      results_array.push_back(result_item);
+    }
+
+    return {
+        {"query", query},
+        {"results", results_array},
+        {"count", results_array.size()}
+    };
+
+  } catch (const std::exception &e) {
+    spdlog::error("Error in semantic search: {}", e.what());
+    throw;
+  }
+}
+
+nlohmann::json
+VectorFS::handle_rebuild_index(const nlohmann::json &message) {
+  try {
+    spdlog::info("Rebuilding search index...");
+
+    state_.getSearch().rebuildIndex();
+
+    return {
+        {"message", "Index rebuilt successfully"},
+        {"timestamp", std::time(nullptr)}
+    };
+
+  } catch (const std::exception &e) {
+    spdlog::error("Error rebuilding index: {}", e.what());
+    throw;
+  }
 }
 
 bool VectorFS::handleContainerCreate(const nlohmann::json &message) {
@@ -601,7 +757,7 @@ bool VectorFS::handleContainerCreate(const nlohmann::json &message) {
     spdlog::info("Container ID: {}",
                  message["container_id"].get<std::string>());
 
-    if (createContainerFromMessage(message)) {
+    if (create_container_from_message(message)) {
       spdlog::info("=== FUSE: Container created successfully ===");
 
       spdlog::info("Total containers in FUSE: {}", containers_.size());
@@ -625,7 +781,7 @@ bool VectorFS::handleFileCreate(const nlohmann::json &message) {
   try {
     spdlog::info("Processing file creation request");
 
-    if (createFileFromMessage(message)) {
+    if (create_file_from_message(message)) {
       spdlog::info("File created successfully from ZeroMQ message");
       return true;
     } else {
@@ -639,11 +795,78 @@ bool VectorFS::handleFileCreate(const nlohmann::json &message) {
   }
 }
 
+bool VectorFS::create_file_from_message(const nlohmann::json &message) {
+  try {
+    std::string path = message["path"];
+    std::string content = message["content"];
+    std::string user_id = message["user_id"];
+    std::string container_id = message["container_id"];
+
+    spdlog::info("Creating file: {} in container: {}", path, container_id);
+
+    if (!container_id.empty()) {
+      auto container = state_.getContainerManager().get_container(container_id);
+      if (!container) {
+        spdlog::error("Container not found in main storage: {}", container_id);
+        return false;
+      }
+
+      if (container->get_owner() != user_id) {
+        spdlog::error("User {} does not have access to container {}", user_id,
+                      container_id);
+        return false;
+      }
+
+      auto chunks = state_.getSemanticChunker().chunk_text(content);
+
+      int i = 0;
+      for (const auto &chunk : chunks) {
+        auto result =
+            container->add_file(path + std::to_string(i++), chunk.text);
+        if (!result) {
+          spdlog::error("Failed to create file in container");
+          return false;
+        }
+      }
+
+      spdlog::info("File {} successfully created in container {}", path,
+                   container_id);
+      return true;
+    } else {
+      time_t now = time(nullptr);
+      fileinfo::FileInfo file_info;
+      file_info.mode = S_IFREG | 0644;
+      file_info.size = content.size();
+      file_info.content = content;
+      file_info.uid = getuid();
+      file_info.gid = getgid();
+      file_info.access_time = now;
+      file_info.modification_time = now;
+      file_info.create_time = now;
+
+      virtual_files[path] = file_info;
+
+      auto add_result = state_.getSearch().addFileImpl(path, content);
+      if (!add_result.is_ok()) {
+        spdlog::warn("Failed to add file to search index: {} - {}", path,
+                     add_result.error().what());
+      }
+
+      spdlog::info("File {} successfully created in virtual filesystem", path);
+      return true;
+    }
+
+  } catch (const std::exception &e) {
+    spdlog::error("Exception in create_file_from_message: {}", e.what());
+    return false;
+  }
+}
+
 bool VectorFS::handleFileDelete(const nlohmann::json &message) {
   try {
     spdlog::info("Processing file deletion request");
 
-    if (deleteFileFromMessage(message)) {
+    if (delete_file_from_message(message)) {
       spdlog::info("File deleted successfully from ZeroMQ message");
       return true;
     } else {
@@ -657,11 +880,58 @@ bool VectorFS::handleFileDelete(const nlohmann::json &message) {
   }
 }
 
+bool VectorFS::delete_file_from_message(const nlohmann::json &message) {
+  try {
+    std::string path = message["path"];
+    std::string user_id = message["user_id"];
+    std::string container_id = message["container_id"];
+
+    spdlog::info("Deleting file: {} from container: {}", path, container_id);
+
+    if (container_id.empty()) {
+      spdlog::error("Container ID is required for file deletion");
+      return false;
+    }
+
+    auto container = state_.getContainerManager().get_container(container_id);
+    if (!container) {
+      spdlog::error("Container not found in main storage: {}", container_id);
+      return false;
+    }
+
+    if (container->get_owner() != user_id) {
+      spdlog::error("User {} does not have access to container {}", user_id,
+                    container_id);
+      return false;
+    }
+
+    if (!container->file_exists(path)) {
+      spdlog::warn("File not found in container: {}", path);
+      return false;
+    }
+
+    bool deleted = container->remove_file(path);
+    if (deleted) {
+      spdlog::info("File {} successfully deleted from container {}", path,
+                   container_id);
+      return true;
+    } else {
+      spdlog::error("Failed to delete file {} from container {}", path,
+                    container_id);
+      return false;
+    }
+
+  } catch (const std::exception &e) {
+    spdlog::error("Exception in delete_file_from_message: {}", e.what());
+    return false;
+  }
+}
+
 bool VectorFS::handleContainerStop(const nlohmann::json &message) {
   try {
     spdlog::info("Processing container stop request");
 
-    if (stopContainerFromMessage(message)) {
+    if (stop_container_from_message(message)) {
       spdlog::info("Container stopped successfully from ZeroMQ message");
       return true;
     } else {
@@ -675,6 +945,41 @@ bool VectorFS::handleContainerStop(const nlohmann::json &message) {
   }
 }
 
+bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
+  try {
+    std::string container_id = message["container_id"];
+
+    spdlog::info("Stopping container: {}", container_id);
+
+    auto container = state_.getContainerManager().get_container(container_id);
+    if (!container) {
+      spdlog::warn("Container not found in main storage: {}", container_id);
+      return false;
+    }
+
+    if (!state_.getContainerManager().unregister_container(container_id)) {
+      spdlog::warn("Failed to unregister container from main storage: {}",
+                   container_id);
+    }
+
+    auto it = containers_.find(container_id);
+    if (it != containers_.end()) {
+      it->second.status = "stopped";
+      it->second.available = false;
+    }
+
+    container_adapters_.erase(container_id);
+
+    spdlog::info("Container {} stopped and unregistered successfully",
+                 container_id);
+    return true;
+
+  } catch (const std::exception &e) {
+    spdlog::error("Exception in stop_container_from_message: {}", e.what());
+    return false;
+  }
+}
+
 bool VectorFS::handleContainerDelete(const nlohmann::json &message) {
   try {
     spdlog::info("=== FUSE: Processing container deletion request ===");
@@ -682,7 +987,7 @@ bool VectorFS::handleContainerDelete(const nlohmann::json &message) {
     std::string container_id = message["container_id"];
     spdlog::info("Container ID to delete: {}", container_id);
 
-    if (deleteContainerFromMessage(message)) {
+    if (delete_container_from_message(message)) {
       spdlog::info("=== FUSE: Container deleted successfully ===");
 
       spdlog::info("Remaining containers in FUSE: {}", containers_.size());
@@ -702,7 +1007,7 @@ bool VectorFS::handleContainerDelete(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::createContainerFromMessage(const nlohmann::json &message) {
+bool VectorFS::create_container_from_message(const nlohmann::json &message) {
   try {
     std::string container_id = message["container_id"];
     std::string user_id = message["user_id"];
@@ -838,14 +1143,14 @@ bool VectorFS::createContainerFromMessage(const nlohmann::json &message) {
       if (existing) {
         spdlog::error(
             "=== FUSE: Container already exists in manager with owner: {} ===",
-            existing->getOwner());
+            existing->get_owner());
       }
 
       auto all_containers = state_.getContainerManager().get_all_containers();
       spdlog::info("=== FUSE: Current containers in manager: {} ===",
                    all_containers.size());
       for (const auto &cont : all_containers) {
-        spdlog::info("  - {} (owner: {})", cont->getId(), cont->getOwner());
+        spdlog::info("  - {} (owner: {})", cont->get_id(), cont->get_owner());
       }
 
       return false;
@@ -929,121 +1234,7 @@ bool VectorFS::createContainerFromMessage(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::createFileFromMessage(const nlohmann::json &message) {
-  try {
-    std::string path = message["path"];
-    std::string content = message["content"];
-    std::string user_id = message["user_id"];
-    std::string container_id = message["container_id"];
-
-    spdlog::info("Creating file: {} in container: {}", path, container_id);
-
-    if (!container_id.empty()) {
-      auto container = state_.getContainerManager().get_container(container_id);
-      if (!container) {
-        spdlog::error("Container not found in main storage: {}", container_id);
-        return false;
-      }
-
-      if (container->getOwner() != user_id) {
-        spdlog::error("User {} does not have access to container {}", user_id,
-                      container_id);
-        return false;
-      }
-
-      auto chunks = state_.getSemanticChunker().chunk_text(content);
-
-      int i = 0;
-      for (const auto &chunk : chunks) {
-        auto result =
-            container->addFile(path + std::to_string(i++), chunk.text);
-        if (!result) {
-          spdlog::error("Failed to create file in container");
-          return false;
-        }
-      }
-
-      spdlog::info("File {} successfully created in container {}", path,
-                   container_id);
-      return true;
-    } else {
-      time_t now = time(nullptr);
-      fileinfo::FileInfo file_info;
-      file_info.mode = S_IFREG | 0644;
-      file_info.size = content.size();
-      file_info.content = content;
-      file_info.uid = getuid();
-      file_info.gid = getgid();
-      file_info.access_time = now;
-      file_info.modification_time = now;
-      file_info.create_time = now;
-
-      virtual_files[path] = file_info;
-
-      auto add_result = state_.getSearch().addFileImpl(path, content);
-      if (!add_result.is_ok()) {
-        spdlog::warn("Failed to add file to search index: {} - {}", path,
-                     add_result.error().what());
-      }
-
-      spdlog::info("File {} successfully created in virtual filesystem", path);
-      return true;
-    }
-
-  } catch (const std::exception &e) {
-    spdlog::error("Exception in createFileFromMessage: {}", e.what());
-    return false;
-  }
-}
-
-bool VectorFS::deleteFileFromMessage(const nlohmann::json &message) {
-  try {
-    std::string path = message["path"];
-    std::string user_id = message["user_id"];
-    std::string container_id = message["container_id"];
-
-    spdlog::info("Deleting file: {} from container: {}", path, container_id);
-
-    if (container_id.empty()) {
-      spdlog::error("Container ID is required for file deletion");
-      return false;
-    }
-
-    auto container = state_.getContainerManager().get_container(container_id);
-    if (!container) {
-      spdlog::error("Container not found in main storage: {}", container_id);
-      return false;
-    }
-
-    if (container->getOwner() != user_id) {
-      spdlog::error("User {} does not have access to container {}", user_id,
-                    container_id);
-      return false;
-    }
-
-    if (!container->fileExists(path)) {
-      spdlog::warn("File not found in container: {}", path);
-      return false;
-    }
-
-    bool deleted = container->removeFile(path);
-    if (deleted) {
-      spdlog::info("File {} successfully deleted from container {}", path,
-                   container_id);
-      return true;
-    } else {
-      spdlog::error("Failed to delete file {} from container {}", path,
-                    container_id);
-      return false;
-    }
-
-  } catch (const std::exception &e) {
-    spdlog::error("Exception in deleteFileFromMessage: {}", e.what());
-    return false;
-  }
-}
-
-bool VectorFS::deleteContainerFromMessage(const nlohmann::json &message) {
+bool VectorFS::delete_container_from_message(const nlohmann::json &message) {
   try {
     std::string container_id = message["container_id"];
 
@@ -1124,42 +1315,7 @@ bool VectorFS::deleteContainerFromMessage(const nlohmann::json &message) {
     return true;
 
   } catch (const std::exception &e) {
-    spdlog::error("Exception in deleteContainerFromMessage: {}", e.what());
-    return false;
-  }
-}
-
-bool VectorFS::stopContainerFromMessage(const nlohmann::json &message) {
-  try {
-    std::string container_id = message["container_id"];
-
-    spdlog::info("Stopping container: {}", container_id);
-
-    auto container = state_.getContainerManager().get_container(container_id);
-    if (!container) {
-      spdlog::warn("Container not found in main storage: {}", container_id);
-      return false;
-    }
-
-    if (!state_.getContainerManager().unregister_container(container_id)) {
-      spdlog::warn("Failed to unregister container from main storage: {}",
-                   container_id);
-    }
-
-    auto it = containers_.find(container_id);
-    if (it != containers_.end()) {
-      it->second.status = "stopped";
-      it->second.available = false;
-    }
-
-    container_adapters_.erase(container_id);
-
-    spdlog::info("Container {} stopped and unregistered successfully",
-                 container_id);
-    return true;
-
-  } catch (const std::exception &e) {
-    spdlog::error("Exception in stopContainerFromMessage: {}", e.what());
+    spdlog::error("Exception in delete_container_from_message: {}", e.what());
     return false;
   }
 }

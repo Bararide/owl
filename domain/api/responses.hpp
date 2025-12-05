@@ -137,7 +137,7 @@ addFileToContainer(const std::string &path, const std::string &content,
                                                     container_id);
     }
 
-    if (container->getOwner() != user_id) {
+    if (container->get_owner() != user_id) {
       return core::Result<bool, std::string>::Error(
           "User " + user_id + " does not have access to container " +
           container_id);
@@ -162,11 +162,11 @@ addFileToContainer(const std::string &path, const std::string &content,
 
 template <typename EmbeddedModel>
 inline core::Result<std::string, std::string>
-getFileContent(const std::string &path) {
+get_file_content(const std::string &path) {
   try {
     auto &search =
         owl::instance::VFSInstance<EmbeddedModel>::getInstance().getSearch();
-    const std::string &content = search.getFileContentImpl(path);
+    const std::string &content = search.get_file_contentImpl(path);
     return core::Result<std::string, std::string>::Ok(content);
   } catch (const std::exception &e) {
     return core::Result<std::string, std::string>::Error("File not found");

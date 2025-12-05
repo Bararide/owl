@@ -35,12 +35,13 @@ public:
       memcpy(zmq_msg.data(), message.data(), message.size());
 
       auto result = socket_.send(zmq_msg, zmq::send_flags::dontwait);
+      
       if (result) {
-        spdlog::debug("Sent message to ZeroMQ server: {} bytes",
+        spdlog::debug("Published message to ZeroMQ server: {} bytes",
                       message.size());
         return true;
       } else {
-        spdlog::warn("Failed to send message to ZeroMQ server");
+        spdlog::warn("Failed to publish message to ZeroMQ server");
         return false;
       }
     } catch (const zmq::error_t &e) {
@@ -147,17 +148,16 @@ public:
 private:
   void connect() {
     try {
-      socket_ = zmq::socket_t(context_, ZMQ_REQ);
+      socket_ = zmq::socket_t(context_, ZMQ_PUB);
       socket_.connect(address_);
 
-      socket_.set(zmq::sockopt::rcvtimeo, 10000);
-
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      
       connected_ = true;
-
-      spdlog::info("Connected to ZeroMQ server at {}", address_);
+      spdlog::info("Connected to ZeroMQ publisher at {}", address_);
+      
     } catch (const zmq::error_t &e) {
-      spdlog::error("Failed to connect to ZeroMQ server: {}", e.what());
+      spdlog::error("Failed to connect to ZeroMQ publisher: {}", e.what());
       connected_ = false;
     }
   }
