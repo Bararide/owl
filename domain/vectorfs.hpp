@@ -52,8 +52,8 @@ private:
   void initialize_container_paths();
   std::shared_ptr<KnowledgeContainer<OssecContainerAdapter>>
   get_container_for_path(const std::string &path);
-  std::string generate_container_listing();
-  std::string generate_container_content(const std::string &container_id);
+  std::string generateContainerListing();
+  std::string generateContainerContent(const std::string &container_id);
   std::string handle_container_search(const std::string &container_id,
                                       const std::string &query);
 

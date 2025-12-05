@@ -45,6 +45,7 @@ public:
   std::shared_ptr<ContainerManager> container_manager_;
   std::shared_ptr<EmbedderManager<>> embedder_manager_;
   std::shared_ptr<semantic::SemanticChunker<>> text_chunker_;
+  
 
   chunkees::Search &getSearch() {
     if (!search_)

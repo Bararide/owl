@@ -19,7 +19,7 @@ VectorFS::get_container_for_path(const std::string &path) {
   return nullptr;
 }
 
-std::string VectorFS::generate_container_listing() {
+std::string VectorFS::generateContainerListing() {
   std::stringstream ss;
   ss << "=== Knowledge Containers ===\n\n";
   auto containers = state_.getContainerManager().get_all_containers();
@@ -46,7 +46,7 @@ std::string VectorFS::generate_container_listing() {
 }
 
 std::string
-VectorFS::generate_container_content(const std::string &container_id) {
+VectorFS::generateContainerContent(const std::string &container_id) {
   auto container = state_.getContainerManager().get_container(container_id);
   if (!container) {
     return "Container not found: " + container_id;
@@ -387,7 +387,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi) {
   if (strcmp(path, "/.containers/.all") == 0) {
-    std::string content = generate_container_listing();
+    std::string content = generateContainerListing();
     if (offset >= static_cast<off_t>(content.size())) {
       return 0;
     }
