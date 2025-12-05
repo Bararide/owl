@@ -315,19 +315,19 @@ void VectorFS::process_messages() {
           if (message_type == "get_container_metrics") {
             response = handle_get_container_metrics(json_msg);
           } else if (message_type == "container_create") {
-            handle_container_create(json_msg);
+            handleContainerCreate(json_msg);
             response["success"] = true;
           } else if (message_type == "file_create") {
-            bool success = handle_file_create(json_msg);
+            bool success = handleFileCreate(json_msg);
             response["success"] = success;
           } else if (message_type == "file_delete") {
-            bool success = handle_file_delete(json_msg);
+            bool success = handleFileDelete(json_msg);
             response["success"] = success;
           } else if (message_type == "container_stop") {
-            bool success = handle_container_stop(json_msg);
+            bool success = handleContainerStop(json_msg);
             response["success"] = success;
           } else if (message_type == "container_delete") {
-            bool success = handle_container_delete(json_msg);
+            bool success = handleContainerDelete(json_msg);
             response["success"] = success;
           } else {
             spdlog::warn("Unknown message type: {}", message_type);
@@ -401,13 +401,13 @@ nlohmann::json VectorFS::handle_get_container_metrics(const nlohmann::json &mess
   return response;
 }
 
-bool VectorFS::handle_container_create(const nlohmann::json &message) {
+bool VectorFS::handleContainerCreate(const nlohmann::json &message) {
   try {
     spdlog::info("=== FUSE: Processing container creation request ===");
     spdlog::info("Container ID: {}",
                  message["container_id"].get<std::string>());
 
-    if (create_container_from_message(message)) {
+    if (createContainerFromMessage(message)) {
       spdlog::info("=== FUSE: Container created successfully ===");
 
       spdlog::info("Total containers in FUSE: {}", containers_.size());
@@ -427,11 +427,11 @@ bool VectorFS::handle_container_create(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::handle_file_create(const nlohmann::json &message) {
+bool VectorFS::handleFileCreate(const nlohmann::json &message) {
   try {
     spdlog::info("Processing file creation request");
 
-    if (create_file_from_message(message)) {
+    if (createFileFromMessage(message)) {
       spdlog::info("File created successfully from ZeroMQ message");
       return true;
     } else {
@@ -445,11 +445,11 @@ bool VectorFS::handle_file_create(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::handle_file_delete(const nlohmann::json &message) {
+bool VectorFS::handleFileDelete(const nlohmann::json &message) {
   try {
     spdlog::info("Processing file deletion request");
 
-    if (delete_file_from_message(message)) {
+    if (deleteFileFromMessage(message)) {
       spdlog::info("File deleted successfully from ZeroMQ message");
       return true;
     } else {
@@ -463,11 +463,11 @@ bool VectorFS::handle_file_delete(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::handle_container_stop(const nlohmann::json &message) {
+bool VectorFS::handleContainerStop(const nlohmann::json &message) {
   try {
     spdlog::info("Processing container stop request");
 
-    if (stop_container_from_message(message)) {
+    if (stopContainerFromMessage(message)) {
       spdlog::info("Container stopped successfully from ZeroMQ message");
       return true;
     } else {
@@ -481,14 +481,14 @@ bool VectorFS::handle_container_stop(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::handle_container_delete(const nlohmann::json &message) {
+bool VectorFS::handleContainerDelete(const nlohmann::json &message) {
   try {
     spdlog::info("=== FUSE: Processing container deletion request ===");
 
     std::string container_id = message["container_id"];
     spdlog::info("Container ID to delete: {}", container_id);
 
-    if (delete_container_from_message(message)) {
+    if (deleteContainerFromMessage(message)) {
       spdlog::info("=== FUSE: Container deleted successfully ===");
 
       spdlog::info("Remaining containers in FUSE: {}", containers_.size());
@@ -508,7 +508,7 @@ bool VectorFS::handle_container_delete(const nlohmann::json &message) {
   }
 }
 
-bool VectorFS::create_container_from_message(const nlohmann::json &message) {
+bool VectorFS::createContainerFromMessage(const nlohmann::json &message) {
   try {
     std::string container_id = message["container_id"];
     std::string user_id = message["user_id"];
@@ -730,12 +730,12 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     return true;
 
   } catch (const std::exception &e) {
-    spdlog::error("Exception in create_container_from_message: {}", e.what());
+    spdlog::error("Exception in createContainerFromMessage: {}", e.what());
     return false;
   }
 }
 
-bool VectorFS::create_file_from_message(const nlohmann::json &message) {
+bool VectorFS::createFileFromMessage(const nlohmann::json &message) {
   try {
     std::string path = message["path"];
     std::string content = message["content"];
@@ -797,12 +797,12 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
     }
 
   } catch (const std::exception &e) {
-    spdlog::error("Exception in create_file_from_message: {}", e.what());
+    spdlog::error("Exception in createFileFromMessage: {}", e.what());
     return false;
   }
 }
 
-bool VectorFS::delete_file_from_message(const nlohmann::json &message) {
+bool VectorFS::deleteFileFromMessage(const nlohmann::json &message) {
   try {
     std::string path = message["path"];
     std::string user_id = message["user_id"];
@@ -844,12 +844,12 @@ bool VectorFS::delete_file_from_message(const nlohmann::json &message) {
     }
 
   } catch (const std::exception &e) {
-    spdlog::error("Exception in delete_file_from_message: {}", e.what());
+    spdlog::error("Exception in deleteFileFromMessage: {}", e.what());
     return false;
   }
 }
 
-bool VectorFS::delete_container_from_message(const nlohmann::json &message) {
+bool VectorFS::deleteContainerFromMessage(const nlohmann::json &message) {
   try {
     std::string container_id = message["container_id"];
 
@@ -930,12 +930,12 @@ bool VectorFS::delete_container_from_message(const nlohmann::json &message) {
     return true;
 
   } catch (const std::exception &e) {
-    spdlog::error("Exception in delete_container_from_message: {}", e.what());
+    spdlog::error("Exception in deleteContainerFromMessage: {}", e.what());
     return false;
   }
 }
 
-bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
+bool VectorFS::stopContainerFromMessage(const nlohmann::json &message) {
   try {
     std::string container_id = message["container_id"];
 
@@ -965,7 +965,7 @@ bool VectorFS::stop_container_from_message(const nlohmann::json &message) {
     return true;
 
   } catch (const std::exception &e) {
-    spdlog::error("Exception in stop_container_from_message: {}", e.what());
+    spdlog::error("Exception in stopContainerFromMessage: {}", e.what());
     return false;
   }
 }

@@ -71,18 +71,11 @@ int main(int argc, char *argv[]) {
         "/home/bararide/code/models/crawl-300d-2M-subword/"
         "crawl-300d-2M-subword.bin";
 
-    core::measure::Measure::start();
     owl::instance::VFSInstance<embedded::FastTextEmbedder>::
         initialize(std::move(fasttext_model_path));
-    core::measure::Measure::end();
-    core::measure::Measure::result<std::chrono::milliseconds>(
-        "VectorFS initialized with compression in {} ms");
 
     auto &vectorfs =
         owl::instance::VFSInstance<embedded::FastTextEmbedder>::getInstance();
-
-    spdlog::info("Embedder: {}", vectorfs.get_embedder_info());
-
 
     core::measure::Measure::start();
     vectorfs.test_semantic_search();

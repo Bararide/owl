@@ -72,17 +72,17 @@ private:
                               const std::string &container_path,
                               const nlohmann::json &config);
 
-  bool handle_container_create(const nlohmann::json &message);
-  bool handle_file_create(const nlohmann::json &message);
-  bool handle_file_delete(const nlohmann::json &message);
-  bool handle_container_stop(const nlohmann::json &message);
-  bool handle_container_delete(const nlohmann::json &message);
+  bool handleContainerCreate(const nlohmann::json &message);
+  bool handleFileCreate(const nlohmann::json &message);
+  bool handleFileDelete(const nlohmann::json &message);
+  bool handleContainerStop(const nlohmann::json &message);
+  bool handleContainerDelete(const nlohmann::json &message);
 
-  bool create_container_from_message(const nlohmann::json &message);
-  bool create_file_from_message(const nlohmann::json &message);
-  bool delete_file_from_message(const nlohmann::json &message);
-  bool stop_container_from_message(const nlohmann::json &message);
-  bool delete_container_from_message(const nlohmann::json &message);
+  bool createContainerFromMessage(const nlohmann::json &message);
+  bool createFileFromMessage(const nlohmann::json &message);
+  bool deleteFileFromMessage(const nlohmann::json &message);
+  bool stopContainerFromMessage(const nlohmann::json &message);
+  bool deleteContainerFromMessage(const nlohmann::json &message);
 
 public:
   VectorFS(State &state) : state_{state}, zmq_context_(1) {
@@ -337,10 +337,6 @@ public:
         .listxattr = listxattr_callback,
     };
     return ops;
-  }
-
-  void* get_context_data() {
-    return static_cast<void*>(this);
   }
 };
 
