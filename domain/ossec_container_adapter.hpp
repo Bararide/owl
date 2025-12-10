@@ -125,8 +125,6 @@ public:
         std::ifstream file(full_path);
         std::string content((std::istreambuf_iterator<char>(file)),
                             std::istreambuf_iterator<char>());
-        spdlog::info("✅ Successfully read file, size: {} bytes",
-                     content.size());
         return content;
       } else {
         spdlog::warn("File not found: {}", full_path.string());
@@ -153,8 +151,6 @@ public:
     try {
       bool is_dir = std::filesystem::exists(full_path) &&
                     std::filesystem::is_directory(full_path);
-      spdlog::info("is_directory: virtual='{}', real='{}', is_dir={}",
-                   virtual_path, real_path, is_dir);
       return is_dir;
     } catch (const std::exception &e) {
       spdlog::error("Error checking directory: {}", e.what());
@@ -171,38 +167,26 @@ public:
 
     auto full_path = data_path / normalized_path;
 
-    spdlog::info("📝 ADD_FILE: path='{}', normalized='{}', full='{}'", path,
-                 normalized_path, full_path.string());
-
     try {
       std::filesystem::create_directories(full_path.parent_path());
 
       std::ofstream file(full_path);
       if (!file) {
-        spdlog::error("❌ Failed to open file for writing: {}",
-                      full_path.string());
         return false;
       }
 
       file << content;
       file.close();
 
-      spdlog::info("✅ File written successfully: {}", full_path.string());
-
       std::string search_path = "/" + normalized_path;
-
-      spdlog::info("🔍 Adding file to container search index: {}", search_path);
 
       auto result = search_->addFileImpl(search_path, content);
       if (!result.is_ok()) {
-        spdlog::error("❌ Failed to add file to search index: {} - {}",
+        spdlog::error("Failed to add file to search index: {} - {}",
                       search_path, result.error().what());
         return false;
       }
 
-      spdlog::info("✅ File added to search index: {}", search_path);
-
-      spdlog::info("🔄 Updating semantic relationships...");
       search_->updateSemanticRelationships();
 
       auto rebuild_result = search_->rebuildIndexImpl();
@@ -213,9 +197,6 @@ public:
 
       record_file_access(search_path, "write");
 
-      spdlog::info(
-          "🎉 File {} successfully added to container and search index",
-          search_path);
       return true;
 
     } catch (const std::exception &e) {
@@ -240,7 +221,6 @@ public:
 
         search_->updateSemanticRelationships();
 
-        spdlog::info("File removed successfully: {}", path);
         return true;
       }
     } catch (const std::exception &e) {
@@ -251,8 +231,6 @@ public:
   }
 
   void initialize_search() {
-    spdlog::info("Initializing search for container: {}", get_id());
-
     auto files = list_files("/");
     size_t indexed_count = 0;
 
@@ -279,14 +257,9 @@ public:
       spdlog::warn("Failed to rebuild index after initialization: {}",
                    rebuild_result.error().what());
     }
-
-    spdlog::info("Search initialized for container {} with {}/{} files indexed",
-                 get_id(), indexed_count, files.size());
   }
 
   void initialize_markov_recommend_chain() {
-    spdlog::info("Initializing Markov chain for container: {}", get_id());
-
     auto semantic_graph = search_->getSemanticGraph();
     auto hmm_model = search_->getHiddenModel();
 
@@ -325,10 +298,6 @@ public:
 
     auto hubs = semantic_graph->random_walk_ranking(1000);
 
-    spdlog::info("Markov chain initialized: {} states, {} edges",
-                 hmm_model->get_state_count(),
-                 semantic_graph->get_edge_count());
-
     if (!hubs.empty()) {
       spdlog::info("Top semantic hub: {} (score: {:.3f})", hubs[0].first,
                    hubs[0].second);
@@ -337,8 +306,6 @@ public:
 
   std::vector<std::pair<std::string, float>> semantic_search(const std::string &query,
                                            int limit = 10) override {
-    spdlog::debug("Semantic search in container {}: '{}'", get_id(), query);
-
     record_search_query(query);
 
     auto result = search_->semanticSearchImpl(query, limit);
@@ -361,8 +328,6 @@ public:
 
   std::vector<std::string>
   search_files(const std::string &pattern) const override {
-    spdlog::debug("Pattern search in container {}: '{}'", get_id(), pattern);
-
     std::vector<std::string> results;
     auto data_path = container_->get_container().data_path;
 
@@ -382,15 +347,11 @@ public:
       spdlog::error("File search error: {}", e.what());
     }
 
-    spdlog::debug("Pattern search found {} results", results.size());
     return results;
   }
 
   std::vector<std::pair<std::string, float>> enhanced_semantic_search(const std::string &query,
                                                     int limit) override {
-    spdlog::debug("Enhanced semantic search in container {}: '{}'", get_id(),
-                  query);
-
     record_search_query(query);
 
     auto result = search_->enhancedSemanticSearchImpl(query, limit);
@@ -407,15 +368,11 @@ public:
       record_file_access(file_path, "enhanced_search");
     }
 
-    spdlog::debug("Enhanced semantic search found {} results",
-                  file_paths.size());
     return file_paths;
   }
 
   std::vector<std::string> get_recommendations(const std::string &current_file,
                                                int limit) override {
-    spdlog::debug("Getting recommendations for file: {}", current_file);
-
     record_file_access(current_file, "recommendation_request");
 
     auto result = search_->getRecommendationsImpl(current_file);
@@ -437,7 +394,6 @@ public:
       recommendations.resize(limit);
     }
 
-    spdlog::debug("Found {} recommendations", recommendations.size());
     return recommendations;
   }
 
@@ -500,9 +456,6 @@ public:
   }
 
   bool update_all_embeddings() override {
-    spdlog::info("Updating embeddings for all files in container: {}",
-                 get_id());
-
     auto files = list_files(container_->get_container().data_path.string());
     size_t updated_count = 0;
 
@@ -526,8 +479,6 @@ public:
 
     search_->updateSemanticRelationships();
 
-    spdlog::info("Updated embeddings for {}/{} files", updated_count,
-                 files.size());
     return updated_count > 0;
   }
 

@@ -81,7 +81,8 @@ void VectorFS::process_messages() {
               response["error"] = "Failed to delete container";
             }
 
-          } else if (message_type == "file_create" || message_type == "create_file") {
+          } else if (message_type == "file_create" ||
+                     message_type == "create_file") {
             // Поддержка обоих вариантов названий
             bool success = handleFileCreate(json_msg);
             response = {{"request_id", request_id},
@@ -95,7 +96,8 @@ void VectorFS::process_messages() {
               response["error"] = "Failed to create file";
             }
 
-          } else if (message_type == "file_delete" || message_type == "delete_file") {
+          } else if (message_type == "file_delete" ||
+                     message_type == "delete_file") {
             bool success = handleFileDelete(json_msg);
             response = {{"request_id", request_id},
                         {"success", success},
@@ -659,10 +661,7 @@ VectorFS::handle_get_container_metrics(const nlohmann::json &message) {
     uint16_t memory_limit = 100;
     uint16_t cpu_limit = 100;
 
-    return {
-        {"memory_limit", memory_limit},
-        {"cpu_limit", cpu_limit}
-    };
+    return {{"memory_limit", memory_limit}, {"cpu_limit", cpu_limit}};
 
   } catch (const std::exception &e) {
     spdlog::error("Error getting container metrics: {}", e.what());
@@ -676,7 +675,8 @@ VectorFS::handle_get_file_content(const nlohmann::json &message) {
     std::string file_id = message["file_id"];
     std::string container_id = message["container_id"];
 
-    spdlog::info("Getting file content: {} from container: {}", file_id, container_id);
+    spdlog::info("Getting file content: {} from container: {}", file_id,
+                 container_id);
 
     auto container = state_.getContainerManager().get_container(container_id);
     if (!container) {
@@ -689,12 +689,10 @@ VectorFS::handle_get_file_content(const nlohmann::json &message) {
 
     std::string content = container->get_file_content(file_id);
 
-    return {
-        {"file_id", file_id},
-        {"container_id", container_id},
-        {"content", content},
-        {"size", content.size()}
-    };
+    return {{"file_id", file_id},
+            {"container_id", container_id},
+            {"content", content},
+            {"size", content.size()}};
 
   } catch (const std::exception &e) {
     spdlog::error("Error getting file content: {}", e.what());
@@ -702,8 +700,7 @@ VectorFS::handle_get_file_content(const nlohmann::json &message) {
   }
 }
 
-nlohmann::json
-VectorFS::handle_semantic_search(const nlohmann::json &message) {
+nlohmann::json VectorFS::handle_semantic_search(const nlohmann::json &message) {
   try {
     std::string query = message["query"];
     int limit = message.value("limit", 10);
@@ -714,18 +711,13 @@ VectorFS::handle_semantic_search(const nlohmann::json &message) {
     nlohmann::json results_array = nlohmann::json::array();
 
     for (const auto &[file_path, score] : results) {
-      nlohmann::json result_item = {
-          {"path", file_path},
-          {"score", score}
-      };
+      nlohmann::json result_item = {{"path", file_path}, {"score", score}};
       results_array.push_back(result_item);
     }
 
-    return {
-        {"query", query},
-        {"results", results_array},
-        {"count", results_array.size()}
-    };
+    return {{"query", query},
+            {"results", results_array},
+            {"count", results_array.size()}};
 
   } catch (const std::exception &e) {
     spdlog::error("Error in semantic search: {}", e.what());
@@ -733,17 +725,14 @@ VectorFS::handle_semantic_search(const nlohmann::json &message) {
   }
 }
 
-nlohmann::json
-VectorFS::handle_rebuild_index(const nlohmann::json &message) {
+nlohmann::json VectorFS::handle_rebuild_index(const nlohmann::json &message) {
   try {
     spdlog::info("Rebuilding search index...");
 
     state_.getSearch().rebuildIndex();
 
-    return {
-        {"message", "Index rebuilt successfully"},
-        {"timestamp", std::time(nullptr)}
-    };
+    return {{"message", "Index rebuilt successfully"},
+            {"timestamp", std::time(nullptr)}};
 
   } catch (const std::exception &e) {
     spdlog::error("Error rebuilding index: {}", e.what());
