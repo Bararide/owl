@@ -817,7 +817,7 @@ bool VectorFS::create_file_from_message(const nlohmann::json &message) {
         return false;
       }
 
-      auto chunks = state_.getSemanticChunker().chunk_text(content);
+      auto chunks = state_.getSemanticChunker().chunkText(content);
 
       int i = 0;
       for (const auto &chunk : chunks) {
