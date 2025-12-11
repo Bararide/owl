@@ -44,6 +44,7 @@ add_subdirectory(3dparty/pistache EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/boost EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/sentencepiece EXCLUDE_FROM_ALL)
 add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
+add_subdirectory(3dparty/termox EXCLUDE_FROM_ALL)
 
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
@@ -59,6 +60,7 @@ target_include_directories(owl PRIVATE
     ${FUSE3_INCLUDE_DIRS}     
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
     ${CMAKE_SOURCE_DIR}/3dparty/fastText/src
+    ${CMAKE_SOURCE_DIR}/3dparty/termox/src
     ${JSONCPP_INCLUDE_DIRS}
     ${LZ4_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/lib/cppcore
@@ -71,6 +73,7 @@ target_link_libraries(owl TBB::tbb)
 target_link_libraries(owl ${OpenMP_CXX_FLAGS})
 target_link_libraries(owl faiss)
 target_link_libraries(owl domain)
+target_link_libraries(owl termox)
 target_link_libraries(owl ossec)
 target_link_libraries(owl chunkees)
 target_link_libraries(owl cppcore)
