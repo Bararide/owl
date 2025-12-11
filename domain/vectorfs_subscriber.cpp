@@ -57,6 +57,17 @@ void VectorFS::process_messages() {
               response["error"] = "Failed to create container";
             }
 
+          } else if (message_type == "get_container_files_and_rebuild") {
+            try {
+              auto data = handle_get_container_files_and_rebuild(json_msg);
+              response = {{"request_id", request_id},
+                          {"success", true},
+                          {"data", data}};
+            } catch (const std::exception &e) {
+              response = {{"request_id", request_id},
+                          {"success", false},
+                          {"error", e.what()}};
+            }
           } else if (message_type == "get_container_files") {
             try {
               auto data = handle_get_container_files(json_msg);
@@ -68,7 +79,6 @@ void VectorFS::process_messages() {
                           {"success", false},
                           {"error", e.what()}};
             }
-
           } else if (message_type == "container_delete") {
             bool success = handleContainerDelete(json_msg);
             response = {{"request_id", request_id},
@@ -263,6 +273,68 @@ void VectorFS::send_error(const std::string &request_id,
                                    {"timestamp", std::time(nullptr)}};
 
   send_response(request_id, false, error_response);
+}
+
+nlohmann::json VectorFS::handle_get_container_files_and_rebuild(
+    const nlohmann::json &message) {
+  try {
+    std::string container_id = message["container_id"];
+    std::string user_id = message["user_id"];
+
+    spdlog::info("Getting files for container: {}", container_id);
+
+    auto container = state_.getContainerManager().get_container(container_id);
+    if (!container) {
+      throw std::runtime_error("Container not found: " + container_id);
+    }
+
+    if (container->get_owner() != user_id) {
+      throw std::runtime_error("Access denied for user: " + user_id);
+    }
+
+    container->rebuildIndex();
+
+    auto files = container->list_files("/");
+    nlohmann::json files_array = nlohmann::json::array();
+
+    for (const auto &file_name : files) {
+      std::string file_path = file_name;
+      if (file_path[0] != '/') {
+        file_path = "/" + file_path;
+      }
+
+      nlohmann::json file_info = {
+          {"name", file_name},
+          {"path", file_path},
+          {"exists", container->file_exists(file_path)},
+          {"is_directory", container->is_directory(file_path)},
+          {"category", container->classify_file(file_path)}};
+
+      try {
+        std::string content = container->get_file_content(file_path);
+        file_info["content"] = content;
+        file_info["size"] = content.size();
+      } catch (...) {
+        file_info["content"] = "";
+        file_info["size"] = 0;
+      }
+
+      files_array.push_back(file_info);
+    }
+
+    nlohmann::json result = {{"files", files_array},
+                             {"count", files_array.size()}};
+
+    spdlog::info("Returning {} files for container {}", files_array.size(),
+                 container_id);
+    spdlog::debug("Result: {}", result.dump());
+
+    return result;
+
+  } catch (const std::exception &e) {
+    spdlog::error("Error getting container files: {}", e.what());
+    throw;
+  }
 }
 
 nlohmann::json

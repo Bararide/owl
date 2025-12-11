@@ -233,6 +233,10 @@ private:
                 Routes::bind(&VectorFSApi::handleGetContainerMetrics, this));
     Routes::Get(router, "/container/files",
                 Routes::bind(&VectorFSApi::handleContainerFilesGet, this));
+    Routes::Get(
+        router, "/container/files/refresh",
+        Routes::bind(&VectorFSApi::handleContainerRebuildIndexAndFilesGet,
+                     this));
     Routes::Delete(router, "/containers/delete",
                    Routes::bind(&VectorFSApi::handleContainerDelete, this));
     Routes::Delete(router, "/files/delete",
@@ -314,10 +318,95 @@ private:
     responses::handleJsonResult(result, response);
   }
 
+  void handleContainerRebuildIndexAndFilesGet(
+      const Pistache::Rest::Request &request,
+      Pistache::Http::ResponseWriter response) {
+    auto result =
+        responses::parseJsonBody(request.body())
+            .and_then([](Json::Value json) {
+              spdlog::debug("Parsed request body: {}", json.toStyledString());
+              return validate::Validator::validate<validate::Container>(json);
+            })
+            .and_then([this](validate::Container params) {
+              auto [user_id, container_id] = params;
+              spdlog::info("Getting files for container: {} for user: {}",
+                           container_id, user_id);
+
+              nlohmann::json request_msg = {{"type", "get_container_files_and_rebuild"},
+                                            {"user_id", user_id},
+                                            {"container_id", container_id}};
+
+              auto zmq_result = sendRequestToVectorFS(request_msg);
+              spdlog::debug("ZeroMQ response: {}", zmq_result.dump());
+
+              if (zmq_result.value("success", false)) {
+                if (zmq_result.contains("data")) {
+                  auto data = zmq_result["data"];
+
+                  Json::Value json_result;
+
+                  Json::Value files_array(Json::arrayValue);
+                  if (data.contains("files") && data["files"].is_array()) {
+                    for (const auto &file : data["files"]) {
+                      Json::Value file_obj;
+
+                      if (file.contains("name"))
+                        file_obj["name"] =
+                            file["name"].template get<std::string>();
+                      if (file.contains("path"))
+                        file_obj["path"] =
+                            file["path"].template get<std::string>();
+                      if (file.contains("content"))
+                        file_obj["content"] =
+                            file["content"].template get<std::string>();
+                      if (file.contains("size"))
+                        file_obj["size"] = file["size"].template get<int>();
+                      if (file.contains("exists"))
+                        file_obj["exists"] =
+                            file["exists"].template get<bool>();
+                      if (file.contains("is_directory"))
+                        file_obj["is_directory"] =
+                            file["is_directory"].template get<bool>();
+                      if (file.contains("category"))
+                        file_obj["category"] =
+                            file["category"].template get<std::string>();
+
+                      files_array.append(file_obj);
+                    }
+                  }
+
+                  return core::Result<Json::Value, std::string>::Ok(
+                      files_array);
+
+                } else {
+                  spdlog::error("Response missing 'data' field");
+                  return core::Result<Json::Value, std::string>::Error(
+                      "No data in response");
+                }
+              } else {
+                std::string error = zmq_result.value("error", "Unknown error");
+                spdlog::error("ZeroMQ error: {}", error);
+                return core::Result<Json::Value, std::string>::Error(error);
+              }
+            })
+            .map([this](Json::Value files_array) -> Json::Value {
+              Json::Value data;
+              data["files"] = files_array;
+              data["count"] = static_cast<int>(files_array.size());
+
+              return utils::create_success_response(
+                  {"files", "count"}, files_array,
+                  static_cast<int>(files_array.size()));
+            });
+
+    response.headers().add<Pistache::Http::Header::ContentType>(
+        MIME(Application, Json));
+
+    responses::handleJsonResult(result, response);
+  }
+
   void handleContainerFilesGet(const Pistache::Rest::Request &request,
                                Pistache::Http::ResponseWriter response) {
-    spdlog::info("=== Container Files Get Request ===");
-
     auto result =
         responses::parseJsonBody(request.body())
             .and_then([](Json::Value json) {

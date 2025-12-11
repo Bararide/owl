@@ -75,6 +75,8 @@ private:
   nlohmann::json
   handle_semantic_search_in_container(const nlohmann::json &message);
   nlohmann::json handle_get_container_metrics(const nlohmann::json &message);
+  nlohmann::json
+  handle_get_container_files_and_rebuild(const nlohmann::json &message);
 
   bool handleContainerCreate(const nlohmann::json &message);
   bool handleFileCreate(const nlohmann::json &message);
