@@ -40,6 +40,7 @@ public:
   virtual size_t get_size() const = 0;
   virtual std::string get_status() const = 0;
   virtual std::string get_data_path() const = 0;
+  virtual bool rebuildIndex() = 0;
 
   virtual std::vector<std::pair<std::string, float>>
   enhanced_semantic_search(const std::string &query, int limit = 10) = 0;

@@ -14,6 +14,19 @@ set(ZeroMQ_FOUND ${ZMQ_FOUND})
 set(ZeroMQ_INCLUDE_DIRS ${ZMQ_INCLUDE_DIRS})
 set(ZeroMQ_LIBRARIES ${ZMQ_LIBRARIES})
 
+find_package(OpenMP REQUIRED)
+if(OpenMP_CXX_FOUND)
+    message(STATUS "OpenMP found: ${OpenMP_CXX_VERSION}")
+else()
+    message(FATAL_ERROR "OpenMP is required but not found")
+endif()
+
+option(TBB_TEST "Enable TBB tests" OFF)
+option(TBB_EXAMPLES "Enable TBB examples" OFF)
+option(TBB_STRICT "Enable strict warnings" OFF)
+option(TBB_CPF "Enable preview features of the library" OFF)
+
+add_subdirectory(3dparty/tbb EXCLUDE_FROM_ALL)
 
 set(FAISS_ENABLE_GPU OFF CACHE BOOL "Disable GPU support" FORCE)
 set(FAISS_ENABLE_PYTHON OFF CACHE BOOL "Disable Python bindings" FORCE)
@@ -40,6 +53,8 @@ add_subdirectory(domain)
 
 add_executable(owl src/main.cpp)
 
+target_compile_options(owl PRIVATE ${OpenMP_CXX_FLAGS})
+
 target_include_directories(owl PRIVATE 
     ${FUSE3_INCLUDE_DIRS}     
     ${CMAKE_SOURCE_DIR}/3dparty/sentencepiece/src
@@ -52,6 +67,8 @@ target_include_directories(owl PRIVATE
     ${ZMQ_INCLUDE_DIRS}
 )
 
+target_link_libraries(owl TBB::tbb)
+target_link_libraries(owl ${OpenMP_CXX_FLAGS})
 target_link_libraries(owl faiss)
 target_link_libraries(owl domain)
 target_link_libraries(owl ossec)

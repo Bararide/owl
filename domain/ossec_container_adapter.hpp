@@ -205,6 +205,17 @@ public:
     }
   }
 
+  bool rebuildIndex() override {
+      auto rebuild_result = search_->rebuildIndexImpl();
+      if (!rebuild_result.is_ok()) {
+        spdlog::warn("Failed to rebuild container index: {}",
+                     rebuild_result.error().what());
+        return false;
+      }
+
+      return true;
+  }
+
   bool remove_file(const std::string &path) override {
     auto data_path = container_->get_container().data_path;
     auto full_path = data_path / path;

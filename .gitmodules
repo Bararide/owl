@@ -43,3 +43,6 @@
 [submodule "3dparty/cppenv"]
 	path = 3dparty/cppenv
 	url = https://github.com/Tina-1300/cppenv.git
+[submodule "3dparty/tbb"]
+	path = 3dparty/tbb
+	url = https://github.com/oneapi-src/oneTBB.git
