@@ -779,10 +779,16 @@ nlohmann::json VectorFS::handle_semantic_search(const nlohmann::json &message) {
 
     spdlog::info("Semantic search: '{}'", query);
 
-    auto results = state_.getSearch().semanticSearchImpl(query, limit);
+    auto results = state_.getSearch().hybridSemanticSearch(query, limit);
     nlohmann::json results_array = nlohmann::json::array();
 
-    for (const auto &[file_path, score] : results) {
+    if (!results.is_ok()) {
+      return {{"query", query}, {"results", {}}, {"count", 0}};
+    }
+
+    auto res = results.unwrap();
+
+    for (const auto &[file_path, score] : res) {
       nlohmann::json result_item = {{"path", file_path}, {"score", score}};
       results_array.push_back(result_item);
     }

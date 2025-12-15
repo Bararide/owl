@@ -319,15 +319,22 @@ public:
                                            int limit = 10) override {
     record_search_query(query);
 
-    auto result = search_->semanticSearchImpl(query, limit);
+    auto result = search_->hybridSemanticSearch(query, limit);
 
-    if (result.empty()) {
+    if (!result.is_ok()) {
+      spdlog::debug("No semantic search results for query: '{}'", query);
+      return {};
+    }
+
+    auto res = result.unwrap();
+
+    if (res.empty()) {
       spdlog::debug("No semantic search results for query: '{}'", query);
       return {};
     }
 
     std::vector<std::pair<std::string, float>> file_paths;
-    for (const auto &[file_path, score] : result) {
+    for (const auto &[file_path, score] : res) {
       file_paths.push_back({file_path, score});
 
       record_file_access(file_path, "semantic_search");

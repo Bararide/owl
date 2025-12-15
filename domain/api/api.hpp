@@ -97,7 +97,7 @@ private:
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(
           now - it->second.timestamp);
 
-      if (duration.count() > 30) {
+      if (duration.count() > 100) {
         it->second.promise.set_value(
             {{"success", false}, {"error", "Request timeout"}});
         it = pending_requests_.erase(it);
@@ -155,7 +155,7 @@ private:
 
       spdlog::critical("Message sent, waiting for response...");
 
-      auto status = future.wait_for(std::chrono::seconds(10));
+      auto status = future.wait_for(std::chrono::seconds(100));
 
       if (status == std::future_status::timeout) {
         spdlog::critical("Request timeout");

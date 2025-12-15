@@ -14,7 +14,7 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
   }
 
   auto search_results =
-      state_.getSearch().enhancedSemanticSearchImpl(query, 5);
+      state_.getSearch().enhancedSemanticSearchWithAnchors(query, 5, true);
   auto recommendations = state_.getSearch().getRecommendationsImpl(query);
   auto predicted_next = state_.getSearch().predictNextFilesImpl();
   auto hubs_result = state_.getSearch().getSemanticHubsImpl(3);
@@ -85,13 +85,32 @@ VectorFS::generate_enhanced_search_result(const std::string &query) {
 std::string VectorFS::generate_search_result(const std::string &query) {
   spdlog::info("Processing search query: {}", query);
 
-  auto search_results = state_.getSearch().semanticSearchImpl(query, 5);
+  auto search_results = state_.getSearch().enhancedSemanticSearchWithAnchors(query, 5, true);
 
   std::stringstream ss;
   ss << "=== Semantic Search Results ===\n";
   ss << "Query: " << query << "\n\n";
 
-  if (search_results.empty()) {
+  if (!search_results.is_ok()) {
+    ss << "No results found\n";
+
+    auto indexed_count = state_.getSearch().getIndexedFilesCountImpl();
+    ss << "Indexed files: ";
+    if (indexed_count.is_ok()) {
+      ss << indexed_count.value();
+    } else {
+      ss << "unknown";
+    }
+    ss << "\n";
+
+    if (indexed_count.is_ok() && indexed_count.value() == 0) {
+      ss << "Hint: Create some files with content first!\n";
+    }
+  }
+
+  auto search_res = search_results.unwrap();
+
+  if (search_res.empty()) {
     ss << "No results found\n";
 
     auto indexed_count = state_.getSearch().getIndexedFilesCountImpl();
@@ -107,8 +126,8 @@ std::string VectorFS::generate_search_result(const std::string &query) {
       ss << "Hint: Create some files with content first!\n";
     }
   } else {
-    ss << "Found " << search_results.size() << " results:\n\n";
-    for (const auto &[file_path, score] : search_results) {
+    ss << "Found " << search_res.size() << " results:\n\n";
+    for (const auto &[file_path, score] : search_res) {
       auto it = virtual_files.find(file_path);
       ss << "📄 " << file_path << " (score: " << score << ")\n";
       if (it != virtual_files.end()) {
