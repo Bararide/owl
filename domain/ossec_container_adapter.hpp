@@ -81,6 +81,194 @@ public:
     return files;
   }
 
+  bool set_resource_limit(const std::string &resource_name,
+                          const std::string &value) override {
+    if (!container_) {
+      return false;
+    }
+
+    try {
+      if (resource_name == "memory") {
+        size_t mb = std::stoull(value);
+        size_t bytes = mb * 1024 * 1024;
+
+        container_->get_container().resources.memory_capacity = bytes;
+
+        if (!container_->get_container().cgroup_path.empty()) {
+          ossec::PidResources::set_memory_limit(
+              container_->get_container().cgroup_path, bytes);
+        }
+
+        spdlog::info("Container {} memory limit set to {} MB", get_id(), mb);
+        return true;
+
+      } else if (resource_name == "disk") {
+        size_t mb = std::stoull(value);
+        size_t bytes = mb * 1024 * 1024;
+        container_->get_container().resources.storage_quota = bytes;
+        spdlog::info("Container {} disk quota set to {} MB", get_id(), mb);
+        return true;
+
+      } else if (resource_name == "pids") {
+        size_t max_pids = std::stoull(value);
+        container_->get_container().resources.max_open_files = max_pids;
+
+        if (!container_->get_container().cgroup_path.empty()) {
+          ossec::PidResources::set_pids_limit(
+              container_->get_container().cgroup_path, max_pids);
+        }
+
+        spdlog::info("Container {} max pids set to {}", get_id(), max_pids);
+        return true;
+
+      } else if (resource_name == "apply") {
+        spdlog::info("Applying resource changes for container {}", get_id());
+        return true;
+      }
+    } catch (const std::exception &e) {
+      spdlog::error("Failed to set resource {} to {}: {}", resource_name, value,
+                    e.what());
+    }
+
+    return false;
+  }
+
+  bool set_memory_limit(const std::string &mb_str) {
+    try {
+      size_t mb = std::stoull(mb_str);
+      size_t bytes = mb * 1024 * 1024;
+
+      spdlog::info("Setting memory limit to {} MB ({} bytes) for container {}",
+                   mb, bytes, get_id());
+
+      // Обновляем ресурсы в контейнере
+      // В реальной реализации нужно обновить
+      // container_->get_container().resources.memory_capacity
+
+      // Временно сохраняем в файл для демонстрации
+      auto data_path = container_->get_container().data_path;
+      std::string config_path = (data_path / "resource_config.json").string();
+      std::ofstream config_file(config_path, std::ios::app);
+      if (config_file) {
+        config_file << "[" << time(nullptr) << "] memory_limit_mb=" << mb
+                    << "\n";
+        config_file.close();
+      }
+
+      return true;
+    } catch (const std::exception &e) {
+      spdlog::error("Failed to set memory limit: {}", e.what());
+      return false;
+    }
+  }
+
+  bool set_disk_quota(const std::string &mb_str) {
+    try {
+      size_t mb = std::stoull(mb_str);
+      size_t bytes = mb * 1024 * 1024;
+
+      spdlog::info("Setting disk quota to {} MB ({} bytes) for container {}",
+                   mb, bytes, get_id());
+
+      auto data_path = container_->get_container().data_path;
+      std::string config_path = (data_path / "resource_config.json").string();
+      std::ofstream config_file(config_path, std::ios::app);
+      if (config_file) {
+        config_file << "[" << time(nullptr) << "] disk_quota_mb=" << mb << "\n";
+        config_file.close();
+      }
+
+      return true;
+    } catch (const std::exception &e) {
+      spdlog::error("Failed to set disk quota: {}", e.what());
+      return false;
+    }
+  }
+
+  bool set_pids_limit(const std::string &max_pids_str) {
+    try {
+      size_t max_pids = std::stoull(max_pids_str);
+
+      spdlog::info("Setting max pids to {} for container {}", max_pids,
+                   get_id());
+
+      auto data_path = container_->get_container().data_path;
+      std::string config_path = (data_path / "resource_config.json").string();
+      std::ofstream config_file(config_path, std::ios::app);
+      if (config_file) {
+        config_file << "[" << time(nullptr) << "] max_pids=" << max_pids
+                    << "\n";
+        config_file.close();
+      }
+
+      return true;
+    } catch (const std::exception &e) {
+      spdlog::error("Failed to set pids limit: {}", e.what());
+      return false;
+    }
+  }
+
+  bool apply_resource_changes() {
+    spdlog::info("Applying resource changes for container {}", get_id());
+
+    auto data_path = container_->get_container().data_path;
+    std::string config_path = (data_path / "resource_config.json").string();
+    std::ofstream config_file(config_path, std::ios::app);
+    if (config_file) {
+      config_file << "[" << time(nullptr) << "] changes_applied=true\n";
+      config_file.close();
+    }
+
+    return true;
+  }
+
+  std::string get_current_resources() const override {
+    std::stringstream ss;
+
+    if (container_) {
+      auto cont = container_->get_container();
+
+      ss << "=== Current Resource Limits ===\n\n";
+      ss << "Memory: " << cont.resources.memory_capacity << " bytes ";
+      ss << "(" << cont.resources.memory_capacity / (1024 * 1024) << " MB)\n";
+
+      ss << "Disk: " << cont.resources.storage_quota << " bytes ";
+      ss << "(" << cont.resources.storage_quota / (1024 * 1024) << " MB)\n";
+
+      ss << "Max Processes/Files: " << cont.resources.max_open_files << "\n";
+
+      ss << "\nChange with: echo 'VALUE' > /containers/" << get_id()
+         << "/.resources/RESOURCE_NAME\n";
+      ss << "Apply changes: echo 'apply' > /containers/" << get_id()
+         << "/.resources/apply\n";
+    }
+
+    return ss.str();
+  }
+
+  std::string get_metrics() const override {
+    std::stringstream ss;
+
+    auto native = get_native_container();
+    if (native) {
+      auto cont = native->get_container();
+
+      ss << "Memory Usage: ";
+      if (!cont.cgroup_path.empty()) {
+        ss << "monitored via cgroup\n";
+      } else {
+        ss << "not monitored\n";
+      }
+
+      ss << "Resource Limits:\n";
+      ss << "  Memory: " << cont.resources.memory_capacity << " bytes\n";
+      ss << "  Storage: " << cont.resources.storage_quota << " bytes\n";
+      ss << "  Max Files: " << cont.resources.max_open_files << "\n";
+    }
+
+    return ss.str();
+  }
+
   bool file_exists(const std::string &virtual_path) const override {
     if (virtual_path.empty() || virtual_path == "/") {
       return true;
@@ -206,14 +394,14 @@ public:
   }
 
   bool rebuildIndex() override {
-      auto rebuild_result = search_->rebuildIndexImpl();
-      if (!rebuild_result.is_ok()) {
-        spdlog::warn("Failed to rebuild container index: {}",
-                     rebuild_result.error().what());
-        return false;
-      }
+    auto rebuild_result = search_->rebuildIndexImpl();
+    if (!rebuild_result.is_ok()) {
+      spdlog::warn("Failed to rebuild container index: {}",
+                   rebuild_result.error().what());
+      return false;
+    }
 
-      return true;
+    return true;
   }
 
   bool remove_file(const std::string &path) override {
@@ -315,8 +503,8 @@ public:
     }
   }
 
-  std::vector<std::pair<std::string, float>> semantic_search(const std::string &query,
-                                           int limit = 10) override {
+  std::vector<std::pair<std::string, float>>
+  semantic_search(const std::string &query, int limit = 10) override {
     record_search_query(query);
 
     auto result = search_->hybridSemanticSearch(query, limit);
@@ -368,8 +556,8 @@ public:
     return results;
   }
 
-  std::vector<std::pair<std::string, float>> enhanced_semantic_search(const std::string &query,
-                                                    int limit) override {
+  std::vector<std::pair<std::string, float>>
+  enhanced_semantic_search(const std::string &query, int limit) override {
     record_search_query(query);
 
     auto result = search_->enhancedSemanticSearchImpl(query, limit);

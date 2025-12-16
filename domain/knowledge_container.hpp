@@ -8,10 +8,8 @@
 
 namespace owl::vectorfs {
 
-template<typename Derived>
-class ContainerOwner {
-  public:
-
+template <typename Derived> class ContainerOwner {
+public:
 };
 
 class IKnowledgeContainer {
@@ -24,6 +22,11 @@ public:
   virtual std::map<std::string, std::string> get_labels() const = 0;
   virtual std::vector<std::string>
   list_files(const std::string &path = "/") const = 0;
+  virtual std::string get_metrics() const = 0;
+
+  virtual bool set_resource_limit(const std::string &resource_name,
+                                  const std::string &value) = 0;
+  virtual std::string get_current_resources() const = 0;
 
   virtual std::string get_file_content(const std::string &path) const = 0;
   virtual bool add_file(const std::string &path,

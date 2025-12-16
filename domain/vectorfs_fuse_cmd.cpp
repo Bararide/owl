@@ -89,10 +89,11 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
 
   if (strcmp(path, "/.debug") == 0 || strcmp(path, "/.all") == 0 ||
       strcmp(path, "/.markov") == 0 || strcmp(path, "/.reindex") == 0 ||
-      strcmp(path, "/.embeddings") == 0) {
+      strcmp(path, "/.embeddings") == 0 || strcmp(path, "/.metrics") == 0) {
+    // Эти файлы должны быть обычными файлами, а не директориями!
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stbuf->st_size = 1024;
+    stbuf->st_size = 1024; // Размер по умолчанию
     stbuf->st_uid = getuid();
     stbuf->st_gid = getgid();
     stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
@@ -117,8 +118,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
     if (container_end == std::string::npos) {
       std::string container_id = path_str.substr(container_start);
 
-      auto container =
-          state_.getContainerManager().get_container(container_id);
+      auto container = state_.getContainerManager().get_container(container_id);
       if (container || containers_.find(container_id) != containers_.end()) {
         stbuf->st_mode = S_IFDIR | 0555;
         stbuf->st_nlink = 2;
@@ -152,8 +152,7 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
         return 0;
       }
 
-      auto container =
-          state_.getContainerManager().get_container(container_id);
+      auto container = state_.getContainerManager().get_container(container_id);
       if (!container) {
         return -ENOENT;
       }
@@ -161,10 +160,22 @@ int VectorFS::getattr(const char *path, struct stat *stbuf,
       if (item_path == "/.search") {
         stbuf->st_mode = S_IFDIR | 0555;
         stbuf->st_nlink = 2;
-      } else if (item_path == "/.debug" || item_path == "/.all") {
+      } else if (item_path == "/.debug" || item_path == "/.all" ||
+                 item_path == "/.metrics") {
         stbuf->st_mode = S_IFREG | 0444;
         stbuf->st_nlink = 1;
         stbuf->st_size = 4096;
+      } else if (item_path == "/.resources") {
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+      } else if (item_path.find("/.resources/") == 0) {
+        stbuf->st_mode = S_IFREG | 0666;
+        stbuf->st_nlink = 1;
+        stbuf->st_size = 64;
+        stbuf->st_uid = getuid();
+        stbuf->st_gid = getgid();
+        stbuf->st_atime = stbuf->st_mtime = stbuf->st_ctime = time(nullptr);
+        return 0;
       } else {
         std::string file_path = item_path;
         if (file_path[0] == '/') {
@@ -292,8 +303,7 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     }
 
     for (const auto &[container_id, info] : containers_) {
-      if (state_.getContainerManager().get_container(container_id) ==
-          nullptr) {
+      if (state_.getContainerManager().get_container(container_id) == nullptr) {
         spdlog::info("  - Container (local): {}", container_id);
         filler(buf, container_id.c_str(), nullptr, 0, FUSE_FILL_DIR_PLUS);
       }
@@ -315,6 +325,8 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
         filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".metrics", nullptr, 0, FUSE_FILL_DIR_PLUS);
+        filler(buf, ".resources", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
         auto files = container->list_files(container->get_data_path());
         for (const auto &file : files) {
@@ -331,6 +343,8 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           filler(buf, ".search", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, ".debug", nullptr, 0, FUSE_FILL_DIR_PLUS);
           filler(buf, ".all", nullptr, 0, FUSE_FILL_DIR_PLUS);
+          filler(buf, ".metrics", nullptr, 0, FUSE_FILL_DIR_PLUS);
+          filler(buf, ".resources", nullptr, 0, FUSE_FILL_DIR_PLUS);
 
           auto files = container->list_files("/");
           for (const auto &file : files) {
@@ -338,6 +352,13 @@ int VectorFS::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
           }
         }
       }
+    } else if (path_str.substr(container_end) == "/.resources") {
+      filler(buf, "memory", nullptr, 0, FUSE_FILL_DIR_PLUS);
+      filler(buf, "cpu", nullptr, 0, FUSE_FILL_DIR_PLUS);
+      filler(buf, "disk", nullptr, 0, FUSE_FILL_DIR_PLUS);
+      filler(buf, "pids", nullptr, 0, FUSE_FILL_DIR_PLUS);
+      filler(buf, "network", nullptr, 0, FUSE_FILL_DIR_PLUS);
+      filler(buf, "apply", nullptr, 0, FUSE_FILL_DIR_PLUS);
     } else {
       std::string container_id =
           path_str.substr(container_start, container_end - container_start);
@@ -405,8 +426,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
     ss << "Total containers: "
        << state_.getContainerManager().get_container_count() << "\n";
     ss << "Available containers: "
-       << state_.getContainerManager().get_available_container_count()
-       << "\n";
+       << state_.getContainerManager().get_available_container_count() << "\n";
 
     std::string content = ss.str();
     if (offset >= static_cast<off_t>(content.size())) {
@@ -461,8 +481,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
           path_str.substr(container_start, container_end - container_start);
       std::string item_path = path_str.substr(container_end);
 
-      auto container =
-          state_.getContainerManager().get_container(container_id);
+      auto container = state_.getContainerManager().get_container(container_id);
       if (!container) {
         spdlog::error("Container not found: {}", container_id);
         return -ENOENT;
@@ -543,8 +562,7 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
 
           if (!search_results.empty()) {
             auto res = search_results[0];
-            auto recommendations =
-                container->get_recommendations(res.first, 3);
+            auto recommendations = container->get_recommendations(res.first, 3);
             if (!recommendations.empty()) {
               ss << "🎯 Recommended Files:\n";
               for (const auto &rec : recommendations) {
@@ -573,6 +591,141 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         return len;
       }
 
+      if (item_path == "/.metrics") {
+        std::stringstream ss;
+        ss << "=== Container Metrics: " << container_id << " ===\n\n";
+
+        ss << "📊 Basic Metrics:\n";
+        ss << "  Size: " << container->get_size() << " bytes\n";
+        ss << "  Status: " << container->get_status() << "\n";
+        ss << "  Available: " << (container->is_available() ? "yes" : "no")
+           << "\n";
+        ss << "  Owner: " << container->get_owner() << "\n";
+        ss << "  Namespace: " << container->get_namespace() << "\n\n";
+
+        ss << "📈 Usage Metrics:\n";
+
+        auto files = container->list_files("/");
+        std::map<std::string, int> file_types;
+        for (const auto &file : files) {
+          std::string category = container->classify_file(file);
+          file_types[category]++;
+        }
+
+        ss << "  Total Files: " << files.size() << "\n";
+        for (const auto &[type, count] : file_types) {
+          ss << "    " << type << ": " << count << " (" << std::fixed
+             << std::setprecision(1) << (100.0 * count / files.size())
+             << "%)\n";
+        }
+
+        ss << "\n🔍 Search & Semantic Metrics:\n";
+
+        if (auto ossec_adapter =
+                std::dynamic_pointer_cast<OssecContainerAdapter>(container)) {
+          try {
+            auto file_count_result = ossec_adapter->getSearch_info();
+            ss << "  " << file_count_result;
+
+            auto hubs = container->get_semantic_hubs(3);
+            if (!hubs.empty()) {
+              ss << "  Top Semantic Hubs:\n";
+              for (size_t i = 0; i < hubs.size() && i < 3; ++i) {
+                ss << "    " << (i + 1) << ". " << hubs[i] << "\n";
+              }
+            }
+
+            if (!files.empty()) {
+              auto recommendations =
+                  container->get_recommendations(files[0], 2);
+              if (!recommendations.empty()) {
+                ss << "  Sample Recommendations: " << recommendations.size()
+                   << " available\n";
+              }
+            }
+          } catch (...) {
+            ss << "  Semantic metrics unavailable\n";
+          }
+        }
+
+        ss << "\n💾 Resource Metrics:\n";
+        try {
+          ss << container->get_current_resources();
+
+          size_t actual_size = container->get_size();
+          auto ossec_adapter =
+              std::dynamic_pointer_cast<OssecContainerAdapter>(container);
+          if (ossec_adapter) {
+            auto native = ossec_adapter->get_native_container();
+            if (native) {
+              auto cont = native->get_container();
+
+              if (cont.resources.storage_quota > 0) {
+                double usage_percent =
+                    (100.0 * actual_size) / cont.resources.storage_quota;
+                ss << "  Disk Usage: " << actual_size << " bytes ";
+                ss << "(" << std::fixed << std::setprecision(1) << usage_percent
+                   << "% of quota)\n";
+
+                if (usage_percent > 90) {
+                  ss << "  ⚠️ Warning: Disk usage high!\n";
+                } else if (usage_percent > 70) {
+                  ss << "  ℹ️ Notice: Consider cleaning up\n";
+                }
+              }
+            }
+          }
+        } catch (...) {
+          ss << "  Resource metrics unavailable\n";
+        }
+
+        ss << "\n⏰ Temporal Metrics:\n";
+        time_t now = time(nullptr);
+        struct tm *local_time = localtime(&now);
+        char time_str[64];
+        strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", local_time);
+        ss << "  Current Time: " << time_str << "\n";
+        ss << "  Uptime: " << "Calculating..." << " (placeholder)\n";
+
+        double health_score = 0.0;
+        if (container->is_available())
+          health_score += 40;
+        if (!files.empty())
+          health_score += 30;
+        if (file_types.size() > 1)
+          health_score += 20;
+        if (health_score > 70)
+          health_score += 10;
+
+        ss << "\n🏥 Health Score: " << std::fixed << std::setprecision(0)
+           << health_score << "% ";
+
+        if (health_score >= 90)
+          ss << "✅ Excellent";
+        else if (health_score >= 70)
+          ss << "⚠️ Good";
+        else if (health_score >= 50)
+          ss << "⚠️ Fair";
+        else
+          ss << "❌ Poor";
+
+        ss << "\n\n📋 Recommendations:\n";
+        if (files.empty())
+          ss << "  → Add files to container\n";
+        if (file_types.find("code") == file_types.end())
+          ss << "  → Consider adding code files\n";
+        if (health_score < 70)
+          ss << "  → Check container availability\n";
+
+        std::string content = ss.str();
+        if (offset >= static_cast<off_t>(content.size())) {
+          return 0;
+        }
+        size_t len = std::min(content.size() - offset, size);
+        memcpy(buf, content.c_str() + offset, len);
+        return len;
+      }
+
       if (item_path == "/.all") {
         std::stringstream ss;
         ss << "=== All Files in Container: " << container_id << " ===\n\n";
@@ -580,6 +733,67 @@ int VectorFS::read(const char *path, char *buf, size_t size, off_t offset,
         auto files = container->list_files(container->get_data_path());
         for (const auto &file : files) {
           ss << file << "\n";
+        }
+
+        std::string content = ss.str();
+        if (offset >= static_cast<off_t>(content.size())) {
+          return 0;
+        }
+        size_t len = std::min(content.size() - offset, size);
+        memcpy(buf, content.c_str() + offset, len);
+        return len;
+      }
+
+      if (item_path.find("/.resources/") == 0) {
+        std::string resource_name = item_path.substr(12);
+
+        std::stringstream ss;
+
+        auto native_container =
+            std::dynamic_pointer_cast<OssecContainerAdapter>(container);
+        if (!native_container) {
+          ss << "Resource management not supported for this container type\n";
+        } else {
+          auto ossec_cont = native_container->get_native_container();
+          if (!ossec_cont) {
+            ss << "Container not available\n";
+          } else {
+            auto cont = ossec_cont->get_container();
+
+            if (resource_name == "memory") {
+              ss << "Memory Limit: " << cont.resources.memory_capacity
+                 << " bytes\n";
+              ss << "(" << (cont.resources.memory_capacity / (1024 * 1024))
+                 << " MB)\n";
+              ss << "\nTo change: echo '1024' > memory (sets limit in MB)\n";
+            } else if (resource_name == "cpu") {
+              ss << "CPU Limit: " << "Not implemented yet\n";
+              ss << "\nTo change: echo '50' > cpu (sets CPU percentage)\n";
+            } else if (resource_name == "disk") {
+              ss << "Disk Quota: " << cont.resources.storage_quota
+                 << " bytes\n";
+              ss << "(" << (cont.resources.storage_quota / (1024 * 1024))
+                 << " MB)\n";
+              ss << "\nTo change: echo '2048' > disk (sets quota in MB)\n";
+            } else if (resource_name == "pids") {
+              ss << "Max Processes/Files: " << cont.resources.max_open_files
+                 << "\n";
+              ss << "\nTo change: echo '100' > pids\n";
+            } else if (resource_name == "network") {
+              ss << "Network: Not implemented yet\n";
+              ss << "\nTo change: echo 'enabled' or 'disabled' > network\n";
+            } else if (resource_name == "apply") {
+              ss << "Apply Changes\n";
+              ss << "=============\n";
+              ss << "Write any text to this file to apply pending resource "
+                    "changes.\n";
+              ss << "\nExample: echo 'apply' > apply\n";
+            } else {
+              ss << "Unknown resource: " << resource_name << "\n";
+              ss << "Available resources: memory, cpu, disk, pids, network, "
+                    "apply\n";
+            }
+          }
         }
 
         std::string content = ss.str();
@@ -791,6 +1005,20 @@ int VectorFS::open(const char *path, struct fuse_file_info *fi) {
     return 0;
   }
 
+  if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+
+    if (container_end != std::string::npos) {
+      std::string item_path = path_str.substr(container_end);
+      if (item_path.find("/.resources/") == 0) {
+        fi->fh = 0xDEADBEEF;
+        return 0;
+      }
+    }
+  }
+
   auto it = virtual_files.find(path);
   if (it == virtual_files.end()) {
     return -ENOENT;
@@ -831,6 +1059,85 @@ int VectorFS::utimens(const char *path, const struct timespec tv[2],
 
 int VectorFS::write(const char *path, const char *buf, size_t size,
                     off_t offset, struct fuse_file_info *fi) {
+  // Проверяем, не файл ли ресурсов
+  if (strncmp(path, "/.containers/", 13) == 0) {
+    std::string path_str(path);
+    size_t container_start = 13;
+    size_t container_end = path_str.find('/', container_start);
+
+    if (container_end != std::string::npos) {
+      std::string container_id =
+          path_str.substr(container_start, container_end - container_start);
+      std::string item_path = path_str.substr(container_end);
+
+      if (item_path.find("/.resources/") == 0) {
+        std::string resource_name = item_path.substr(12);
+        std::string value(buf, size);
+
+        // Убираем пробелы и переводы строк
+        value.erase(
+            std::remove_if(value.begin(), value.end(),
+                           [](unsigned char c) { return std::isspace(c); }),
+            value.end());
+
+        spdlog::info("Setting resource {} to '{}' for container {}",
+                     resource_name, value, container_id);
+
+        auto container =
+            state_.getContainerManager().get_container(container_id);
+        if (!container) {
+          spdlog::error("Container {} not found", container_id);
+          return -ENOENT;
+        }
+
+        bool success = false;
+        try {
+          if (resource_name == "memory") {
+            if (auto ossec_adapter =
+                    std::dynamic_pointer_cast<OssecContainerAdapter>(
+                        container)) {
+              success = ossec_adapter->set_memory_limit(value);
+            }
+          } else if (resource_name == "disk") {
+            if (auto ossec_adapter =
+                    std::dynamic_pointer_cast<OssecContainerAdapter>(
+                        container)) {
+              success = ossec_adapter->set_disk_quota(value);
+            }
+          } else if (resource_name == "pids") {
+            if (auto ossec_adapter =
+                    std::dynamic_pointer_cast<OssecContainerAdapter>(
+                        container)) {
+              success = ossec_adapter->set_pids_limit(value);
+            }
+          } else if (resource_name == "apply") {
+            if (auto ossec_adapter =
+                    std::dynamic_pointer_cast<OssecContainerAdapter>(
+                        container)) {
+              success = ossec_adapter->apply_resource_changes();
+            }
+          } else {
+            spdlog::error("Unknown resource: {}", resource_name);
+            return -EINVAL;
+          }
+        } catch (const std::exception &e) {
+          spdlog::error("Failed to set resource: {}", e.what());
+          return -EIO;
+        }
+
+        if (success) {
+          spdlog::info("Successfully set resource {} to {}", resource_name,
+                       value);
+          return size;
+        } else {
+          spdlog::error("Failed to set resource {}", resource_name);
+          return -EIO;
+        }
+      }
+    }
+  }
+
+  // Остальной код для виртуальных файлов
   if (fi->fh == 0) {
     auto it = virtual_files.find(path);
     if (it == virtual_files.end()) {
