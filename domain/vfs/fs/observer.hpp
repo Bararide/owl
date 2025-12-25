@@ -4,6 +4,8 @@
 #define FUSE_USE_VERSION 31
 
 #include "handlers/getattr.hpp"
+#include "handlers/mkdir.hpp"
+#include "handlers/open.hpp"
 #include "handlers/read.hpp"
 #include "handlers/readdir.hpp"
 #include "handlers/write.hpp"
@@ -32,12 +34,9 @@ public:
     return Handler<Readdir>::callback(path, buf, filler, offset, fi, flags);
   }
 
-  //   static inline int open_callback(const char *path, struct fuse_file_info
-  //   *fi) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->open(path, fi);
-  //   }
+  static inline int open_callback(const char *path, struct fuse_file_info *fi) {
+    return Handler<Open>::callback(path, fi);
+  }
 
   static inline int read_callback(const char *path, char *buf, size_t size,
                                   off_t offset, struct fuse_file_info *fi) {
@@ -50,11 +49,9 @@ public:
     return Handler<Write>::callback(path, buf, size, offset, fi);
   }
 
-  //   static inline int mkdir_callback(const char *path, mode_t mode) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->mkdir(path, mode);
-  //   }
+  static inline int mkdir_callback(const char *path, mode_t mode) {
+    return Handler<Mkdir>::callback(path, mode);
+  }
 
   //   static inline int create_callback(const char *path, mode_t mode,
   //                                     struct fuse_file_info *fi) {
@@ -109,10 +106,10 @@ public:
     static struct fuse_operations ops = {
         .getattr = getattr_callback,
         .readdir = readdir_callback,
-        // .open = open_callback,
+        .open = open_callback,
         .read = read_callback,
         .write = write_callback,
-        // .mkdir = mkdir_callback,
+        .mkdir = mkdir_callback,
         // .create = create_callback,
         // .utimens = utimens_callback,
         // .rmdir = rmdir_callback,
