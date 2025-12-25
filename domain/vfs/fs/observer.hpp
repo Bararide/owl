@@ -3,11 +3,18 @@
 
 #define FUSE_USE_VERSION 31
 
+#include "handlers/create.hpp"
 #include "handlers/getattr.hpp"
+#include "handlers/getxattr.hpp"
+#include "handlers/listxattr.hpp"
 #include "handlers/mkdir.hpp"
 #include "handlers/open.hpp"
 #include "handlers/read.hpp"
 #include "handlers/readdir.hpp"
+#include "handlers/rmdir.hpp"
+#include "handlers/setxattr.hpp"
+#include "handlers/unlink.hpp"
+#include "handlers/utimens.hpp"
 #include "handlers/write.hpp"
 #include <fuse3/fuse.h>
 
@@ -53,70 +60,56 @@ public:
     return Handler<Mkdir>::callback(path, mode);
   }
 
-  //   static inline int create_callback(const char *path, mode_t mode,
-  //                                     struct fuse_file_info *fi) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->create(path, mode, fi);
-  //   }
+  static inline int create_callback(const char *path, mode_t mode,
+                                    struct fuse_file_info *fi) {
+    return Handler<Create>::callback(path, mode, fi);
+  }
 
-  //   static inline int utimens_callback(const char *path,
-  //                                      const struct timespec tv[2],
-  //                                      struct fuse_file_info *fi) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->utimens(path, tv, fi);
-  //   }
+  static inline int utimens_callback(const char *path,
+                                     const struct timespec tv[2],
+                                     struct fuse_file_info *fi) {
+    return Handler<Utimens>::callback(path, tv, fi);
+  }
 
-  //   static inline int rmdir_callback(const char *path) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->rmdir(path);
-  //   }
+  static inline int rmdir_callback(const char *path) {
+    return Handler<Rmdir>::callback(path);
+  }
 
-  //   static inline int unlink_callback(const char *path) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->unlink(path);
-  //   }
+  static inline int unlink_callback(const char *path) {
+    return Handler<Unlink>::callback(path);
+  }
 
-  //   static inline int getxattr_callback(const char *path, const char *name,
-  //                                       char *value, size_t size) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->getxattr(path, name, value, size);
-  //   }
+  static inline int getxattr_callback(const char *path, const char *name,
+                                      char *value, size_t size) {
+    return Handler<Getxattr>::callback(path, name, value, size);
+  }
 
-  //   static inline int setxattr_callback(const char *path, const char *name,
-  //                                       const char *value, size_t size,
-  //                                       int flags) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->setxattr(path, name, value, size, flags);
-  //   }
+  static inline int setxattr_callback(const char *path, const char *name,
+                                      const char *value, size_t size,
+                                      int flags) {
+    return Handler<Setxattr>::callback(path, name, value, size, flags);
+  }
 
-  //   static inline int listxattr_callback(const char *path, char *list,
-  //                                        size_t size) {
-  //     if (!instance_)
-  //       return -ENOENT;
-  //     return instance_->listxattr(path, list, size);
-  //   }
+  static inline int listxattr_callback(const char *path, char *list,
+                                       size_t size) {
+    return Handler<Listxattr>::callback(path, list, size);
+  }
 
   static struct fuse_operations &get_operations() {
     static struct fuse_operations ops = {
         .getattr = getattr_callback,
-        .readdir = readdir_callback,
+        .mkdir = mkdir_callback,
+        .unlink = unlink_callback,
+        .rmdir = rmdir_callback,
         .open = open_callback,
         .read = read_callback,
         .write = write_callback,
-        .mkdir = mkdir_callback,
-        // .create = create_callback,
-        // .utimens = utimens_callback,
-        // .rmdir = rmdir_callback,
-        // .unlink = unlink_callback,
-        // .getxattr = getxattr_callback,
-        // .setxattr = setxattr_callback,
-        // .listxattr = listxattr_callback,
+        .setxattr = setxattr_callback,
+        .getxattr = getxattr_callback,
+        .listxattr = listxattr_callback,
+        .readdir = readdir_callback,
+        .create = create_callback,
+        .utimens = utimens_callback,
     };
     return ops;
   }
