@@ -7,7 +7,7 @@
 #include <mutex>
 #include <vector>
 
-namespace owl::vectorfs {
+namespace owl {
 
 class ContainerManager {
 private:
@@ -60,6 +60,6 @@ public:
   void clear();
 };
 
-} // namespace owl::vectorfs
+} // namespace owl
 
 #endif

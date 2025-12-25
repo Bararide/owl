@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace owl::vectorfs {
+namespace owl {
 
 template <typename Derived> class ContainerOwner {
 public:
@@ -64,6 +64,6 @@ public:
   virtual void record_search_query(const std::string &query) = 0;
 };
 
-} // namespace owl::vectorfs
+} // namespace owl
 
 #endif

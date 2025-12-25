@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace owl::vectorfs {
+namespace owl {
 
 std::string
 VectorFS::generate_enhanced_search_result(const std::string &query) {
@@ -157,4 +157,4 @@ std::string VectorFS::generate_search_result(const std::string &query) {
   return ss.str();
 }
 
-} // namespace owl::vectorfs
+} // namespace owl

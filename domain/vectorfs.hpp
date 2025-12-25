@@ -19,7 +19,7 @@
 #include <nlohmann/json.hpp>
 #include <zmq.hpp>
 
-namespace owl::vectorfs {
+namespace owl {
 
 class VectorFS {
 private:
@@ -322,6 +322,6 @@ public:
   }
 };
 
-} // namespace owl::vectorfs
+} // namespace owl
 
 #endif

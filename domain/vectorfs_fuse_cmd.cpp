@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace owl::vectorfs {
+namespace owl {
 
 VectorFS *VectorFS::instance_ = nullptr;
 
@@ -1246,4 +1246,4 @@ int VectorFS::listxattr(const char *path, char *list, size_t size) {
 
   return total_size;
 }
-} // namespace owl::vectorfs
+} // namespace owl

@@ -95,7 +95,7 @@ public:
            ", Dimension: " + std::to_string(embedder.getDimension());
   }
 
-  vectorfs::VectorFS &get_vector_fs() const { return *vector_fs_; }
+  vectorfs &get_vector_fs() const { return *vector_fs_; }
   chunkees::Search &getSearch() {
     if (!search_) {
       throw std::runtime_error("Search not initialized");
@@ -103,7 +103,7 @@ public:
     return *search_;
   }
 
-  vectorfs::State &get_state() {
+  State &get_state() {
     if (!state_) {
       throw std::runtime_error("State not initialized");
     }
@@ -120,16 +120,16 @@ private:
         throw std::runtime_error(init_result.error().what());
       }
 
-      container_manager_ = std::make_shared<vectorfs::ContainerManager>();
+      container_manager_ = std::make_shared<ContainerManager>();
       search_ = std::make_shared<chunkees::Search>(
           *embedder_manager_,
           std::vector<std::string>{"code", "document", "config", "test",
                                    "misc"});
 
-      state_ = std::make_unique<vectorfs::State>(search_, container_manager_,
+      state_ = std::make_unique<State>(search_, container_manager_,
                                                  embedder_manager_);
 
-      vector_fs_ = std::make_unique<vectorfs::VectorFS>(*state_);
+      vector_fs_ = std::make_unique<vectorfs>(*state_);
 
       container_manager_->set_embedder(*embedder_manager_);
 
@@ -150,9 +150,9 @@ private:
 
   std::shared_ptr<EmbedderManager<>> embedder_manager_;
   std::shared_ptr<chunkees::Search> search_;
-  std::shared_ptr<vectorfs::ContainerManager> container_manager_;
-  std::unique_ptr<vectorfs::State> state_;
-  std::unique_ptr<vectorfs::VectorFS> vector_fs_;
+  std::shared_ptr<ContainerManager> container_manager_;
+  std::unique_ptr<State> state_;
+  std::unique_ptr<vectorfs> vector_fs_;
 
   static std::unique_ptr<VFSInstance<EmbeddedModel>> instance_;
 };

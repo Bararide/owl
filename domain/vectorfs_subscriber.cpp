@@ -1,6 +1,6 @@
 #include "vectorfs.hpp"
 
-namespace owl::vectorfs {
+namespace owl {
 
 void VectorFS::initialize_zeromq() {
   try {
@@ -690,7 +690,7 @@ bool VectorFS::load_container_adapter(const std::string &container_id,
       }
     }
 
-    auto adapter = std::make_shared<vectorfs::OssecContainerAdapter>(
+    auto adapter = std::make_shared<OssecContainerAdapter>(
         pid_container, state_.getEmbedderManager());
 
     adapter->initialize_markov_recommend_chain();
@@ -1192,7 +1192,7 @@ bool VectorFS::create_container_from_message(const nlohmann::json &message) {
     }
 
     spdlog::info("Creating container adapter...");
-    auto adapter = std::make_shared<vectorfs::OssecContainerAdapter>(
+    auto adapter = std::make_shared<OssecContainerAdapter>(
         pid_container, state_.getEmbedderManager());
 
     spdlog::info("Initializing Markov chain...");
@@ -1387,4 +1387,4 @@ bool VectorFS::delete_container_from_message(const nlohmann::json &message) {
   }
 }
 
-} // namespace owl::vectorfs
+} // namespace owl

@@ -1,6 +1,6 @@
 #include "container_manager.hpp"
 
-namespace owl::vectorfs {
+namespace owl {
 
 ContainerManager *ContainerManager::instance_ = nullptr;
 std::mutex ContainerManager::mutex_;
@@ -127,4 +127,4 @@ void ContainerManager::clear() {
   containers_.clear();
 }
 
-} // namespace owl::vectorfs
+} // namespace owl

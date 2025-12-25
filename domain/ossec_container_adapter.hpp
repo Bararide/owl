@@ -9,7 +9,7 @@
 #include <set>
 #include <spdlog/spdlog.h>
 
-namespace owl::vectorfs {
+namespace owl {
 
 class OssecContainerAdapter : public IKnowledgeContainer {
 public:
@@ -746,6 +746,6 @@ private:
   std::unique_ptr<chunkees::Search> search_;
 };
 
-} // namespace owl::vectorfs
+} // namespace owl
 
 #endif
