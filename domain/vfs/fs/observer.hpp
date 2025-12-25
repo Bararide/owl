@@ -15,7 +15,9 @@ class FileSystemObserver {
 public:
   static int initialize_fuse(int argc, char *argv[]) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-    return fuse_main(args.argc, args.argv, &(get_operations()), nullptr);
+    auto state = std::make_shared<State>(nullptr, nullptr, nullptr);
+
+    return fuse_main(args.argc, args.argv, &(get_operations()), state.get());
   }
 
   static inline int getattr_callback(const char *path, struct stat *stbuf,

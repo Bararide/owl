@@ -2,10 +2,10 @@
 #define OWL_VFS_FS_HANDLER
 
 #include "state.hpp"
-#include <fuse3/fuse.h>
-#include <type_traits>
 #include <cstring>
+#include <fuse3/fuse.h>
 #include <spdlog/spdlog.h>
+#include <type_traits>
 
 namespace owl {
 
@@ -40,12 +40,16 @@ public:
 
   template <typename... Args> static int callback(Args &&...args) {
     struct fuse_context *ctx = fuse_get_context();
-    if (!ctx || !ctx->private_data) {
-      return -ENOENT;
+
+    if (ctx && ctx->private_data) {
+      Derived *handler = static_cast<Derived *>(ctx->private_data);
+      return (*handler)(std::forward<Args>(args)...);
     }
 
-    Derived *handler = static_cast<Derived *>(ctx->private_data);
-    return (*handler)(std::forward<Args>(args)...);
+    spdlog::warn(
+        "No private_data in fuse_context, using default implementation");
+
+    return -ENOSYS;
   }
 };
 

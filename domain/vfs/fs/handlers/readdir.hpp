@@ -12,6 +12,9 @@ struct Readdir final : public Handler<Readdir> {
                  enum fuse_readdir_flags flags) const {
     spdlog::info("Readdir handler called for path: {}", path);
 
+    filler(buf, ".", nullptr, 0, FUSE_FILL_DIR_PLUS);
+    filler(buf, "..", nullptr, 0, FUSE_FILL_DIR_PLUS);
+
     if (strncmp(path, "/.containers/", 13) == 0) {
       return handle_container_read(path, buf, filler, offset, fi, flags);
     }
