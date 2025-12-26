@@ -2,10 +2,6 @@
 #define OWL_VFS_FS_HANDLER
 
 #include "vfs/domain.hpp"
-#include <cstring>
-#include <fuse3/fuse.h>
-#include <spdlog/spdlog.h>
-#include <type_traits>
 
 namespace owl {
 

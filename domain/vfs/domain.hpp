@@ -3,12 +3,16 @@
 
 #include <chrono>
 #include <cstring>
+#include <fuse3/fuse.h>
 #include <map>
 #include <memory>
 #include <search.hpp>
 #include <set>
+#include <spdlog/spdlog.h>
 #include <string>
+#include <type_traits>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 #include "container_manager.hpp"
