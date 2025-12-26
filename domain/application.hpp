@@ -7,16 +7,19 @@ namespace owl {
 
 class Application {
 public:
-    Application(const Application& other) = delete;
-    Application(Application&& other) = delete;
-    
-    Application& operator=(const Application& other) = delete;
-    Application& operator=(Application&& other) = delete;
-    
-    Application() : state_{} {}
-    
+  Application(const Application &other) = delete;
+  Application(Application &&other) = delete;
+
+  Application &operator=(const Application &other) = delete;
+  Application &operator=(Application &&other) = delete;
+
+  Application() : observer_{state_} {}
+
+  int run(int argc, char *argv[]) { return observer_.run(argc, argv); }
+
 private:
-    State state_;
+  State state_;
+  FileSystemObserver observer_;
 };
 
 } // namespace owl

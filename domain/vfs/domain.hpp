@@ -18,14 +18,20 @@
 #include <semantic/semantic_chunker.hpp>
 #include <spdlog/spdlog.h>
 
+constexpr static auto kModelPath =
+    "/home/bararide/code/models/crawl-300d-2M-subword/"
+    "crawl-300d-2M-subword.bin";
+
 namespace owl {
 
 struct State {
-  //   cppenv::EnvManager env_manager_;
-  // chunkees::Search search_;
-  // ContainerManager container_manager_;
-  // EmbedderManager<> embedder_manager_;
-  // semantic::SemanticChunker<>> text_chunker_;
+  cppenv::EnvManager env_manager_;
+
+  ContainerManager container_manager_;
+  EmbedderManager<> embedder_manager_{kModelPath};
+
+  chunkees::Search search_{embedder_manager_};
+  semantic::SemanticChunker<> text_chunker_{embedder_manager_};
 
   // std::shared_ptr<chunkees::Search> search_;
   // ContainerManager container_manager_;

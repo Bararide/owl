@@ -9,7 +9,7 @@
 // #include <thread>
 // #include <unistd.h>
 
-#include "vfs/fs/observer.hpp"
+#include "application.hpp"
 
 // std::atomic<bool> running{true};
 
@@ -56,7 +56,8 @@
 // }
 
 int main(int argc, char *argv[]) {
-  int result = owl::FileSystemObserver::initialize_fuse(argc, argv);
+  owl::Application app;
+  return app.run(argc, argv);
   // try {
   //   setup_safe_locale();
 
