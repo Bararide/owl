@@ -2,7 +2,6 @@
 
 namespace owl {
 
-ContainerManager *ContainerManager::instance_ = nullptr;
 std::mutex ContainerManager::mutex_;
 
 bool ContainerManager::register_container(

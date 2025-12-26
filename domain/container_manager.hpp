@@ -11,7 +11,6 @@ namespace owl {
 
 class ContainerManager {
 private:
-  static ContainerManager *instance_;
   static std::mutex mutex_;
 
   std::map<std::string, std::shared_ptr<IKnowledgeContainer>> containers_;
@@ -22,21 +21,7 @@ public:
   ContainerManager(const ContainerManager &) = delete;
   ContainerManager &operator=(const ContainerManager &) = delete;
 
-  static ContainerManager &get_instance() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!instance_) {
-      instance_ = new ContainerManager();
-    }
-    return *instance_;
-  }
-
   ContainerManager() = default;
-
-  static void destroy_instance() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    delete instance_;
-    instance_ = nullptr;
-  }
 
   void set_embedder(EmbedderManager<> &embedder) { embedder_ = &embedder; }
 
