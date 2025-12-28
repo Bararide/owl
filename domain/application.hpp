@@ -14,13 +14,14 @@ public:
   Application &operator=(const Application &other) = delete;
   Application &operator=(Application &&other) = delete;
 
-  Application() : observer_{state_} {}
+  Application() : fs_observer_{state_}, mq_observer_{state_} {}
 
-  int run(int argc, char *argv[]) { return observer_.run(argc, argv); }
+  int run(int argc, char *argv[]) { return fs_observer_.run(argc, argv); }
 
 private:
   State state_;
-  FileSystemObserver observer_;
+  FileSystemObserver fs_observer_;
+  MQObserver mq_observer_;
 };
 
 } // namespace owl
