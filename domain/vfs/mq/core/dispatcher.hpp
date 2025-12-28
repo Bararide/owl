@@ -1,14 +1,14 @@
 #ifndef OWL_MQ_ROUTING_DISPATCHER
 #define OWL_MQ_ROUTING_DISPATCHER
 
-#include "controller.hpp"
+#include "vfs/mq/controller.hpp"
 #include "routing.hpp"
 #include <spdlog/spdlog.h>
 #include <sstream>
 
 namespace owl {
 
-inline std::vector<std::string_view> split_path(std::string_view path) {
+inline std::vector<std::string_view> splitPath(std::string_view path) {
   std::vector<std::string_view> result;
   size_t start = 0;
   while (start < path.size()) {
@@ -25,7 +25,7 @@ inline std::vector<std::string_view> split_path(std::string_view path) {
 }
 
 template <typename TPath>
-inline bool match_path(const std::vector<std::string_view> &segments) {
+inline bool matchPath(const std::vector<std::string_view> &segments) {
   constexpr auto routeSegs = TPath::segments;
   if (segments.size() != routeSegs.size()) {
     return false;
@@ -43,7 +43,7 @@ public:
   explicit Dispatcher(State &state) : state_(state) {}
 
   nlohmann::json dispatch(const Request &req) {
-    auto segments = split_path(req.path);
+    auto segments = splitPath(req.path);
 
     bool handled = false;
     nlohmann::json result;
@@ -73,7 +73,8 @@ private:
     if (req.verb != RouteT::verb) {
       return;
     }
-    if (!match_path<typename RouteT::PathType>(segments)) {
+    
+    if (!matchPath<typename RouteT::PathType>(segments)) {
       return;
     }
 

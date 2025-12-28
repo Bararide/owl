@@ -3,8 +3,8 @@
 
 #include "controllers/container.hpp"
 #include "controllers/file.hpp"
-#include "dispatcher.hpp"
-#include "routing.hpp"
+#include "core/dispatcher.hpp"
+#include "core/routing.hpp"
 
 namespace owl {
 
