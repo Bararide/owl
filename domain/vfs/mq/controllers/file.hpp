@@ -3,7 +3,7 @@
 
 #include "../controller.hpp"
 #include "../filters/by.hpp"
-#include "../operators/get.hpp"
+#include "../schemas/schemas.hpp"
 
 namespace owl {
 
@@ -15,11 +15,18 @@ struct File final : public Controller<File> {
                         const std::string &user_id,
                         const nlohmann::json &message) {
     try {
+      spdlog::info("FileController: container {}, user {}", container_id,
+                   user_id);
 
-      return {};
+      // auto r = ById::validate<FileSchema>(message);
+      // ...
+
+      return nlohmann::json{{"status", "ok"},
+                            {"container_id", container_id},
+                            {"user_id", user_id}};
 
     } catch (const std::exception &e) {
-      spdlog::error("File error: {}", e.what());
+      spdlog::error("FileController error: {}", e.what());
       throw;
     }
   }

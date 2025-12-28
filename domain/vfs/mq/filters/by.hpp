@@ -1,16 +1,19 @@
 #ifndef OWL_MQ_RESOLVERS_BY
 #define OWL_MQ_RESOLVERS_BY
 
-#include "../resolvers/id.hpp"
-#include "../validation/validator.hpp"
+#include "vfs/mq/resolvers/id.hpp"
 
 namespace owl {
 
-template <typename Derived> struct By : public Validator<By<Derived>> {
-  template <typename... Args> auto handle(Args &&...args) -> decltype(auto) {
-    return Derived::handle(std::forward<Args>(args)...);
+template <typename Validator> struct By {
+  using ValidatorType = Validator;
+
+  template <typename Schema> static auto validate(const nlohmann::json &json) {
+    return Validator::template validate<Schema>(json);
   }
 };
+
+using ById = By<ByIdValidator>;
 
 } // namespace owl
 

@@ -2,12 +2,16 @@
 #define OWL_MQ_VALIDATION_VALIDATOR
 
 #include <boost/hana.hpp>
+#include <boost/hana/accessors.hpp>
+#include <boost/hana/functional.hpp>
 #include <infrastructure/result.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace owl {
-
 template <typename Derived> class Validator {
 public:
   template <typename Schema> static auto validate(const nlohmann::json &json) {
@@ -18,15 +22,13 @@ public:
         });
 
     if (success) {
-      return core::Result<Schema, std::string>::Ok(obj);
+      return core::Result<Schema, std::string>::Ok(std::move(obj));
     }
 
     return core::Result<Schema, std::string>::Error("Validation failed");
   }
 
-private:
-  friend Derived;
-
+protected:
   template <typename Schema, typename Accessor>
   static bool validateField(const nlohmann::json &json, Accessor accessor,
                             Schema &obj) {
@@ -65,7 +67,7 @@ private:
         try {
           member_ref = json_value.get<std::vector<std::string>>();
           return true;
-        } catch (const nlohmann::json::exception &) {
+        } catch (...) {
           return false;
         }
       }
@@ -77,7 +79,7 @@ private:
           member_ref.first = json_value["key"].get<std::string>();
           member_ref.second = json_value["value"].get<std::string>();
           return true;
-        } catch (const nlohmann::json::exception &) {
+        } catch (...) {
           return false;
         }
       }

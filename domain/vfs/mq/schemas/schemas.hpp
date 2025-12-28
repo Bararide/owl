@@ -3,23 +3,20 @@
 
 #include <boost/hana.hpp>
 #include <string>
-#include <utility>
-#include <vector>
 
 namespace owl {
 
-struct Container {
+struct ContainerSchema {
   std::string container_id;
-
-  BOOST_HANA_DEFINE_STRUCT(Container, (std::string, container_id));
 };
 
-struct User {
+struct UserSchema {
   std::string user_id;
-
-  BOOST_HANA_DEFINE_STRUCT(Container, (std::string, user_id));
 };
 
 } // namespace owl
+
+BOOST_HANA_ADAPT_STRUCT(owl::ContainerSchema, container_id);
+BOOST_HANA_ADAPT_STRUCT(owl::UserSchema, user_id);
 
 #endif // OWL_MQ_SCHEMAS
