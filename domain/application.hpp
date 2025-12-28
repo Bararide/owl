@@ -2,7 +2,7 @@
 #define OWL_APPLICATION
 
 #include "vfs/fs/observer.hpp"
-#include "vfs/mq/controller.hpp"
+#include "vfs/mq/observer.hpp"
 
 namespace owl {
 

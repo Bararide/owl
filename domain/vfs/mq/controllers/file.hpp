@@ -1,12 +1,16 @@
 #ifndef OWL_MQ_CONTROLLERS_FILE
 #define OWL_MQ_CONTROLLERS_FILE
 
-#include "controller.hpp"
-#include <nlohmann/json.hpp>
+#include "../controller.hpp"
+#include "../filters/by.hpp"
+#include "../operators/get.hpp"
 
 namespace owl {
 
-struct FileHandler final : public Controller<FileHandler> {
+struct File final : public Controller<File> {
+  using Base = Controller<File>;
+  using Base::Base;
+
   nlohmann::json handle(const std::string &container_id,
                         const std::string &user_id,
                         const nlohmann::json &message) {
@@ -15,7 +19,7 @@ struct FileHandler final : public Controller<FileHandler> {
       return {};
 
     } catch (const std::exception &e) {
-      spdlog::error("FileHandler error: {}", e.what());
+      spdlog::error("File error: {}", e.what());
       throw;
     }
   }

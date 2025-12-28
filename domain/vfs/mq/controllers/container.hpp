@@ -1,12 +1,14 @@
 #ifndef OWL_MQ_CONTROLLERS_CONTAINER
 #define OWL_MQ_CONTROLLERS_CONTAINER
 
-#include "controller.hpp"
-#include "get.hpp"
+#include "file.hpp"
 
 namespace owl {
 
-struct Container final : public Get<Controller<Container>> {
+struct Container final : public Controller<Container> {
+  using Base = Controller<Container>;
+  using Base::Base;
+
   nlohmann::json handle(const nlohmann::json &message) {
     try {
       std::string container_id = message["container_id"];
