@@ -12,22 +12,30 @@ struct Container final : public Controller<Container> {
   using Base = Controller<Container>;
   using Base::Base;
 
-  void handle(const nlohmann::json &message) {
-    try {
-      auto result = ById::validate<ContainerUserSchema>(message);
-      if (!result.is_ok()) {
-        spdlog::error("Container validation failed: {}", result.error());
-        return;
-      }
+  template <typename Schema> void handle(const nlohmann::json &message) {
+    process<Schema>(message);
+  }
 
-      const auto &[container_id, user_id] = result.value();
+private:
+  ContainerSchemasVariant variants_;
 
-      next<File>(container_id, user_id, message);
-
-    } catch (const std::exception &e) {
-      spdlog::error("ContainerController error: {}", e.what());
-      throw;
+  template <typename Schema> void process(const nlohmann::json &message) {
+    auto result = ById::validate<Schema>(message);
+    if (!result.is_ok()) {
+      spdlog::error("Container validation failed: {}", result.error());
+      return;
     }
+
+    const auto &params = result.value();
+
+    auto params_tuple =
+        boost::hana::transform(boost::hana::keys(params), [&params](auto key) {
+          return boost::hana::at_key(params, key);
+        });
+
+    boost::hana::unpack(params_tuple, [this, &message](auto &&...args) {
+      next<Schema, File>(std::forward<decltype(args)>(args)..., message);
+    });
   }
 };
 

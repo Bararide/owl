@@ -18,9 +18,10 @@ template <std::string_view const &...Segs> struct Path {
       Segs...};
 };
 
-template <Verb V, typename TPath, typename ControllerT, typename FilterT = void>
+template <Verb V, typename SchemaT, typename TPath, typename ControllerT, typename FilterT = void>
 struct Route {
   static constexpr Verb verb = V;
+  using Schema = SchemaT;
   using PathType = TPath;
   using ControllerType = ControllerT;
   using FilterType = FilterT;

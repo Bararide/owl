@@ -12,14 +12,15 @@ protected:
 public:
   explicit Controller(State &state) : state_(state) {}
 
-  template <typename NextHandler, typename... Args>
+  template <typename Schema, typename NextHandler, typename... Args>
   auto next(Args &&...args) -> decltype(auto) {
     NextHandler next_handler(state_);
-    return next_handler.handle(std::forward<Args>(args)...);
+    return next_handler.template handle<Schema>(std::forward<Args>(args)...);
   }
 
-  template <typename... Args> auto handle(Args &&...args) -> decltype(auto) {
-    return static_cast<Derived *>(this)->handle(
+  template <typename Schema, typename... Args>
+  auto handle(Args &&...args) -> decltype(auto) {
+    return static_cast<Derived *>(this)->template handle<Schema>(
         std::forward<Args>(args)...);
   }
 

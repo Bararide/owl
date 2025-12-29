@@ -2,6 +2,7 @@
 #define OWL_MQ_SCHEMAS
 
 #include <boost/hana.hpp>
+#include <boost/preprocessor.hpp>
 #include <string>
 
 namespace owl {
@@ -18,6 +19,10 @@ struct ContainerSchema {
 struct UserSchema {
   std::string user_id;
 };
+
+#define SCHEMAS (ContainerUserSchema)
+
+using ContainerSchemasVariant = std::variant<BOOST_PP_SEQ_ENUM(SCHEMAS)>;
 
 } // namespace owl
 

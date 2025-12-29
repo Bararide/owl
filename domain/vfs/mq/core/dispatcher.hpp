@@ -1,8 +1,8 @@
 #ifndef OWL_MQ_ROUTING_DISPATCHER
 #define OWL_MQ_ROUTING_DISPATCHER
 
-#include "vfs/mq/controller.hpp"
 #include "routing.hpp"
+#include "vfs/mq/controller.hpp"
 #include <spdlog/spdlog.h>
 #include <sstream>
 
@@ -69,7 +69,7 @@ private:
     if (req.verb != RouteT::verb) {
       return;
     }
-    
+
     if (!matchPath<typename RouteT::PathType>(segments)) {
       return;
     }
@@ -79,7 +79,7 @@ private:
     using ControllerT = typename RouteT::ControllerType;
     ControllerT controller{state_};
 
-    controller.handle(req.payload);
+    controller.template handle<typename RouteT::Schema>(req.payload);
     handled = true;
   }
 };

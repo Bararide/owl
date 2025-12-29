@@ -10,8 +10,8 @@ namespace owl {
 
 using ContainerFilePath = Path<containers_sv, file_sv>;
 
-using GetContainerFileRoute =
-    Route<Verb::Get, ContainerFilePath, Container, ById>;
+using GetContainerFilesById =
+    Route<Verb::Get, ContainerUserSchema, ContainerFilePath, Container, ById>;
 
 class MQObserver {
 public:
@@ -25,7 +25,7 @@ public:
   }
 
 private:
-  using MyDispatcher = Dispatcher<GetContainerFileRoute
+  using MyDispatcher = Dispatcher<GetContainerFilesById
                                   // , другие маршруты...
                                   >;
 
