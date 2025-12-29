@@ -14,7 +14,8 @@ struct File final : public Controller<File> {
 
   void handle(const std::string &container_id, const std::string &user_id,
               const nlohmann::json &message) {
-    state_.events_.Notify(ContainerUserSchema{.container_id = container_id, .user_id = user_id});
+    state_.events_.NotifyAsync(
+        ContainerUserSchema{.container_id = container_id, .user_id = user_id});
   }
 };
 
