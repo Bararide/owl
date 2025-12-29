@@ -17,12 +17,11 @@ class MQObserver {
 public:
   explicit MQObserver(State &state) : dispatcher_(state) {}
 
-  nlohmann::json onMessage(const std::string &verb_str,
-                            const std::string &path,
-                            const nlohmann::json &msg) {
+  void onMessage(const std::string &verb_str, const std::string &path,
+                 const nlohmann::json &msg) {
     Verb v = parseVerb(verb_str);
     Request req{v, path, msg};
-    return dispatcher_.dispatch(req);
+    dispatcher_.dispatch(req);
   }
 
 private:

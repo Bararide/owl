@@ -12,22 +12,17 @@ struct Container final : public Controller<Container> {
   using Base = Controller<Container>;
   using Base::Base;
 
-  nlohmann::json handle(const nlohmann::json &message) {
+  void handle(const nlohmann::json &message) {
     try {
-      auto result = ById::validate<ContainerSchema>(message);
+      auto result = ById::validate<ContainerUserSchema>(message);
       if (!result.is_ok()) {
         spdlog::error("Container validation failed: {}", result.error());
-        throw std::runtime_error("Validation failed");
+        return;
       }
 
-      const auto &schema = result.value();
-      std::string container_id = schema.container_id;
-      std::string user_id = message.at("user_id").get<std::string>();
+      const auto &[container_id, user_id] = result.value();
 
-      spdlog::info("Processing container: {} for user: {}", container_id,
-                   user_id);
-
-      return next<File>(container_id, user_id, message);
+      next<File>(container_id, user_id, message);
 
     } catch (const std::exception &e) {
       spdlog::error("ContainerController error: {}", e.what());

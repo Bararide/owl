@@ -42,21 +42,18 @@ template <typename... Routes> class Dispatcher {
 public:
   explicit Dispatcher(State &state) : state_(state) {}
 
-  nlohmann::json dispatch(const Request &req) {
+  void dispatch(const Request &req) {
     auto segments = splitPath(req.path);
 
     bool handled = false;
-    nlohmann::json result;
 
-    (tryRoute<Routes>(req, segments, handled, result), ...);
+    (tryRoute<Routes>(req, segments, handled), ...);
 
     if (!handled) {
       spdlog::error("No route matched: {} {}", static_cast<int>(req.verb),
                     req.path);
       throw std::runtime_error("Route not found");
     }
-
-    return result;
   }
 
 private:
@@ -64,8 +61,7 @@ private:
 
   template <typename RouteT>
   void tryRoute(const Request &req,
-                const std::vector<std::string_view> &segments, bool &handled,
-                nlohmann::json &result) {
+                const std::vector<std::string_view> &segments, bool &handled) {
     if (handled) {
       return;
     }
@@ -83,7 +79,7 @@ private:
     using ControllerT = typename RouteT::ControllerType;
     ControllerT controller{state_};
 
-    result = controller.handle(req.payload);
+    controller.handle(req.payload);
     handled = true;
   }
 };
