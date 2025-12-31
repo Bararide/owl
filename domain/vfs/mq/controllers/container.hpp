@@ -19,7 +19,7 @@ struct Container final : public Controller<Container> {
       return;
     }
 
-    const auto & = result.value();
+    const auto& params = result.value();
 
     auto params_tuple =
         boost::hana::transform(boost::hana::keys(params), [&params](auto key) {

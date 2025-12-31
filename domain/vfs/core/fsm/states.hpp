@@ -1,41 +1,48 @@
-#ifndef GIMBAL_TR_OS_DOMAIN_FSM_STATES
-#define GIMBAL_TR_OS_DOMAIN_FSM_STATES
+#ifndef CORE_FSM_STATES
+#define CORE_FSM_STATES
 
-#include <boost/fusion/adapted.hpp>
-#include <boost/fusion/functional.hpp>
-#include <boost/fusion/mpl.hpp>
-#include <boost/fusion/sequence.hpp>
-#include <boost/hana.hpp>
-#include <boost/preprocessor.hpp>
-#include <type_traits>
+#include <infrastructure/fsm/fsm.hpp>
 
-namespace gimbal::tr_os {
+namespace owl {
 
-enum class CameraStates {
-    IrN,
-    TvN,
-    IrW,
-    TvW
-};
+using core::is_state;
 
-enum class TrackerStates {
-    run,
-    init,
-    stop,
-    lost
-};
+enum class CameraStates { IrN, TvN, IrW, TvW };
+
+enum class TrackerStates { run, init, stop, lost };
 
 struct CameraState {
-    CameraStates state_;
+  CameraStates state_;
 };
 
 struct TrackerState {
-    TrackerStates state_;
+  TrackerStates state_;
 };
 
-}  // namespace gimbal::tr_os
+struct CameraFsm : core::StateBase<CameraFsm> {
+  CameraState hw_state_;
 
-BOOST_FUSION_ADAPT_STRUCT(gimbal::tr_os::CameraState, state_)
-BOOST_FUSION_ADAPT_STRUCT(gimbal::tr_os::TrackerState, state_)
+  template <typename From, typename To>
+  constexpr void doTransition(const From & /*from*/, const To & /*to*/) {
+    if constexpr (std::is_same_v<From, CameraState> &&
+                  std::is_same_v<To, CameraState>) {
+      // Реальный код переключения
+      // hw_switch(...);
+    } else {
+      static_assert(sizeof(From) == 0, "Unsupported transition");
+    }
+  }
+};
 
-#endif  // GIMBAL_TR_OS_DOMAIN_FSM_STATES
+} // namespace owl
+
+namespace core {
+  template <> struct is_state<owl::CameraState> : std::true_type {};
+  template <> struct is_state<owl::TrackerState> : std::true_type {};
+}
+
+
+BOOST_FUSION_ADAPT_STRUCT(owl::CameraState, state_)
+BOOST_FUSION_ADAPT_STRUCT(owl::TrackerState, state_)
+
+#endif // CORE_FSM_STATES

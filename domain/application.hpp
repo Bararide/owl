@@ -3,6 +3,7 @@
 
 #include "vfs/fs/observer.hpp"
 #include "vfs/mq/observer.hpp"
+#include "vfs/core/fsm/states.hpp"
 
 namespace owl {
 
