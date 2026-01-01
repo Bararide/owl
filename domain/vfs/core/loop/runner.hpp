@@ -11,13 +11,8 @@ public:
 
   void stop() { static_cast<Derived *>(this)->stop(); }
 
-  ~ILoopRunner() = default;
+  ~LoopRunner() = default;
 
-protected:
-  ILoopRunner() {
-    static_assert(std::is_base_of<ILoop, TLoop>::value,
-                  "The template parameter TLoop must be of type ILoop");
-  }
 };
 
 template <class TLoopPtr, class TTimer>

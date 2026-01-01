@@ -1,6 +1,12 @@
 #ifndef OWL_VFS_CORE_LOOP_LOOP
 #define OWL_VFS_CORE_LOOP_LOOP
 
+#include <functional>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
+
 namespace owl {
 
 template <typename Derived> class Loop {
@@ -15,12 +21,12 @@ public:
 
   void stop() { static_cast<Derived *>(this)->stop(); }
 
-  ~ILoop() = default;
+  ~Loop() = default;
 
 private:
   friend Derived;
 
-  bool is_active_{false};
+  std::atomic<bool> is_active_{false};
 };
 
 } // namespace owl

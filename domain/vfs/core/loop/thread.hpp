@@ -5,7 +5,7 @@
 #include <sched.h>
 #include <spdlog/spdlog.h>
 
-namespace gimbal {
+namespace owl {
 
 inline bool setThreadAffinity(std::thread* thread, const cpu_set_t& cpu_set) {
     return pthread_setaffinity_np(thread->native_handle(), sizeof(cpu_set_t), &cpu_set) == 0;
@@ -36,6 +36,6 @@ inline void setThreadNameAndAffinity(
     }
 }
 
-}  // namespace gimbal
+}  // namespace owl
 
 #endif  // OWL_VFS_CORE_THREAD
