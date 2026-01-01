@@ -56,8 +56,7 @@
 // }
 
 int main(int argc, char *argv[]) {
-  owl::Application app;
-  return app.run(argc, argv);
+  return owl::Application().run(argc, argv);
   // try {
   //   setup_safe_locale();
 
