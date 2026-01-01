@@ -6,13 +6,13 @@
 
 namespace owl {
 
-struct GetContainerFilesReq {
+struct GetContainerFilesEvent {
   std::string container_id;
   std::string user_id;
 };
 
 } // namespace owl
 
-BOOST_HANA_ADAPT_STRUCT(owl::GetContainerFilesReq, container_id, user_id);
+BOOST_HANA_ADAPT_STRUCT(owl::GetContainerFilesEvent, container_id, user_id);
 
 #endif // OWL_VFS_MQ_SCHEMAS_EVENTS

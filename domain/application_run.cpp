@@ -7,7 +7,7 @@ int Application::run(int argc, char *argv[]) {
 }
 
 void Application::runHandlers() {
-    
+
 }
 
 } // namespace owl
