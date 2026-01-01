@@ -1,13 +1,7 @@
 #ifndef OWL_VFS_MQ_MQ_LOOP
 #define OWL_VFS_MQ_MQ_LOOP
 
-#include <atomic>
-#include <condition_variable>
-#include <functional>
-#include <memory>
-#include <mutex>
-#include <nlohmann/json.hpp>
-#include <queue>
+#include "zeromq_loop.hpp"
 
 namespace owl {
 
@@ -16,40 +10,49 @@ public:
   using MessageHandler = std::function<void(
       const std::string &, const std::string &, const nlohmann::json &)>;
 
-  explicit MQLoop(MessageHandler handler) : handler_(std::move(handler)) {}
+  explicit MQLoop(MessageHandler handler)
+      : zeromq_loop_(std::make_unique<ZeroMQLoop>(std::move(handler))) {}
 
-  MQLoop(MQLoop &&other) noexcept
-      : handler_(std::move(other.handler_)),
-        is_active_(other.is_active_.load()) {}
-
-  MQLoop &operator=(MQLoop &&other) noexcept {
-    handler_ = std::move(other.handler_);
-    is_active_ = other.is_active_.load();
-    return *this;
-  }
-
-  MQLoop(const MQLoop &) = delete;
-  MQLoop &operator=(const MQLoop &) = delete;
-
-  void start() { is_active_ = true; }
-
-  void stop() { is_active_ = false; }
-
-  void update() {
-    if (is_active_) {
-      // handler_(verb, path, msg)
+  void start() {
+    if (zeromq_loop_) {
+      zeromq_loop_->start();
     }
   }
 
-  void setIsActive(bool active) { is_active_ = active; }
-  bool getIsActive() const { return is_active_; }
+  void stop() {
+    if (zeromq_loop_) {
+      zeromq_loop_->stop();
+    }
+  }
+
+  void update() {
+    if (zeromq_loop_) {
+      zeromq_loop_->update();
+    }
+  }
+
+  void setIsActive(bool active) {
+    if (zeromq_loop_) {
+      zeromq_loop_->setIsActive(active);
+    }
+  }
+
+  bool getIsActive() const {
+    return zeromq_loop_ ? zeromq_loop_->getIsActive() : false;
+  }
+
+  void sendResponse(const std::string &request_id, bool success,
+                    const nlohmann::json &data) {
+    if (zeromq_loop_) {
+      zeromq_loop_->sendResponse(request_id, success, data);
+    }
+  }
 
   void sendMessage(const std::string &queue, const std::string &verb,
                    const std::string &path, const nlohmann::json &body) {}
 
 private:
-  MessageHandler handler_;
-  std::atomic<bool> is_active_{false};
+  std::unique_ptr<ZeroMQLoop> zeromq_loop_;
 };
 
 } // namespace owl

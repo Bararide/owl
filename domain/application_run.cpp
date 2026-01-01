@@ -10,6 +10,4 @@ int Application::run(int argc, char *argv[]) {
 
 void Application::stop() { event_loop_.stop(); }
 
-void Application::runHandlers() {}
-
 } // namespace owl

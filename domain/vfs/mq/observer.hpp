@@ -7,6 +7,7 @@
 #include "core/routing.hpp"
 #include "mq_loop.hpp"
 #include "vfs/core/loop/simple_separate_thread.hpp"
+#include "vfs/mq/schemas/events.hpp"
 
 namespace owl {
 
@@ -17,52 +18,144 @@ using GetContainerFilesById =
 class MQObserver {
 public:
   explicit MQObserver(State &state)
-      : dispatcher_(state), state_(state),
-        mq_loop_(
-            std::make_shared<MQLoop>([this](auto verb, auto path, auto msg) {
-              onMessage(verb, path, msg);
-            })),
+      : state_(state), mq_loop_(std::make_shared<MQLoop>(
+                           [this](auto verb, auto path, auto msg) {
+                             processMQMessage(verb, path, msg);
+                           })),
         runner_(mq_loop_) {}
 
   void start() { runner_.start("mq_listener"); }
 
   void stop() { runner_.stop(); }
 
-  void onMessage(const std::string &verb_str, const std::string &path,
-                 const nlohmann::json &msg) {
-    Verb v = parseVerb(verb_str);
-    Request req{v, path, msg};
-
-    dispatcher_.dispatch(std::move(req));
-  }
-
-  void sendResponse(const std::string &queue, const std::string &correlation_id,
-                    const nlohmann::json &response) {
-    mq_loop_->sendMessage(
-        queue, "RESPONSE", "",
-        {{"correlation_id", correlation_id}, {"response", response}});
+  void sendResponse(const std::string &request_id, bool success,
+                    const nlohmann::json &data) {
+    if (mq_loop_) {
+      mq_loop_->sendResponse(request_id, success, data);
+    }
   }
 
 private:
-  using MyDispatcher =
-      Dispatcher<GetContainerFilesById /*, другие маршруты... */>;
+  void processMQMessage(const std::string &verb, const std::string &path,
+                        const nlohmann::json &msg) {
+    try {
+      std::string request_id = msg.value("request_id", "");
 
-  MyDispatcher dispatcher_;
+      if (verb == "container_create") {
+        handleContainerCreate(msg);
+      } else if (verb == "get_container_files" ||
+                 verb == "get_container_files_and_rebuild") {
+        handleGetContainerFiles(msg, verb == "get_container_files_and_rebuild");
+      } else if (verb == "container_delete") {
+        handleContainerDelete(msg);
+      } else if (verb == "file_create" || verb == "create_file") {
+        handleFileCreate(msg);
+      } else if (verb == "file_delete" || verb == "delete_file") {
+        handleFileDelete(msg);
+      } else if (verb == "container_stop") {
+        handleContainerStop(msg);
+      } else if (verb == "semantic_search_in_container") {
+        handleSemanticSearchInContainer(msg);
+      } else if (verb == "semantic_search") {
+        handleSemanticSearch(msg);
+      } else {
+        sendResponse(request_id, false,
+                     {{"error", "Unknown message type: " + verb}});
+      }
+
+    } catch (const std::exception &e) {
+      std::string request_id = msg.value("request_id", "");
+      sendResponse(request_id, false, {{"error", e.what()}});
+    }
+  }
+
+  void handleContainerCreate(const nlohmann::json &msg) {
+    ContainerCreateEvent event;
+    event.request_id = msg["request_id"];
+    event.container_id = msg["container_id"];
+    event.user_id = msg["user_id"];
+    event.memory_limit = msg["memory_limit"];
+    event.storage_quota = msg["storage_quota"];
+    event.file_limit = msg["file_limit"];
+    event.privileged = msg["privileged"];
+    event.env_label = msg["env_label"];
+    event.type_label = msg["type_label"];
+    event.commands = msg["commands"].get<std::vector<std::string>>();
+
+    state_.events_.Notify(std::move(event));
+  }
+
+  void handleGetContainerFiles(const nlohmann::json &msg, bool rebuild) {
+    GetContainerFilesEvent event;
+    event.request_id = msg["request_id"];
+    event.container_id = msg["container_id"];
+    event.user_id = msg["user_id"];
+    event.rebuild_index = rebuild;
+
+    state_.events_.Notify(std::move(event));
+  }
+
+  void handleContainerDelete(const nlohmann::json &msg) {
+    ContainerDeleteEvent event;
+    event.request_id = msg["request_id"];
+    event.container_id = msg["container_id"];
+
+    state_.events_.Notify(std::move(event));
+  }
+
+  void handleFileCreate(const nlohmann::json &msg) {
+    FileCreateEvent event;
+    event.request_id = msg["request_id"];
+    event.path = msg["path"];
+    event.content = msg["content"];
+    event.user_id = msg["user_id"];
+    event.container_id = msg.value("container_id", "");
+
+    state_.events_.Notify(std::move(event));
+  }
+
+  void handleFileDelete(const nlohmann::json &msg) {
+    FileDeleteEvent event;
+    event.request_id = msg["request_id"];
+    event.path = msg["path"];
+    event.user_id = msg["user_id"];
+    event.container_id = msg["container_id"];
+
+    state_.events_.Notify(std::move(event));
+  }
+
+  void handleContainerStop(const nlohmann::json &msg) {
+    ContainerStopEvent event;
+    event.request_id = msg["request_id"];
+    event.container_id = msg["container_id"];
+
+    state_.events_.Notify(std::move(event));
+  }
+
+  void handleSemanticSearchInContainer(const nlohmann::json &msg) {
+    SemanticSearchEvent event;
+    event.request_id = msg["request_id"];
+    event.query = msg["query"];
+    event.limit = msg.value("limit", 10);
+    event.user_id = msg["user_id"];
+    event.container_id = msg["container_id"];
+
+    state_.events_.Notify(std::move(event));
+  }
+
+  void handleSemanticSearch(const nlohmann::json &msg) {
+    SemanticSearchEvent event;
+    event.request_id = msg["request_id"];
+    event.query = msg["query"];
+    event.limit = msg.value("limit", 10);
+
+    state_.events_.Notify(std::move(event));
+  }
+
+private:
   State &state_;
   std::shared_ptr<MQLoop> mq_loop_;
   SimpleSeparateThreadLoopRunner<MQLoop> runner_;
-
-  static Verb parseVerb(const std::string &v) {
-    if (v == "GET")
-      return Verb::Get;
-    if (v == "POST")
-      return Verb::Post;
-    if (v == "PUT")
-      return Verb::Put;
-    if (v == "DELETE")
-      return Verb::Delete;
-    throw std::runtime_error("Unknown verb: " + v);
-  }
 };
 
 } // namespace owl
