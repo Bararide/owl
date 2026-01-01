@@ -13,7 +13,7 @@ public:
     });
   }
 
-  virtual ~EventHandlerBase() = default;
+  ~EventHandlerBase() = default;
 
   EventHandlerBase(const EventHandlerBase &) = delete;
   EventHandlerBase(EventHandlerBase &&) = delete;
@@ -22,6 +22,7 @@ public:
 
 protected:
   State &state_;
+
   friend Derived;
 };
 
@@ -82,4 +83,5 @@ private:
 };
 
 } // namespace owl
+
 #endif // OWL_VFS_CORE_HANDLERS
