@@ -1,132 +1,86 @@
 #ifndef OWL_VFS_MQ_ZEROMQ_LOOP
 #define OWL_VFS_MQ_ZEROMQ_LOOP
 
-#include <atomic>
-#include <functional>
-#include <memory>
-#include <nlohmann/json.hpp>
-#include <string>
-#include <thread>
-#include <zmq.hpp>
+#include "vfs/core/socket/socket.hpp"
 
 namespace owl {
 
 class ZeroMQLoop {
 public:
-  using MessageHandler =
-      std::function<void(const std::string &verb, const std::string &path,
-                         const nlohmann::json &msg)>;
+  using MessageHandler = std::function<void(
+      const std::string &, const std::string &, const nlohmann::json &)>;
 
   explicit ZeroMQLoop(MessageHandler handler)
-      : handler_(std::move(handler)), context_(1), is_active_(false) {}
+      : handler_(std::move(handler)),
+        subscriber_(SocketType::Sub, "tcp://*:5555"),
+        publisher_(SocketType::Pub, "tcp://*:5556"), is_active_(false) {
 
-  ~ZeroMQLoop() { stop(); }
+    setupSockets();
+  }
 
   void start() {
-    if (is_active_)
+    if (is_active_) {
       return;
-
-    try {
-      subscriber_ = std::make_unique<zmq::socket_t>(context_, ZMQ_SUB);
-      subscriber_->bind("tcp://*:5555");
-      subscriber_->setsockopt(ZMQ_SUBSCRIBE, "", 0);
-
-      publisher_ = std::make_unique<zmq::socket_t>(context_, ZMQ_PUB);
-      publisher_->bind("tcp://*:5556");
-
-      is_active_ = true;
-
-    } catch (const zmq::error_t &e) {
-      // Логирование ошибки
     }
+    is_active_ = true;
   }
 
-  void stop() {
-    if (!is_active_)
-      return;
-
-    is_active_ = false;
-
-    if (subscriber_) {
-      subscriber_->close();
-      subscriber_.reset();
-    }
-
-    if (publisher_) {
-      publisher_->close();
-      publisher_.reset();
-    }
-  }
+  void stop() { is_active_ = false; }
 
   void update() {
-    if (!is_active_)
+    if (!is_active_) {
       return;
+    }
 
-    try {
-      zmq::message_t message;
-      auto result = subscriber_->recv(message, zmq::recv_flags::dontwait);
+    if (auto msg = subscriber_.receiveString(zmq::recv_flags::dontwait)) {
+      try {
+        auto json_msg = nlohmann::json::parse(*msg);
 
-      if (result && message.size() > 0) {
-        std::string message_str(static_cast<char *>(message.data()),
-                                message.size());
+        std::string verb = json_msg.value("type", "");
+        std::string path = json_msg.value("path", "");
 
-        try {
-          auto json_msg = nlohmann::json::parse(message_str);
-
-          std::string verb = json_msg.value("type", "");
-          std::string path = json_msg.value("path", "");
-
-          if (handler_) {
-            handler_(verb, path, json_msg);
-          }
-
-        } catch (const std::exception &e) {
-          // Логирование ошибки парсинга
+        if (handler_) {
+          handler_(verb, path, json_msg);
         }
+
+      } catch (const nlohmann::json::exception &e) {
+        // Логирование
       }
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-    } catch (const zmq::error_t &e) {
-      // Логирование ошибки ZeroMQ
     }
   }
 
   void sendResponse(const std::string &request_id, bool success,
                     const nlohmann::json &data) {
-    if (!publisher_ || !is_active_)
-      return;
+    nlohmann::json response = {{"request_id", request_id},
+                               {"success", success},
+                               {"timestamp", std::time(nullptr)}};
 
-    try {
-      nlohmann::json response = {{"request_id", request_id},
-                                 {"success", success},
-                                 {"timestamp", std::time(nullptr)}};
-
-      if (success) {
-        response["data"] = data;
-      } else {
-        response["error"] = data.value("error", "Unknown error");
-      }
-
-      std::string response_str = response.dump();
-      zmq::message_t msg(response_str.size());
-      memcpy(msg.data(), response_str.data(), response_str.size());
-
-      publisher_->send(msg, zmq::send_flags::dontwait);
-
-    } catch (const std::exception &e) {
-      // Логирование ошибки
+    if (success) {
+      response["data"] = data;
+    } else {
+      response["error"] = data.value("error", "Unknown error");
     }
+
+    publisher_.send(response.dump());
   }
 
   void setIsActive(bool active) { is_active_ = active; }
   bool getIsActive() const { return is_active_; }
 
 private:
+  void setupSockets() {
+    subscriber_.setReceiveTimeout(100);
+    subscriber_.setLinger(0);
+    subscriber_.setSubscribe("");
+
+    publisher_.setSendTimeout(100);
+    publisher_.setLinger(0);
+    publisher_.setImmediate(true);
+  }
+
   MessageHandler handler_;
-  zmq::context_t context_;
-  std::unique_ptr<zmq::socket_t> subscriber_;
-  std::unique_ptr<zmq::socket_t> publisher_;
+  Socket subscriber_;
+  Socket publisher_;
   std::atomic<bool> is_active_;
 };
 
