@@ -5,9 +5,9 @@
 #include "controllers/file.hpp"
 #include "core/dispatcher.hpp"
 #include "core/routing.hpp"
-#include "mq_loop.hpp"
 #include "vfs/core/loop/simple_separate_thread.hpp"
 #include "vfs/mq/schemas/events.hpp"
+#include "vfs/mq/zeromq_loop.hpp"
 
 namespace owl {
 
@@ -18,11 +18,11 @@ using GetContainerFilesById =
 class MQObserver {
 public:
   explicit MQObserver(State &state)
-      : state_(state), mq_loop_(std::make_shared<MQLoop>(
+      : state_(state), zeromq_loop_(std::make_shared<ZeroMQLoop>(
                            [this](auto verb, auto path, auto msg) {
                              processMQMessage(verb, path, msg);
                            })),
-        runner_(mq_loop_) {}
+        runner_(zeromq_loop_) {}
 
   void start() { runner_.start("mq_listener"); }
 
@@ -30,8 +30,8 @@ public:
 
   void sendResponse(const std::string &request_id, bool success,
                     const nlohmann::json &data) {
-    if (mq_loop_) {
-      mq_loop_->sendResponse(request_id, success, data);
+    if (zeromq_loop_) {
+      zeromq_loop_->sendResponse(request_id, success, data);
     }
   }
 
@@ -154,8 +154,8 @@ private:
 
 private:
   State &state_;
-  std::shared_ptr<MQLoop> mq_loop_;
-  SimpleSeparateThreadLoopRunner<MQLoop> runner_;
+  std::shared_ptr<ZeroMQLoop> zeromq_loop_;
+  SimpleSeparateThreadLoopRunner<ZeroMQLoop> runner_;
 };
 
 } // namespace owl
