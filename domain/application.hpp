@@ -6,10 +6,10 @@
 #include "vfs/core/fsm/states.hpp"
 #include "vfs/core/handlers.hpp"
 #include "vfs/core/loop/loop.hpp"
-#include "vfs/mq/schemas/events.hpp"
 #include "vfs/fs/observer.hpp"
 #include "vfs/mq/observer.hpp"
 #include "vfs/mq/operators/get/container_files.hpp"
+#include "vfs/mq/schemas/events.hpp"
 
 namespace owl {
 
@@ -34,15 +34,9 @@ private:
     });
 
     state_.events_.Subscribe<GetContainerFilesEvent>([this](const auto &event) {
-      nlohmann::json files =
-          getContainerFiles(event.container_id, event.user_id);
+      nlohmann::json files{};
       mq_observer_.sendResponse(event.request_id, true, {{"files", files}});
     });
-  }
-
-  nlohmann::json getContainerFiles(const std::string &container_id,
-                                   const std::string &user_id) {
-    return nlohmann::json::array();
   }
 
 private:

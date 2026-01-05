@@ -41,6 +41,8 @@ private:
     try {
       std::string request_id = msg.value("request_id", "");
 
+      spdlog::critical("Обработка сообщения");
+
       if (verb == "container_create") {
         handleContainerCreate(msg);
       } else if (verb == "get_container_files" ||
@@ -91,6 +93,8 @@ private:
     event.container_id = msg["container_id"];
     event.user_id = msg["user_id"];
     event.rebuild_index = rebuild;
+
+    spdlog::critical("void handleGetContainerFiles(const nlohmann::json &msg, bool rebuild)");
 
     state_.events_.Notify(std::move(event));
   }

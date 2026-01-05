@@ -34,11 +34,11 @@ public:
       : context_(io_threads.value_or(1)),
         socket_(context_, static_cast<int>(type)) {
 
-    if (isBindType(type)) {
+    // if (isBindType(type)) {
       socket_.bind(std::string(endpoint));
-    } else {
-      socket_.connect(std::string(endpoint));
-    }
+    // } else {
+    //   socket_.connect(std::string(endpoint));
+    // }
   }
 
   void setIdentity(std::string_view identity) {

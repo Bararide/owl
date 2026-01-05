@@ -15,7 +15,13 @@ public:
         subscriber_(SocketType::Sub, "tcp://*:5555"),
         publisher_(SocketType::Pub, "tcp://*:5556"), is_active_(false) {
 
-    setupSockets();
+    subscriber_.setReceiveTimeout(100);
+    subscriber_.setLinger(0);
+    subscriber_.setSubscribe("");
+
+    publisher_.setSendTimeout(100);
+    publisher_.setLinger(0);
+    publisher_.setImmediate(true);
   }
 
   void start() {
@@ -32,7 +38,10 @@ public:
       return;
     }
 
+    spdlog::critical("UPDATE IN ZEROMQ LOOP");
+
     if (auto msg = subscriber_.receiveString(zmq::recv_flags::dontwait)) {
+      spdlog::critical("if (auto msg = subscriber_.receiveString(zmq::recv_flags::dontwait))");
       try {
         auto json_msg = nlohmann::json::parse(*msg);
 
@@ -40,6 +49,7 @@ public:
         std::string path = json_msg.value("path", "");
 
         if (handler_) {
+          spdlog::critical("MQ LISTENER IS WORKED");
           handler_(verb, path, json_msg);
         }
 
@@ -68,16 +78,6 @@ public:
   bool getIsActive() const { return is_active_; }
 
 private:
-  void setupSockets() {
-    subscriber_.setReceiveTimeout(100);
-    subscriber_.setLinger(0);
-    subscriber_.setSubscribe("");
-
-    publisher_.setSendTimeout(100);
-    publisher_.setLinger(0);
-    publisher_.setImmediate(true);
-  }
-
   MessageHandler handler_;
   Socket subscriber_;
   Socket publisher_;

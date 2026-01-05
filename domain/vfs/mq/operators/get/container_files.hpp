@@ -13,6 +13,7 @@ public:
   using Base::Base;
 
   void operator()(const EventSchema &event) {
+    spdlog::critical("Обработчик работает");
     // здесь у нас есть доступ к:
     // - this->state_
     // - event.container_id
