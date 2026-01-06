@@ -17,33 +17,19 @@ class Application {
 public:
   Application()
       : state_{}, fs_observer_{state_}, mq_observer_{state_},
-        event_handlers_{state_}, event_loop_{} {
-
-    setupEventSubscriptions();
-  }
+        event_handlers_{state_}, event_loop_{} {}
 
   int run(int argc, char *argv[]);
 
   void stop();
 
 private:
-  void setupEventSubscriptions() {
-    state_.events_.Subscribe<ContainerCreateEvent>([this](const auto &event) {
-      mq_observer_.sendResponse(event.request_id, true,
-                                {{"status", "created"}});
-    });
-
-    state_.events_.Subscribe<GetContainerFilesEvent>([this](const auto &event) {
-      nlohmann::json files{};
-      mq_observer_.sendResponse(event.request_id, true, {{"files", files}});
-    });
-  }
-
-private:
   State state_;
   FileSystemObserver fs_observer_;
   MQObserver mq_observer_;
-  EventHandlers<GetContainerFiles<GetContainerFilesEvent>> event_handlers_;
+  EventHandlers<GetContainerFiles<GetContainerFilesEvent>,
+                GetContainerFiles<SemanticSearchEvent>>
+      event_handlers_;
   EventLoop event_loop_;
 };
 

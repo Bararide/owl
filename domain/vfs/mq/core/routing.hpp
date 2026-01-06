@@ -10,6 +10,14 @@ namespace owl {
 
 inline constexpr std::string_view containers_sv = "containers";
 inline constexpr std::string_view file_sv = "file";
+inline constexpr std::string_view container_sv = "container";
+inline constexpr std::string_view search_sv = "search";
+inline constexpr std::string_view semantic_sv = "semantic";
+inline constexpr std::string_view create_sv = "create";
+inline constexpr std::string_view delete_sv = "delete";
+inline constexpr std::string_view stop_sv = "stop";
+inline constexpr std::string_view rebuild_sv = "rebuild";
+inline constexpr std::string_view files_sv = "files";
 
 enum class Verb { Get, Post, Put, Delete };
 
@@ -18,7 +26,8 @@ template <std::string_view const &...Segs> struct Path {
       Segs...};
 };
 
-template <Verb V, typename SchemaT, typename TPath, typename ControllerT, typename FilterT = void>
+template <Verb V, typename SchemaT, typename TPath, typename ControllerT,
+          typename FilterT = void>
 struct Route {
   static constexpr Verb verb = V;
   using Schema = SchemaT;

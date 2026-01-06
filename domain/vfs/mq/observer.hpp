@@ -1,27 +1,20 @@
 #ifndef OWL_MQ_OBSERVER
 #define OWL_MQ_OBSERVER
 
-#include "controllers/container.hpp"
-#include "controllers/file.hpp"
-#include "core/dispatcher.hpp"
-#include "core/routing.hpp"
+#include "vfs/mq/controllers/controllers.hpp"
 #include "vfs/core/loop/simple_separate_thread.hpp"
-#include "vfs/mq/schemas/events.hpp"
 #include "vfs/mq/zeromq_loop.hpp"
 
 namespace owl {
 
-using ContainerFilePath = Path<containers_sv, file_sv>;
-using GetContainerFilesById =
-    Route<Verb::Get, ContainerUserSchema, ContainerFilePath, Container, ById>;
-
 class MQObserver {
 public:
   explicit MQObserver(State &state)
-      : state_(state), zeromq_loop_(std::make_shared<ZeroMQLoop>(
-                           [this](auto verb, auto path, auto msg) {
-                             processMQMessage(verb, path, msg);
-                           })),
+      : state_(state), dispatcher_(state),
+        zeromq_loop_(std::make_shared<ZeroMQLoop>(
+            [this](auto verb_str, auto path_str, auto msg) {
+              processMessage(verb_str, path_str, msg);
+            })),
         runner_(zeromq_loop_) {}
 
   void start() { runner_.start("mq_listener"); }
@@ -36,128 +29,69 @@ public:
   }
 
 private:
-  void processMQMessage(const std::string &verb, const std::string &path,
-                        const nlohmann::json &msg) {
+  void processMessage(const std::string &verb_str, const std::string &path_str,
+                      const nlohmann::json &msg) {
     try {
       std::string request_id = msg.value("request_id", "");
 
-      spdlog::critical("Обработка сообщения");
+      auto [verb, path] = mapMQToRoute(verb_str, path_str, msg);
 
-      if (verb == "container_create") {
-        handleContainerCreate(msg);
-      } else if (verb == "get_container_files" ||
-                 verb == "get_container_files_and_rebuild") {
-        handleGetContainerFiles(msg, verb == "get_container_files_and_rebuild");
-      } else if (verb == "container_delete") {
-        handleContainerDelete(msg);
-      } else if (verb == "file_create" || verb == "create_file") {
-        handleFileCreate(msg);
-      } else if (verb == "file_delete" || verb == "delete_file") {
-        handleFileDelete(msg);
-      } else if (verb == "container_stop") {
-        handleContainerStop(msg);
-      } else if (verb == "semantic_search_in_container") {
-        handleSemanticSearchInContainer(msg);
-      } else if (verb == "semantic_search") {
-        handleSemanticSearch(msg);
-      } else {
-        sendResponse(request_id, false,
-                     {{"error", "Unknown message type: " + verb}});
-      }
+      Request req{verb, path, msg};
+
+      spdlog::info("Processing MQ message: {} {} -> {} {}", verb_str, path_str,
+                   verbToString(verb), path);
+
+      dispatcher_.dispatch(req);
 
     } catch (const std::exception &e) {
       std::string request_id = msg.value("request_id", "");
       sendResponse(request_id, false, {{"error", e.what()}});
+      spdlog::error("Error processing MQ message: {}", e.what());
     }
   }
 
-  void handleContainerCreate(const nlohmann::json &msg) {
-    ContainerCreateEvent event;
-    event.request_id = msg["request_id"];
-    event.container_id = msg["container_id"];
-    event.user_id = msg["user_id"];
-    event.memory_limit = msg["memory_limit"];
-    event.storage_quota = msg["storage_quota"];
-    event.file_limit = msg["file_limit"];
-    event.privileged = msg["privileged"];
-    event.env_label = msg["env_label"];
-    event.type_label = msg["type_label"];
-    event.commands = msg["commands"].get<std::vector<std::string>>();
+  std::pair<Verb, std::string> mapMQToRoute(const std::string &verb_str,
+                                            const std::string &path_str,
+                                            const nlohmann::json &msg) {
+    if (verb_str == "container_create") {
+      return {Verb::Post, "container/create"};
+    } else if (verb_str == "get_container_files" ||
+               verb_str == "get_container_files_and_rebuild") {
+      return {Verb::Get, "container/files"};
+    } else if (verb_str == "container_delete") {
+      return {Verb::Delete, "container/delete"};
+    } else if (verb_str == "file_create" || verb_str == "create_file") {
+      return {Verb::Post, "file/create"};
+    } else if (verb_str == "file_delete" || verb_str == "delete_file") {
+      return {Verb::Delete, "file/delete"};
+    } else if (verb_str == "container_stop") {
+      return {Verb::Post, "container/stop"};
+    } else if (verb_str == "semantic_search_in_container" ||
+               verb_str == "semantic_search") {
+      return {Verb::Post, "search/semantic"};
+    }
 
-    state_.events_.Notify(std::move(event));
+    throw std::runtime_error("Unknown MQ command: " + verb_str);
   }
 
-  void handleGetContainerFiles(const nlohmann::json &msg, bool rebuild) {
-    GetContainerFilesEvent event;
-    event.request_id = msg["request_id"];
-    event.container_id = msg["container_id"];
-    event.user_id = msg["user_id"];
-    event.rebuild_index = rebuild;
-
-    spdlog::critical("void handleGetContainerFiles(const nlohmann::json &msg, bool rebuild)");
-
-    state_.events_.Notify(std::move(event));
-  }
-
-  void handleContainerDelete(const nlohmann::json &msg) {
-    ContainerDeleteEvent event;
-    event.request_id = msg["request_id"];
-    event.container_id = msg["container_id"];
-
-    state_.events_.Notify(std::move(event));
-  }
-
-  void handleFileCreate(const nlohmann::json &msg) {
-    FileCreateEvent event;
-    event.request_id = msg["request_id"];
-    event.path = msg["path"];
-    event.content = msg["content"];
-    event.user_id = msg["user_id"];
-    event.container_id = msg.value("container_id", "");
-
-    state_.events_.Notify(std::move(event));
-  }
-
-  void handleFileDelete(const nlohmann::json &msg) {
-    FileDeleteEvent event;
-    event.request_id = msg["request_id"];
-    event.path = msg["path"];
-    event.user_id = msg["user_id"];
-    event.container_id = msg["container_id"];
-
-    state_.events_.Notify(std::move(event));
-  }
-
-  void handleContainerStop(const nlohmann::json &msg) {
-    ContainerStopEvent event;
-    event.request_id = msg["request_id"];
-    event.container_id = msg["container_id"];
-
-    state_.events_.Notify(std::move(event));
-  }
-
-  void handleSemanticSearchInContainer(const nlohmann::json &msg) {
-    SemanticSearchEvent event;
-    event.request_id = msg["request_id"];
-    event.query = msg["query"];
-    event.limit = msg.value("limit", 10);
-    event.user_id = msg["user_id"];
-    event.container_id = msg["container_id"];
-
-    state_.events_.Notify(std::move(event));
-  }
-
-  void handleSemanticSearch(const nlohmann::json &msg) {
-    SemanticSearchEvent event;
-    event.request_id = msg["request_id"];
-    event.query = msg["query"];
-    event.limit = msg.value("limit", 10);
-
-    state_.events_.Notify(std::move(event));
+  std::string verbToString(Verb verb) {
+    switch (verb) {
+    case Verb::Get:
+      return "GET";
+    case Verb::Post:
+      return "POST";
+    case Verb::Put:
+      return "PUT";
+    case Verb::Delete:
+      return "DELETE";
+    default:
+      return "UNKNOWN";
+    }
   }
 
 private:
   State &state_;
+  MQDispatcher dispatcher_;
   std::shared_ptr<ZeroMQLoop> zeromq_loop_;
   SimpleSeparateThreadLoopRunner<ZeroMQLoop> runner_;
 };
