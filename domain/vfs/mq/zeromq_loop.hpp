@@ -12,16 +12,22 @@ public:
 
   explicit ZeroMQLoop(MessageHandler handler)
       : handler_(std::move(handler)),
-        subscriber_(SocketType::Sub, "tcp://*:5555"),
-        publisher_(SocketType::Pub, "tcp://*:5556"), is_active_(false) {
+        subscriber_(SocketType::Sub, "tcp://127.0.0.1:5555"),
+        publisher_(SocketType::Pub, "tcp://*:5556"),
+        is_active_(false) {
 
-    subscriber_.setReceiveTimeout(100);
+    spdlog::critical("ZeroMQLoop INIT: Subscriber connecting to "
+                     "127.0.0.1:5555, Publisher binding to *:5556");
+
+    subscriber_.setReceiveTimeout(1000);
     subscriber_.setLinger(0);
     subscriber_.setSubscribe("");
 
-    publisher_.setSendTimeout(100);
+    publisher_.setSendTimeout(1000);
     publisher_.setLinger(0);
     publisher_.setImmediate(true);
+
+    spdlog::critical("ZeroMQLoop initialized successfully");
   }
 
   void start() {
@@ -38,10 +44,11 @@ public:
       return;
     }
 
-    spdlog::critical("UPDATE IN ZEROMQ LOOP");
+    // spdlog::critical("UPDATE IN ZEROMQ LOOP");
 
     if (auto msg = subscriber_.receiveString(zmq::recv_flags::dontwait)) {
-      spdlog::critical("if (auto msg = subscriber_.receiveString(zmq::recv_flags::dontwait))");
+      spdlog::critical("if (auto msg = "
+                       "subscriber_.receiveString(zmq::recv_flags::dontwait))");
       try {
         auto json_msg = nlohmann::json::parse(*msg);
 

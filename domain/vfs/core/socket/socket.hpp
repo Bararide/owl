@@ -32,13 +32,31 @@ public:
                   std::optional<int> io_threads = std::nullopt,
                   std::optional<int> max_sockets = std::nullopt)
       : context_(io_threads.value_or(1)),
-        socket_(context_, static_cast<int>(type)) {
+        socket_(context_, static_cast<int>(type)), type_(type) {
 
-    // if (isBindType(type)) {
-      socket_.bind(std::string(endpoint));
-    // } else {
-    //   socket_.connect(std::string(endpoint));
-    // }
+    spdlog::critical("=== SOCKET CONSTRUCTOR ===");
+    spdlog::critical("Type: {} ({}), Endpoint: {}", static_cast<int>(type),
+                     type == SocketType::Pub ? "PUB" : "SUB", endpoint);
+
+    if (isBindType(type)) {
+      spdlog::critical(">>> BINDING to: {}", endpoint);
+      try {
+        socket_.bind(std::string(endpoint));
+        spdlog::critical(">>> SUCCESSFULLY BOUND to: {}", endpoint);
+      } catch (const zmq::error_t &e) {
+        spdlog::critical(">>> FAILED to bind to {}: {}", endpoint, e.what());
+        throw;
+      }
+    } else {
+      spdlog::critical(">>> CONNECTING to: {}", endpoint);
+      try {
+        socket_.connect(std::string(endpoint));
+        spdlog::critical(">>> SUCCESSFULLY CONNECTED to: {}", endpoint);
+      } catch (const zmq::error_t &e) {
+        spdlog::critical(">>> FAILED to connect to {}: {}", endpoint, e.what());
+        throw;
+      }
+    }
   }
 
   void setIdentity(std::string_view identity) {
@@ -160,15 +178,21 @@ public:
 private:
   static bool isBindType(SocketType type) {
     switch (type) {
-    case SocketType::Pub:
-    case SocketType::Rep:
-    case SocketType::Router:
-    case SocketType::Pull:
-    case SocketType::XPub:
-    case SocketType::Stream:
+    case SocketType::Pub:    // Publisher BIND
+    case SocketType::Sub:    // Subscriber BIND
+    case SocketType::Rep:    // Reply BIND
+    case SocketType::Router: // Router BIND
+    case SocketType::Pull:   // Pull BIND
+    case SocketType::XPub:   // XPublisher BIND
+    case SocketType::Stream: // Stream BIND
       return true;
-    default:
+    case SocketType::Req:    // Request CONNECT
+    case SocketType::Dealer: // Dealer CONNECT
+    case SocketType::Push:   // Push CONNECT
+    case SocketType::XSub:   // XSubscriber CONNECT
       return false;
+    default:
+      return true;
     }
   }
 
