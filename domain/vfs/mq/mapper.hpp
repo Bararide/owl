@@ -29,21 +29,21 @@ static std::pair<Verb, std::string> mqmap(const std::string &verb_str) {
              : throw std::runtime_error("Unknown command: " + verb_str);
 }
 
-template <typename Derived> class MQMapper {
+template <typename Derived, typename TLoop, typename TDispatcher> class MQMapper {
 public:
-  MQMapper(State &state, std::shared_ptr<ZeroMQLoop> loop)
+  MQMapper(State &state, std::shared_ptr<TLoop> loop)
       : state_(state), dispatcher_(state), loop_(std::move(loop)) {}
 
-  template <typename... Args> void processMessage(Args &&...args) {
+  template <typename... Args> void operator()(Args &&...args) {
     static_cast<Derived &>(*this)(std::forward<Args>(args)...);
   }
 
-  std::shared_ptr<ZeroMQLoop> getLoop() const { return loop_; }
+  std::shared_ptr<TLoop> getLoop() const { return loop_; }
 
-private:
+protected:
   State &state_;
-  MQDispatcher dispatcher_;
-  std::shared_ptr<ZeroMQLoop> loop_;
+  TDispatcher dispatcher_;
+  std::shared_ptr<TLoop> loop_;
 
   friend Derived;
 };

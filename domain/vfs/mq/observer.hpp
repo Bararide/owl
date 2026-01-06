@@ -5,10 +5,11 @@
 
 namespace owl {
 
+template <typename TLoop = ZeroMQLoop, typename TDispatcher = MQDispatcher>
 class MQObserver {
-  class Handler final : public MQMapper<Handler> {
+  class Handler final : public MQMapper<Handler, TLoop, TDispatcher> {
   public:
-    using Base = MQMapper<Handler>;
+    using Base = MQMapper<Handler, TLoop, TDispatcher>;
     using Base::Base;
 
     void operator()(const std::string &verb_str, const std::string &path_str,
@@ -17,11 +18,11 @@ class MQObserver {
         auto [verb, path] = mqmap(verb_str);
         Request req{verb, path, msg};
 
-        dispatcher_.dispatch(req);
+        this->dispatcher_.dispatch(req);
 
       } catch (const std::exception &e) {
         std::string id = msg.value("request_id", "");
-        loop_->sendResponse(id, false, {{"error", e.what()}});
+        this->loop_->sendResponse(id, false, {{"error", e.what()}});
         spdlog::error("MQ error: {}", e.what());
       }
     }
@@ -29,9 +30,8 @@ class MQObserver {
 
 public:
   explicit MQObserver(State &state)
-      : handler_(state,
-                 std::make_shared<ZeroMQLoop>([this](auto v, auto p, auto m) {
-                   handler_.processMessage(v, p, m);
+      : handler_(state, std::make_shared<TLoop>([this](auto v, auto p, auto m) {
+                   handler_(v, p, m);
                  })),
         runner_(handler_.getLoop()) {}
 
@@ -40,7 +40,7 @@ public:
 
 private:
   Handler handler_;
-  SimpleSeparateThreadLoopRunner<ZeroMQLoop> runner_;
+  SimpleSeparateThreadLoopRunner<TLoop> runner_;
 };
 
 } // namespace owl

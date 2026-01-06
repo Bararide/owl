@@ -26,7 +26,7 @@ public:
 private:
   State state_;
   FileSystemObserver fs_observer_;
-  MQObserver mq_observer_;
+  MQObserver<> mq_observer_;
   EventHandlers<GetContainerFiles<GetContainerFilesEvent>,
                 GetContainerFiles<SemanticSearchEvent>>
       event_handlers_;
