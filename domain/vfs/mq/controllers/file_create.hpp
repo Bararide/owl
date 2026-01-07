@@ -10,8 +10,9 @@ struct FileCreateController final : public Controller<FileCreateController> {
   using Base = Controller<FileCreateController>;
   using Base::Base;
 
-  template <typename Schema> auto handle(const nlohmann::json &message) {
-    FileCreateEvent event;
+  template <typename Schema, typename Event>
+  auto operator()(const nlohmann::json &message) {
+    Event event;
 
     event.request_id = message["request_id"];
     event.path = message["path"];

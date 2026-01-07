@@ -17,13 +17,13 @@
 
 namespace owl {
 
-using ContainerCreateRoute = Route<Verb::Post, ContainerCreateSchema, Path<container_sv, create_sv>, ContainerCreateController>;
-using GetContainerFilesRoute = Route<Verb::Get, ContainerGetFilesSchema, Path<container_sv, files_sv>, ContainerGetFilesController>;
-using ContainerDeleteRoute = Route<Verb::Delete, ContainerDeleteSchema, Path<container_sv, delete_sv>, ContainerDeleteController>;
-using FileCreateRoute = Route<Verb::Post, FileCreateSchema, Path<file_sv, create_sv>, FileCreateController>;
-using FileDeleteRoute = Route<Verb::Delete, FileDeleteSchema, Path<file_sv, delete_sv>, FileDeleteController>;
-using ContainerStopRoute = Route<Verb::Post, ContainerStopSchema, Path<container_sv, stop_sv>, ContainerStopController>;
-using SemanticSearchRoute = Route<Verb::Post, SemanticSearchSchema, Path<search_sv, semantic_sv>, SemanticSearchController>;
+using ContainerCreateRoute = Route<Verb::Post, ContainerCreateSchema, ContainerCreateEvent, Path<container_sv, create_sv>, ContainerCreateController>;
+using GetContainerFilesRoute = Route<Verb::Get, ContainerGetFilesSchema, GetContainerFilesEvent, Path<container_sv, files_sv>, ContainerGetFilesController>;
+using ContainerDeleteRoute = Route<Verb::Delete, ContainerDeleteSchema, ContainerDeleteEvent, Path<container_sv, delete_sv>, ContainerDeleteController>;
+using FileCreateRoute = Route<Verb::Post, FileCreateSchema, FileCreateEvent, Path<file_sv, create_sv>, FileCreateController>;
+using FileDeleteRoute = Route<Verb::Delete, FileDeleteSchema, FileDeleteEvent, Path<file_sv, delete_sv>, FileDeleteController>;
+using ContainerStopRoute = Route<Verb::Post, ContainerStopSchema, ContainerStopEvent, Path<container_sv, stop_sv>, ContainerStopController>;
+using SemanticSearchRoute = Route<Verb::Post, SemanticSearchSchema, SemanticSearchEvent, Path<search_sv, semantic_sv>, SemanticSearchController>;
 
 using MQDispatcher = Dispatcher<ContainerCreateRoute, GetContainerFilesRoute, ContainerDeleteRoute, FileCreateRoute, FileDeleteRoute, ContainerStopRoute, SemanticSearchRoute>;
 

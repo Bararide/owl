@@ -11,8 +11,8 @@ struct ContainerCreateController final
   using Base = Controller<ContainerCreateController>;
   using Base::Base;
 
-  template <typename Schema> auto operator()(const nlohmann::json &message) {
-    ContainerCreateEvent event;
+  template <typename Schema, typename Event> auto operator()(const nlohmann::json &message) {
+    Event event;
 
     event.request_id = message["request_id"];
     event.container_id = message["container_id"];

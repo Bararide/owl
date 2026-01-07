@@ -10,8 +10,9 @@ struct FileDeleteController final : public Controller<FileDeleteController> {
   using Base = Controller<FileDeleteController>;
   using Base::Base;
 
-  template <typename Schema> auto operator()(const nlohmann::json &message) {
-    FileDeleteEvent event;
+  template <typename Schema, typename Event>
+  auto operator()(const nlohmann::json &message) {
+    Event event;
 
     event.request_id = message["request_id"];
     event.path = message["path"];

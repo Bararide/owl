@@ -11,8 +11,8 @@ struct ContainerGetFilesController final
   using Base = Controller<ContainerGetFilesController>;
   using Base::Base;
 
-  template <typename Schema> auto operator()(const nlohmann::json &message) {
-    GetContainerFilesEvent event;
+  template <typename Schema, typename Event> auto operator()(const nlohmann::json &message) {
+    Event event;
 
     event.request_id = message["request_id"];
     event.container_id = message["container_id"];

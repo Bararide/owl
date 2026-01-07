@@ -23,12 +23,18 @@ public:
     return next_handler.template handle<Schema>(std::forward<Args>(args)...);
   }
 
-  template <typename Schema, typename... Args> void handle(Args &&...args) {
-    state_.events_.template Notify<
-        decltype(static_cast<Derived *>(this)->template operator()<Schema>(
-            std::forward<Args>(args)...))>(
-        static_cast<Derived *>(this)->template operator()<Schema>(
-            std::forward<Args>(args)...));
+  template <typename Schema, typename Event, typename... Args>
+  void handle(Args &&...args) {
+    spdlog::critical("Controller::operator() вызван");
+
+    Event event =
+        static_cast<Derived *>(this)->template operator()<Schema, Event>(
+            std::forward<Args>(args)...);
+
+    spdlog::critical("Controller отправляет Notify");
+    spdlog::critical("Тип события: {}", typeid(Event).name());
+
+    state_.events_.template Notify<Event>(std::move(event));
   }
 
 private:

@@ -79,7 +79,7 @@ private:
     using ControllerT = typename RouteT::ControllerType;
     ControllerT controller{state_};
 
-    controller.template handle<typename RouteT::Schema>(req.payload);
+    controller.template handle<typename RouteT::Schema, typename RouteT::Event>(req.payload);
     handled = true;
   }
 };

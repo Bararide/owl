@@ -11,8 +11,17 @@ struct SemanticSearchController final
   using Base = Controller<SemanticSearchController>;
   using Base::Base;
 
-  template <typename Schema> auto operator()(const nlohmann::json &message) {
-    return this->validate<SemanticSearchEvent>(message);
+  template <typename Schema, typename Event>
+  auto operator()(const nlohmann::json &message) {
+    spdlog::critical("WORK");
+    auto result = this->validate<Event>(message);
+
+    if (result.is_ok()) {
+      return result.unwrap();
+    } else {
+      spdlog::error("Validation failed: {}", result.error());
+      return Event{};
+    }
   }
 };
 
