@@ -11,7 +11,7 @@ struct ContainerGetFilesController final
   using Base = Controller<ContainerGetFilesController>;
   using Base::Base;
 
-  template <typename Schema> void handle(const nlohmann::json &message) {
+  template <typename Schema> auto operator()(const nlohmann::json &message) {
     GetContainerFilesEvent event;
 
     event.request_id = message["request_id"];
@@ -22,7 +22,7 @@ struct ContainerGetFilesController final
     spdlog::info("ContainerGetFilesController: Getting files for container {}",
                  event.container_id);
 
-    state_.events_.Notify(std::move(event));
+    return event;
   }
 };
 

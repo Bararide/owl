@@ -63,6 +63,26 @@ struct ContainerStopEvent : BaseEvent {
 
 } // namespace owl
 
-// BOOST_HANA_ADAPT_STRUCT(owl::GetContainerFilesEvent, container_id, user_id);
+// Адаптируем все структуры как Hana структуры
+BOOST_HANA_ADAPT_STRUCT(owl::ContainerCreateEvent, container_id, user_id,
+                        memory_limit, storage_quota, file_limit, privileged,
+                        env_label, type_label, commands);
+
+BOOST_HANA_ADAPT_STRUCT(owl::GetContainerFilesEvent, container_id, user_id,
+                        rebuild_index);
+
+BOOST_HANA_ADAPT_STRUCT(owl::ContainerDeleteEvent, container_id);
+
+BOOST_HANA_ADAPT_STRUCT(owl::FileCreateEvent, path, content, user_id,
+                        container_id);
+
+BOOST_HANA_ADAPT_STRUCT(owl::FileDeleteEvent, path, user_id, container_id);
+
+BOOST_HANA_ADAPT_STRUCT(owl::SemanticSearchEvent, query, limit, user_id,
+                        container_id);
+
+BOOST_HANA_ADAPT_STRUCT(owl::ContainerStopEvent, container_id);
+
+BOOST_HANA_ADAPT_STRUCT(owl::BaseEvent, request_id, type, data);
 
 #endif // OWL_VFS_MQ_SCHEMAS_EVENTS

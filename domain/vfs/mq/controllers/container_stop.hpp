@@ -11,7 +11,7 @@ struct ContainerStopController final
   using Base = Controller<ContainerStopController>;
   using Base::Base;
 
-  template <typename Schema> void handle(const nlohmann::json &message) {
+  template <typename Schema> auto operator()(const nlohmann::json &message) {
     ContainerStopEvent event;
 
     event.request_id = message["request_id"];
@@ -20,7 +20,7 @@ struct ContainerStopController final
     spdlog::info("ContainerStopController: Stopping container {}",
                  event.container_id);
 
-    state_.events_.Notify(std::move(event));
+    return event;
   }
 };
 

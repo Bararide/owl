@@ -10,7 +10,7 @@ struct FileDeleteController final : public Controller<FileDeleteController> {
   using Base = Controller<FileDeleteController>;
   using Base::Base;
 
-  template <typename Schema> void handle(const nlohmann::json &message) {
+  template <typename Schema> auto operator()(const nlohmann::json &message) {
     FileDeleteEvent event;
 
     event.request_id = message["request_id"];
@@ -21,7 +21,7 @@ struct FileDeleteController final : public Controller<FileDeleteController> {
     spdlog::info("FileDeleteController: Deleting file {} from container {}",
                  event.path, event.container_id);
 
-    state_.events_.Notify(std::move(event));
+    return event;
   }
 };
 

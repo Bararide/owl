@@ -10,7 +10,7 @@ struct FileCreateController final : public Controller<FileCreateController> {
   using Base = Controller<FileCreateController>;
   using Base::Base;
 
-  template <typename Schema> void handle(const nlohmann::json &message) {
+  template <typename Schema> auto handle(const nlohmann::json &message) {
     FileCreateEvent event;
 
     event.request_id = message["request_id"];
@@ -22,7 +22,7 @@ struct FileCreateController final : public Controller<FileCreateController> {
     spdlog::info("FileCreateController: Creating file {} in container {}",
                  event.path, event.container_id);
 
-    state_.events_.Notify(std::move(event));
+    return event;
   }
 };
 
