@@ -7,9 +7,6 @@
 namespace owl {
 
 struct FileCreateController final : public Controller<FileCreateController> {
-  using Base = Controller<FileCreateController>;
-  using Base::Base;
-
   template <typename Schema, typename Event>
   auto operator()(const nlohmann::json &message) {
     return this->validate<Event>(message).map(

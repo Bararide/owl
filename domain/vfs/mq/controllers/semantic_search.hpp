@@ -8,9 +8,6 @@ namespace owl {
 
 struct SemanticSearchController final
     : public Controller<SemanticSearchController> {
-  using Base = Controller<SemanticSearchController>;
-  using Base::Base;
-
   template <typename Schema, typename Event>
   auto operator()(const nlohmann::json &message) {
     spdlog::critical("WORK");

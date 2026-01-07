@@ -8,9 +8,6 @@ namespace owl {
 
 struct ContainerCreateController final
     : public Controller<ContainerCreateController> {
-  using Base = Controller<ContainerCreateController>;
-  using Base::Base;
-
   template <typename Schema, typename Event>
   auto operator()(const nlohmann::json &message) {
     return this->validate<Event>(message).map(
