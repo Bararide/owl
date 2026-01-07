@@ -6,11 +6,9 @@
 
 namespace owl {
 
-struct SemanticSearchController final
-    : public Controller<SemanticSearchController> {
+struct SemanticSearchController final : public Controller<SemanticSearchController> {
   template <typename Schema, typename Event>
   auto operator()(const nlohmann::json &message) {
-    spdlog::critical("WORK");
     return this->validate<Event>(message).map(
         [](const Event &ev) { return ev; });
   }

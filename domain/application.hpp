@@ -8,8 +8,7 @@
 #include "vfs/core/loop/loop.hpp"
 #include "vfs/fs/observer.hpp"
 #include "vfs/mq/observer.hpp"
-#include "vfs/mq/operators/get/container_files.hpp"
-#include "vfs/mq/schemas/events.hpp"
+#include "vfs/mq/operators/event_handlers.hpp"
 
 namespace owl {
 
@@ -27,9 +26,7 @@ private:
   State state_;
   FileSystemObserver fs_observer_;
   MQObserver<> mq_observer_;
-  EventHandlers<GetContainerFiles<GetContainerFilesEvent>,
-                GetContainerFiles<SemanticSearchEvent>>
-      event_handlers_;
+  Operators event_handlers_;
   EventLoop event_loop_;
 };
 
