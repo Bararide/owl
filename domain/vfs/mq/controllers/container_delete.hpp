@@ -11,16 +11,10 @@ struct ContainerDeleteController final
   using Base = Controller<ContainerDeleteController>;
   using Base::Base;
 
-  template <typename Schema, typename Event> auto operator()(const nlohmann::json &message) {
-    Event event;
-
-    event.request_id = message["request_id"];
-    event.container_id = message["container_id"];
-
-    spdlog::info("ContainerDeleteController: Deleting container {}",
-                 event.container_id);
-
-    return event;
+  template <typename Schema, typename Event>
+  auto operator()(const nlohmann::json &message) {
+    return this->validate<Event>(message).map(
+        [](const Event &ev) { return ev; });
   }
 };
 

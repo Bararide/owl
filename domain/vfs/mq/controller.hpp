@@ -27,14 +27,20 @@ public:
   void handle(Args &&...args) {
     spdlog::critical("Controller::operator() вызван");
 
-    Event event =
+    auto result =
         static_cast<Derived *>(this)->template operator()<Schema, Event>(
             std::forward<Args>(args)...);
 
-    spdlog::critical("Controller отправляет Notify");
-    spdlog::critical("Тип события: {}", typeid(Event).name());
-
-    state_.events_.template Notify<Event>(std::move(event));
+    result.handle(
+        [this](const Event &event) {
+          spdlog::critical("Controller отправляет Notify");
+          spdlog::critical("Тип события: {}", typeid(Event).name());
+          state_.events_.template Notify<Event>(std::move(event));
+        },
+        [](auto &err) {
+          spdlog::error("Controller error: {}", err);
+          throw err;
+        });
   }
 
 private:

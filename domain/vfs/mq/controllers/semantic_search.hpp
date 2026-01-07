@@ -14,14 +14,8 @@ struct SemanticSearchController final
   template <typename Schema, typename Event>
   auto operator()(const nlohmann::json &message) {
     spdlog::critical("WORK");
-    auto result = this->validate<Event>(message);
-
-    if (result.is_ok()) {
-      return result.unwrap();
-    } else {
-      spdlog::error("Validation failed: {}", result.error());
-      return Event{};
-    }
+    return this->validate<Event>(message).map(
+        [](const Event &ev) { return ev; });
   }
 };
 

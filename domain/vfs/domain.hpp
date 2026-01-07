@@ -6,6 +6,7 @@
 #include "container_manager.hpp"
 #include "env/cppenv.hpp"
 #include <infrastructure/event.hpp>
+#include <infrastructure/result.hpp>
 #include <memory/container_builder.hpp>
 #include <semantic/semantic_chunker.hpp>
 

@@ -11,18 +11,10 @@ struct ContainerGetFilesController final
   using Base = Controller<ContainerGetFilesController>;
   using Base::Base;
 
-  template <typename Schema, typename Event> auto operator()(const nlohmann::json &message) {
-    Event event;
-
-    event.request_id = message["request_id"];
-    event.container_id = message["container_id"];
-    event.user_id = message["user_id"];
-    event.rebuild_index = message.value("rebuild_index", false);
-
-    spdlog::info("ContainerGetFilesController: Getting files for container {}",
-                 event.container_id);
-
-    return event;
+  template <typename Schema, typename Event>
+  auto operator()(const nlohmann::json &message) {
+    return this->validate<Event>(message).map(
+        [](const Event &ev) { return ev; });
   }
 };
 

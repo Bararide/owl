@@ -10,19 +10,10 @@ struct FileCreateController final : public Controller<FileCreateController> {
   using Base = Controller<FileCreateController>;
   using Base::Base;
 
-  template <typename Schema, typename Event> auto operator()(const nlohmann::json &message) {
-    Event event;
-
-    event.request_id = message["request_id"];
-    event.path = message["path"];
-    event.content = message["content"];
-    event.user_id = message["user_id"];
-    event.container_id = message.value("container_id", "");
-
-    spdlog::info("FileCreateController: Creating file {} in container {}",
-                 event.path, event.container_id);
-
-    return event;
+  template <typename Schema, typename Event>
+  auto operator()(const nlohmann::json &message) {
+    return this->validate<Event>(message).map(
+        [](const Event &ev) { return ev; });
   }
 };
 

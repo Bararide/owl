@@ -11,24 +11,10 @@ struct ContainerCreateController final
   using Base = Controller<ContainerCreateController>;
   using Base::Base;
 
-  template <typename Schema, typename Event> auto operator()(const nlohmann::json &message) {
-    Event event;
-
-    event.request_id = message["request_id"];
-    event.container_id = message["container_id"];
-    event.user_id = message["user_id"];
-    event.memory_limit = message["memory_limit"];
-    event.storage_quota = message["storage_quota"];
-    event.file_limit = message["file_limit"];
-    event.privileged = message["privileged"];
-    event.env_label = message["env_label"];
-    event.type_label = message["type_label"];
-    event.commands = message["commands"].get<std::vector<std::string>>();
-
-    spdlog::info("ContainerCreateController: Creating container {}",
-                 event.container_id);
-
-    return event;
+  template <typename Schema, typename Event>
+  auto operator()(const nlohmann::json &message) {
+    return this->validate<Event>(message).map(
+        [](const Event &ev) { return ev; });
   }
 };
 
