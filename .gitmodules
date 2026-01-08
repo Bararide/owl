@@ -49,3 +49,6 @@
 [submodule "3dparty/termox"]
 	path = 3dparty/termox
 	url = https://github.com/a-n-t-h-o-n-y/TermOx.git
+[submodule "3dparty/dotenv"]
+	path = 3dparty/dotenv
+	url = https://github.com/adeharo9/cpp-dotenv
