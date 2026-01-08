@@ -14,12 +14,7 @@ public:
   using EventType = EventSchema;
 
   explicit EventHandlerBase(State &state, EventLoop &loop)
-      : state_{state}, loop_{loop} {
-
-    state_.events_.Subscribe<EventSchema>([this](const EventSchema &event) {
-      loop_.post([this, event]() { static_cast<Derived &>(*this)(event); });
-    });
-  }
+      : state_{state}, loop_{loop} {}
 
   ~EventHandlerBase() = default;
 
@@ -31,6 +26,26 @@ public:
 protected:
   State &state_;
   EventLoop &loop_;
+
+  template <typename Task> void postToLoop(Task &&task) {
+    loop_.post(std::forward<Task>(task));
+  }
+
+  template <typename Task>
+  auto async(Task &&task) -> std::future<decltype(task())> {
+    auto promise = std::make_shared<std::promise<decltype(task())>>();
+    auto future = promise->get_future();
+
+    loop_.post([task = std::forward<Task>(task), promise]() mutable {
+      try {
+        promise->set_value(task());
+      } catch (...) {
+        promise->set_exception(std::current_exception());
+      }
+    });
+
+    return future;
+  }
 
   friend Derived;
 };
@@ -83,7 +98,7 @@ public:
 
     loop_->start();
 
-    initDispatcher();
+    (registerDispatcher<ConcreteHandlers>(), ...);
   }
 
   ~EventHandlers() { loop_->stop(); }
@@ -111,30 +126,33 @@ public:
     });
   }
 
+  template <typename Event> void postEvent(const Event &event) {
+    dispatch(event);
+  }
+
+  std::shared_ptr<EventLoop> getEventLoop() { return loop_; }
+
+  template <typename Task> void post(Task &&task) {
+    loop_->post(std::forward<Task>(task));
+  }
+
   template <typename... Args> void operator()(Args &&...args) {
     static_assert(sizeof...(Args) == 0,
                   "Use dispatch(event) instead of operator()");
   }
 
 private:
-  void initDispatcher() { registerDispatcher<ConcreteHandlers...>(); }
-
-  template <typename FirstHandler, typename... RestHandlers>
-  void registerDispatcher() {
-    using EventType = EventTypeOf<FirstHandler>;
+  template <typename Handler> void registerDispatcher() {
+    using EventType = EventTypeOf<Handler>;
 
     state_.events_.template Subscribe<EventType>(
         [this](const EventType &event) { this->dispatch(event); });
-
-    if constexpr (sizeof...(RestHandlers) > 0) {
-      registerDispatcher<RestHandlers...>();
-    }
   }
 
 private:
+  State &state_;
   std::shared_ptr<EventLoop> loop_;
   std::tuple<EventHandlerWrapper<ConcreteHandlers>...> handlers_;
-  State &state_;
 };
 
 } // namespace owl
