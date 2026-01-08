@@ -15,8 +15,8 @@ public:
 class IKnowledgeContainer {
 public:
   virtual ~IKnowledgeContainer() = default;
-  virtual std::string get_id() const = 0;
-  virtual std::string get_owner() const = 0;
+  virtual std::string getId() const = 0;
+  virtual std::string getOwner() const = 0;
   virtual std::string get_namespace() const = 0;
   virtual std::vector<std::string> get_commands() const = 0;
   virtual std::map<std::string, std::string> get_labels() const = 0;

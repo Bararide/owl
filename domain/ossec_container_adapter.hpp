@@ -20,11 +20,11 @@ public:
     initialize_search();
   }
 
-  std::string get_id() const override {
+  std::string getId() const override {
     return container_->get_container().container_id;
   }
 
-  std::string get_owner() const override {
+  std::string getOwner() const override {
     return container_->get_container().owner_id;
   }
 
@@ -99,14 +99,14 @@ public:
               container_->get_container().cgroup_path, bytes);
         }
 
-        spdlog::info("Container {} memory limit set to {} MB", get_id(), mb);
+        spdlog::info("Container {} memory limit set to {} MB", getId(), mb);
         return true;
 
       } else if (resource_name == "disk") {
         size_t mb = std::stoull(value);
         size_t bytes = mb * 1024 * 1024;
         container_->get_container().resources.storage_quota = bytes;
-        spdlog::info("Container {} disk quota set to {} MB", get_id(), mb);
+        spdlog::info("Container {} disk quota set to {} MB", getId(), mb);
         return true;
 
       } else if (resource_name == "pids") {
@@ -118,11 +118,11 @@ public:
               container_->get_container().cgroup_path, max_pids);
         }
 
-        spdlog::info("Container {} max pids set to {}", get_id(), max_pids);
+        spdlog::info("Container {} max pids set to {}", getId(), max_pids);
         return true;
 
       } else if (resource_name == "apply") {
-        spdlog::info("Applying resource changes for container {}", get_id());
+        spdlog::info("Applying resource changes for container {}", getId());
         return true;
       }
     } catch (const std::exception &e) {
@@ -139,7 +139,7 @@ public:
       size_t bytes = mb * 1024 * 1024;
 
       spdlog::info("Setting memory limit to {} MB ({} bytes) for container {}",
-                   mb, bytes, get_id());
+                   mb, bytes, getId());
 
       // Обновляем ресурсы в контейнере
       // В реальной реализации нужно обновить
@@ -168,7 +168,7 @@ public:
       size_t bytes = mb * 1024 * 1024;
 
       spdlog::info("Setting disk quota to {} MB ({} bytes) for container {}",
-                   mb, bytes, get_id());
+                   mb, bytes, getId());
 
       auto data_path = container_->get_container().data_path;
       std::string config_path = (data_path / "resource_config.json").string();
@@ -190,7 +190,7 @@ public:
       size_t max_pids = std::stoull(max_pids_str);
 
       spdlog::info("Setting max pids to {} for container {}", max_pids,
-                   get_id());
+                   getId());
 
       auto data_path = container_->get_container().data_path;
       std::string config_path = (data_path / "resource_config.json").string();
@@ -209,7 +209,7 @@ public:
   }
 
   bool apply_resource_changes() {
-    spdlog::info("Applying resource changes for container {}", get_id());
+    spdlog::info("Applying resource changes for container {}", getId());
 
     auto data_path = container_->get_container().data_path;
     std::string config_path = (data_path / "resource_config.json").string();
@@ -237,9 +237,9 @@ public:
 
       ss << "Max Processes/Files: " << cont.resources.max_open_files << "\n";
 
-      ss << "\nChange with: echo 'VALUE' > /containers/" << get_id()
+      ss << "\nChange with: echo 'VALUE' > /containers/" << getId()
          << "/.resources/RESOURCE_NAME\n";
-      ss << "Apply changes: echo 'apply' > /containers/" << get_id()
+      ss << "Apply changes: echo 'apply' > /containers/" << getId()
          << "/.resources/apply\n";
     }
 
@@ -693,7 +693,7 @@ public:
     auto recent_queries = search_->getRecentQueriesCountImpl();
 
     std::stringstream ss;
-    ss << "Search Info for Container " << get_id() << ":\n";
+    ss << "Search Info for Container " << getId() << ":\n";
     ss << "  Indexed Files: " << (file_count.is_ok() ? file_count.value() : 0)
        << "\n";
     ss << "  Recent Queries: "

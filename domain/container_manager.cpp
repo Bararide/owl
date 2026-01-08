@@ -7,7 +7,7 @@ std::mutex ContainerManager::mutex_;
 bool ContainerManager::register_container(
     std::shared_ptr<IKnowledgeContainer> container) {
   std::lock_guard<std::mutex> lock(containers_mutex_);
-  std::string container_id = container->get_id();
+  std::string container_id = container->getId();
   if (containers_.find(container_id) != containers_.end())
     return false;
   containers_[container_id] = container;
@@ -59,7 +59,7 @@ bool ContainerManager::delete_container(const std::string &container_id) {
 }
 
 std::shared_ptr<IKnowledgeContainer>
-ContainerManager::get_container(const std::string &container_id) {
+ContainerManager::getContainer(const std::string &container_id) {
   std::lock_guard<std::mutex> lock(containers_mutex_);
   auto it = containers_.find(container_id);
   return it != containers_.end() ? it->second : nullptr;
@@ -79,7 +79,7 @@ ContainerManager::get_containers_by_owner(const std::string &owner) {
   std::lock_guard<std::mutex> lock(containers_mutex_);
   std::vector<std::shared_ptr<IKnowledgeContainer>> result;
   for (const auto &[id, container] : containers_) {
-    if (container->get_owner() == owner)
+    if (container->getOwner() == owner)
       result.push_back(container);
   }
   return result;

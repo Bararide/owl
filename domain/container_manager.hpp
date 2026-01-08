@@ -30,7 +30,7 @@ public:
       std::shared_ptr<ossec::PidContainer> ossec_container);
   bool unregister_container(const std::string &container_id);
   std::shared_ptr<IKnowledgeContainer>
-  get_container(const std::string &container_id);
+  getContainer(const std::string &container_id);
   bool delete_container(const std::string &container_id);
   std::vector<std::string> get_commands();
   std::vector<std::shared_ptr<IKnowledgeContainer>> get_all_containers();
