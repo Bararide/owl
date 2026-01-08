@@ -1,17 +1,23 @@
 #ifndef OWL_VFS_CORE_HANDLERS
 #define OWL_VFS_CORE_HANDLERS
 
+#include "vfs/core/loop/loop.hpp"
 #include "vfs/domain.hpp"
+#include <typeindex>
+#include <unordered_map>
 
 namespace owl {
 
 template <typename Derived, typename EventSchema> class EventHandlerBase {
 public:
   using StateType = State;
-  
-  explicit EventHandlerBase(State &state) : state_{state} {
+  using EventType = EventSchema;
+
+  explicit EventHandlerBase(State &state, EventLoop &loop)
+      : state_{state}, loop_{loop} {
+
     state_.events_.Subscribe<EventSchema>([this](const EventSchema &event) {
-      static_cast<Derived &>(*this)(event);
+      loop_.post([this, event]() { static_cast<Derived &>(*this)(event); });
     });
   }
 
@@ -24,14 +30,15 @@ public:
 
 protected:
   State &state_;
+  EventLoop &loop_;
 
   friend Derived;
 };
 
 template <typename ConcreteHandler> class EventHandlerWrapper {
 public:
-  explicit EventHandlerWrapper(State &state)
-      : handler_{std::make_unique<ConcreteHandler>(state)} {}
+  explicit EventHandlerWrapper(State &state, EventLoop &loop)
+      : handler_{std::make_unique<ConcreteHandler>(state, loop)} {}
 
   EventHandlerWrapper(EventHandlerWrapper &&other) noexcept = default;
   EventHandlerWrapper &
@@ -47,17 +54,39 @@ public:
   ConcreteHandler &get() { return *handler_; }
   const ConcreteHandler &get() const { return *handler_; }
 
+  template <typename Event> void dispatchIfMatch(const Event &event) {
+    if constexpr (std::is_same_v<Event, typename ConcreteHandler::EventType>) {
+      (*handler_)(event);
+    }
+  }
+
 private:
   std::unique_ptr<ConcreteHandler> handler_;
 };
 
+template <typename Handler> struct EventTypeExtractor;
+
+template <template <typename> class Handler, typename Event>
+struct EventTypeExtractor<Handler<Event>> {
+  using type = Event;
+};
+
+template <typename Handler>
+using EventTypeOf = typename EventTypeExtractor<Handler>::type;
+
 template <typename... ConcreteHandlers> class EventHandlers final {
 public:
   explicit EventHandlers(State &state)
-      : handlers_(
-            std::make_tuple(EventHandlerWrapper<ConcreteHandlers>(state)...)) {}
+      : state_{state}, loop_{std::make_shared<EventLoop>()},
+        handlers_{std::make_tuple(
+            EventHandlerWrapper<ConcreteHandlers>(state, *loop_)...)} {
 
-  ~EventHandlers() = default;
+    loop_->start();
+
+    initDispatcher();
+  }
+
+  ~EventHandlers() { loop_->stop(); }
 
   EventHandlers(const EventHandlers &) = delete;
   EventHandlers(EventHandlers &&) = default;
@@ -72,16 +101,40 @@ public:
     return std::get<EventHandlerWrapper<HandlerType>>(handlers_).get();
   }
 
+  template <typename Event> void dispatch(const Event &event) {
+    loop_->post([this, event]() {
+      std::apply(
+          [&event](auto &...handlers) {
+            (handlers.template dispatchIfMatch(event), ...);
+          },
+          handlers_);
+    });
+  }
+
   template <typename... Args> void operator()(Args &&...args) {
-    std::apply(
-        [&args...](auto &...handlers) {
-          (handlers(std::forward<Args>(args)...), ...);
-        },
-        handlers_);
+    static_assert(sizeof...(Args) == 0,
+                  "Use dispatch(event) instead of operator()");
   }
 
 private:
+  void initDispatcher() { registerDispatcher<ConcreteHandlers...>(); }
+
+  template <typename FirstHandler, typename... RestHandlers>
+  void registerDispatcher() {
+    using EventType = EventTypeOf<FirstHandler>;
+
+    state_.events_.template Subscribe<EventType>(
+        [this](const EventType &event) { this->dispatch(event); });
+
+    if constexpr (sizeof...(RestHandlers) > 0) {
+      registerDispatcher<RestHandlers...>();
+    }
+  }
+
+private:
+  std::shared_ptr<EventLoop> loop_;
   std::tuple<EventHandlerWrapper<ConcreteHandlers>...> handlers_;
+  State &state_;
 };
 
 } // namespace owl

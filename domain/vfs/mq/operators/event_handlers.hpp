@@ -19,7 +19,7 @@ using Operators =
                   FileCreate<FileCreateEvent>, 
                   FileDelete<FileDeleteEvent>,
                   ContainerStop<ContainerStopEvent>>;
-
+                  
 }
 
 #endif // OWL_MQ_OPERATORS_EVENT_HANDLERS

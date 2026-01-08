@@ -5,7 +5,6 @@
 
 #include "vfs/core/fsm/states.hpp"
 #include "vfs/core/handlers.hpp"
-#include "vfs/core/loop/loop.hpp"
 #include "vfs/fs/observer.hpp"
 #include "vfs/mq/observer.hpp"
 #include "vfs/mq/operators/event_handlers.hpp"
@@ -16,7 +15,7 @@ class Application {
 public:
   Application()
       : state_{}, fs_observer_{state_}, mq_observer_{state_},
-        event_handlers_{state_}, event_loop_{} {}
+        event_handlers_{state_} {}
 
   int run(int argc, char *argv[]);
 
@@ -27,7 +26,6 @@ private:
   FileSystemObserver fs_observer_;
   MQObserver<> mq_observer_;
   Operators event_handlers_;
-  EventLoop event_loop_;
 };
 
 } // namespace owl
