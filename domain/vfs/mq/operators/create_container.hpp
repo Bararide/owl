@@ -6,16 +6,17 @@
 namespace owl {
 
 template <typename EventSchema>
-struct CreateContainer
+struct CreateContainer final
     : CreateContainerHandler<CreateContainer<EventSchema>, EventSchema> {
-  using Base = CreateContainerHandler<CreateContainer<EventSchema>, EventSchema>;
+  using Base =
+      CreateContainerHandler<CreateContainer<EventSchema>, EventSchema>;
   using Base::Base;
 
   void operator()(const EventSchema &e) {
     this->process(e, [this](auto &s, auto &ev, bool not_exist) {
       if (not_exist) {
-        return core::Result<std::shared_ptr<IKnowledgeContainer>>::Ok({}
-            // s.container_manager_.createContainer(ev.container_id)
+        return core::Result<std::shared_ptr<IKnowledgeContainer>>::Ok(
+            {} // s.container_manager_.createContainer(ev.container_id)
         );
       }
 

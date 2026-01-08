@@ -6,7 +6,7 @@
 namespace owl {
 
 template <typename EventSchema>
-struct DeleteContainer
+struct DeleteContainer final
     : FullContainerHandler<DeleteContainer<EventSchema>, EventSchema> {
   using Base = FullContainerHandler<DeleteContainer<EventSchema>, EventSchema>;
   using Base::Base;

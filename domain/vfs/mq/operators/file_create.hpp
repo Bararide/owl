@@ -6,7 +6,7 @@
 namespace owl {
 
 template <typename EventSchema>
-struct FileCreate : CreateFileHandler<FileCreate<EventSchema>, EventSchema> {
+struct FileCreate final : CreateFileHandler<FileCreate<EventSchema>, EventSchema> {
   using Base = CreateFileHandler<FileCreate<EventSchema>, EventSchema>;
   using Base::Base;
 

@@ -6,7 +6,7 @@
 namespace owl {
 
 template <typename EventSchema>
-struct GetContainerFiles
+struct GetContainerFiles final
     : ExistingContainerHandler<GetContainerFiles<EventSchema>, EventSchema> {
   using Base =
       ExistingContainerHandler<GetContainerFiles<EventSchema>, EventSchema>;

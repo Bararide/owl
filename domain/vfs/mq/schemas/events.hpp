@@ -59,12 +59,12 @@ struct SemanticSearchEvent : BaseEvent {
 };
 
 struct ContainerStopEvent : BaseEvent {
+  std::string user_id;
   std::string container_id;
 };
 
 } // namespace owl
 
-// Адаптируем все структуры как Hana структуры
 BOOST_HANA_ADAPT_STRUCT(owl::ContainerCreateEvent, container_id, user_id,
                         memory_limit, storage_quota, file_limit, privileged,
                         env_label, type_label, commands);

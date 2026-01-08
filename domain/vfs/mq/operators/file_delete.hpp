@@ -6,7 +6,7 @@
 namespace owl {
 
 template <typename EventSchema>
-struct FileDelete : DeleteFileHandler<FileCreate<EventSchema>, EventSchema> {
+struct FileDelete final : DeleteFileHandler<FileCreate<EventSchema>, EventSchema> {
   using Base = DeleteFileHandler<FileCreate<EventSchema>, EventSchema>;
   using Base::Base;
 
