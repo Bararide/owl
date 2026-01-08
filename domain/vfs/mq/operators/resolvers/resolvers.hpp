@@ -20,16 +20,28 @@ using FullContainerResolverChain =
                   ContainerOwnership<State, Event>,
                   ContainerIsActive<State, Event>>;
 
-template <typename State, typename Event> auto createContainerResolverChain() {
+template <typename State, typename Event> inline auto resolveContainer() {
   return ContainerResolverChain<State, Event>(
       ContainerExists<State, Event>{}, ContainerOwnership<State, Event>{});
 }
 
-template <typename State, typename Event>
-auto createFullContainerResolverChain() {
+template <typename State, typename Event> inline auto resolveFullContainer() {
   return FullContainerResolverChain<State, Event>(
       ContainerExists<State, Event>{}, ContainerOwnership<State, Event>{},
       ContainerIsActive<State, Event>{});
+}
+
+template <typename State, typename Event, typename Handler>
+inline auto processContainer(State &state, const Event &event,
+                             Handler &&handler) {
+  return makeContainerHandler<State, Event>(std::forward<Handler>(handler))(
+      state, event);
+}
+
+template <typename State, typename Event, typename Handler>
+inline auto makeContainerHandler(Handler &&handler) {
+  return withResolvers(resolveFullContainer<State, Event>(),
+                       std::forward<Handler>(handler));
 }
 
 } // namespace owl

@@ -13,16 +13,14 @@ struct GetContainerFiles
   using Base::Base;
 
   void operator()(const EventSchema &e) {
-    withResolvers(createFullContainerResolverChain<State, EventSchema>(),
-                  [this](auto &, auto &, auto c) {
-                    auto files = c->listFiles("/");
-                    return core::Result<int>::Ok(files.size());
-                  })(this->state_, e)
+    processContainer(this->state_, e,
+                     [](auto &, auto &, auto c) {
+                       auto files = c->listFiles("/");
+                       return core::Result<int>::Ok(files.size());
+                     })
         .handle(
-            [](int c) { spdlog::info("Successfully processed {} files", c); },
-            [](auto &e) {
-              spdlog::error("Error in GetContainerFiles: {}", e.what());
-            });
+            [](int c) { spdlog::info("Processed {} files", c); },
+            [](auto &e) { spdlog::error("GetContainerFiles: {}", e.what()); });
   }
 };
 
