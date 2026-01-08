@@ -5,7 +5,7 @@
 
 namespace owl {
 
-template <typename State, typename Event> struct ContainerExists {
+template <typename State, typename Event> struct ContainerExists final {
   auto operator()(State &state, const Event &event) const
       -> Result<std::shared_ptr<IKnowledgeContainer>> {
     auto container = state.container_manager_.getContainer(event.container_id);

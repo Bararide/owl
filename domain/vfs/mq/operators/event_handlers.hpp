@@ -4,6 +4,7 @@
 #include "vfs/mq/operators/create_container.hpp"
 #include "vfs/mq/operators/delete_container.hpp"
 #include "vfs/mq/operators/get_container_files.hpp"
+#include "vfs/mq/operators/file_create.hpp"
 #include "vfs/mq/schemas/events.hpp"
 
 namespace owl {
@@ -11,7 +12,8 @@ namespace owl {
 using Operators = EventHandlers<GetContainerFiles<GetContainerFilesEvent>,
                                 GetContainerFiles<SemanticSearchEvent>,
                                 CreateContainer<ContainerCreateEvent>,
-                                DeleteContainer<ContainerDeleteEvent>>;
+                                DeleteContainer<ContainerDeleteEvent>,
+                                FileCreate<FileCreateEvent>>;
 
 }
 
