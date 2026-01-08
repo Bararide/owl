@@ -10,8 +10,6 @@ template <typename State, typename Event> struct ContainerExists final {
       -> Result<std::shared_ptr<IKnowledgeContainer>> {
     auto container = state.container_manager_.getContainer(event.container_id);
 
-    spdlog::critical("this thread 2: {}", thread_id_to_string());
-
     if (!container) {
       return Result<std::shared_ptr<IKnowledgeContainer>>::Error(
           std::runtime_error("IKnowledgeContainer not found: " +
