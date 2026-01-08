@@ -90,7 +90,7 @@ ContainerManager::get_available_containers() {
   std::lock_guard<std::mutex> lock(containers_mutex_);
   std::vector<std::shared_ptr<IKnowledgeContainer>> result;
   for (const auto &[id, container] : containers_) {
-    if (container->is_available())
+    if (container->isAvailable())
       result.push_back(container);
   }
   return result;

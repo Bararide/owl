@@ -1,206 +1,99 @@
-#ifndef OWL_MQ_OPERATORS_RESOLVERS_RESOLVER
-#define OWL_MQ_OPERATORS_RESOLVERS_RESOLVER
+#ifndef OWL_MQ_OPERATORS_RESOLVERS_RESOLVER_HPP
+#define OWL_MQ_OPERATORS_RESOLVERS_RESOLVER_HPP
 
 #include <concepts>
 #include <functional>
 #include <infrastructure/result.hpp>
+#include <memory>
 #include <tuple>
 #include <type_traits>
 
 namespace owl {
 
-// ============================================================================
-// Концепты для type-safe резолверов
-// ============================================================================
+template <typename T, typename Err = std::runtime_error>
+using Result = core::Result<T, Err>;
 
-template <typename R, typename State, typename Event>
+template <typename R, typename State, typename Event, typename Value,
+          typename Err>
 concept BasicResolver = requires(R r, State &s, const Event &e) {
-  {
-    r(s, e)
-  } -> std::same_as<
-        core::Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error>>;
+  { r(s, e) } -> std::same_as<Result<Value, Err>>;
 };
 
-template <typename R, typename State, typename Event>
-concept ResolverValidator =
-    requires(R r, State &s, const std::shared_ptr<IKnowledgeContainer> &c,
-             const Event &e) {
-      { r(s, c, e) } -> std::same_as<core::Result<void, std::runtime_error>>;
+template <typename R, typename State, typename Event, typename Value,
+          typename Err>
+concept ValidatorResolver =
+    requires(R r, State &s, const Value &v, const Event &e) {
+      { r(s, v, e) } -> std::same_as<Result<void, Err>>;
     };
 
-template <typename R, typename State, typename Event>
-concept Transformer = requires(R r, State &s,
-                               const std::shared_ptr<IKnowledgeContainer> &c,
-                               const Event &e) {
-  {
-    r(s, c, e)
-  } -> std::same_as<
-        core::Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error>>;
+template <typename R, typename State, typename Event, typename Value,
+          typename Err>
+concept Transformer = requires(R r, State &s, Value &v, const Event &e) {
+  { r(s, v, e) } -> std::same_as<Result<Value, Err>>;
 };
 
-// ============================================================================
-// Базовые резолверы
-// ============================================================================
-
-template <typename State, typename Event>
-auto containerExistsResolver(State &state, const Event &event)
-    -> core::Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error> {
-
-  const auto [container_id, user_id] = event;
-  auto container =
-      state.container_manager_.getIKnowledgeContainer(container_id);
-
-  if (!container) {
-    return core::
-        Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error>::Error(
-            std::runtime_error("IKnowledgeContainer not found: " +
-                               container_id));
-  }
-
-  return core::Result<std::shared_ptr<IKnowledgeContainer>,
-                      std::runtime_error>::Ok(container);
-}
-
-template <typename State, typename Event>
-auto containerOwnershipResolver(State &state, const Event &event)
-    -> core::Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error> {
-
-  const auto [container_id, user_id] = event;
-
-  return containerExistsResolver(state, event)
-      .and_then([&](auto container)
-                    -> core::Result<std::shared_ptr<IKnowledgeContainer>,
-                                    std::runtime_error> {
-        if (container->getOwner() != user_id) {
-          return core::Result<std::shared_ptr<IKnowledgeContainer>,
-                              std::runtime_error>::
-              Error(std::runtime_error("Access denied for user: " + user_id));
-        }
-        return core::Result<std::shared_ptr<IKnowledgeContainer>,
-                            std::runtime_error>::Ok(container);
-      });
-}
-
-template <typename State, typename Event>
-auto containerStatusResolver(State &state, const Event &event)
-    -> core::Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error> {
-
-  return containerOwnershipResolver(state, event)
-      .and_then([](auto container)
-                    -> core::Result<std::shared_ptr<IKnowledgeContainer>,
-                                    std::runtime_error> {
-        if (!container->isActive()) {
-          return core::Result<std::shared_ptr<IKnowledgeContainer>,
-                              std::runtime_error>::
-              Error(std::runtime_error("IKnowledgeContainer is not active"));
-        }
-        return core::Result<std::shared_ptr<IKnowledgeContainer>,
-                            std::runtime_error>::Ok(container);
-      });
-}
-
-// ============================================================================
-// Валидаторы (работают с уже полученным контейнером)
-// ============================================================================
-
-// template <typename State, typename Event>
-// auto validateContainerPermissions(const std::string &permission) {
-//   return [permission](
-//              State &state,
-//              const std::shared_ptr<IKnowledgeContainer> &container,
-//              const Event &event) -> core::Result<void, std::runtime_error> {
-//     const auto [container_id, user_id] = event;
-
-//     if (!state.permission_manager_.check(container->getId(), user_id,
-//                                          permission)) {
-//       return core::Result<void, std::runtime_error>::Error(std::runtime_error(
-//           "Permission denied: " + permission + " for user: " + user_id));
-//     }
-
-//     return core::Result<void, std::runtime_error>::Ok();
-//   };
-// }
-
-// template <typename State, typename Event> auto validateContainerResources() {
-//   return [](State &state, const std::shared_ptr<IKnowledgeContainer> &container,
-//             const Event &event) -> core::Result<void, std::runtime_error> {
-//     if (container->getMemoryUsage() > container->getMemoryLimit() * 0.9) {
-//       return core::Result<void, std::runtime_error>::Error(
-//           std::runtime_error("IKnowledgeContainer memory limit exceeded"));
-//     }
-
-//     return core::Result<void, std::runtime_error>::Ok();
-//   };
-// }
-
-// ============================================================================
-// Композитор резолверов с поддержкой разных типов
-// ============================================================================
-
-template <typename State, typename Event, typename... Stages>
+template <typename State, typename Event, typename Value, typename Err,
+          typename... Stages>
 class ResolverChain {
   std::tuple<Stages...> stages_;
 
 public:
-  explicit ResolverChain(Stages &&...stages)
-      : stages_(std::forward<Stages>(stages)...) {}
+  using StateType = State;
+  using EventType = Event;
+  using ValueType = Value;
+  using ErrorType = Err;
 
-  auto resolve(State &state, const Event &event)
-      -> core::Result<std::shared_ptr<IKnowledgeContainer>,
-                      std::runtime_error> {
+  explicit ResolverChain(Stages... stages) : stages_(std::move(stages)...) {}
 
-    return executeChain<0>(state, event, nullptr);
+  ResolverChain(ResolverChain &&) noexcept = default;
+  ResolverChain(const ResolverChain &) = default;
+
+  auto resolve(State &state, const Event &event) const -> Result<Value, Err> {
+    return executeChain<0>(state, event, Value{});
   }
 
-  auto operator()(State &state, const Event &event) {
+  auto operator()(State &state, const Event &event) const {
     return resolve(state, event);
   }
 
-  template <typename NewStage> auto then(NewStage &&new_stage) {
+  template <typename NewStage> auto then(NewStage &&new_stage) const {
     return std::apply(
-        [&](auto &&...stages) {
-          return ResolverChain<State, Event, Stages..., NewStage>(
-              std::forward<decltype(stages)>(stages)...,
-              std::forward<NewStage>(new_stage));
+        [&](const auto &...stages) {
+          using NewStageT = std::decay_t<NewStage>;
+          return ResolverChain<State, Event, Value, Err, Stages..., NewStageT>(
+              stages..., std::forward<NewStage>(new_stage));
         },
         stages_);
   }
 
 private:
-  template <size_t Index,
-            typename CurrentResult = std::shared_ptr<IKnowledgeContainer>>
-  auto executeChain(State &state, const Event &event, CurrentResult current)
-      -> core::Result<std::shared_ptr<IKnowledgeContainer>,
-                      std::runtime_error> {
-
+  template <std::size_t Index>
+  auto executeChain(State &state, const Event &event,
+                    Value current) const -> Result<Value, Err> {
     if constexpr (Index >= sizeof...(Stages)) {
-      return core::Result<std::shared_ptr<IKnowledgeContainer>,
-                          std::runtime_error>::Ok(current);
+      return Result<Value, Err>::Ok(std::move(current));
     } else {
-      auto &stage = std::get<Index>(stages_);
-
+      const auto &stage = std::get<Index>(stages_);
       using StageType = std::decay_t<decltype(stage)>;
 
-      if constexpr (BasicResolver<StageType, State, Event>) {
+      if constexpr (BasicResolver<StageType, State, Event, Value, Err>) {
         auto result = stage(state, event);
-
-        return result.and_then([&](auto container) {
-          return executeChain<Index + 1>(state, event, container);
+        return result.and_then([&](auto &&val) {
+          return executeChain<Index + 1>(state, event,
+                                         std::forward<decltype(val)>(val));
         });
-
-      } else if constexpr (ResolverValidator<StageType, State, Event>) {
+      } else if constexpr (ValidatorResolver<StageType, State, Event, Value,
+                                             Err>) {
         auto result = stage(state, current, event);
-
-        return result.and_then(
-            [&]() { return executeChain<Index + 1>(state, event, current); });
-
-      } else if constexpr (Transformer<StageType, State, Event>) {
-        auto result = stage(state, current, event);
-
-        return result.and_then([&](auto new_container) {
-          return executeChain<Index + 1>(state, event, new_container);
+        return result.and_then([&]() {
+          return executeChain<Index + 1>(state, event, std::move(current));
         });
-
+      } else if constexpr (Transformer<StageType, State, Event, Value, Err>) {
+        auto result = stage(state, current, event);
+        return result.and_then([&](auto &&val) {
+          return executeChain<Index + 1>(state, event,
+                                         std::forward<decltype(val)>(val));
+        });
       } else {
         static_assert(!sizeof(StageType),
                       "Unsupported stage type in ResolverChain");
@@ -209,80 +102,56 @@ private:
   }
 };
 
-// ============================================================================
-// Фабричные функции для создания цепочек
-// ============================================================================
-
-template <typename State, typename Event> auto createContainerResolverChain() {
-  return ResolverChain<State, Event>(containerExistsResolver<State, Event>,
-                                     containerOwnershipResolver<State, Event>);
-}
-
-template <typename State, typename Event>
-auto createFullContainerResolverChain() {
-  return ResolverChain<State, Event>(containerExistsResolver<State, Event>,
-                                     containerOwnershipResolver<State, Event>,
-                                     containerStatusResolver<State, Event>);
-}
-
-template <typename State, typename Event>
-auto createContainerResolverChainWithPermissions(
-    const std::string &permission) {
-  return createContainerResolverChain<State, Event>().then(
-      validateContainerPermissions<State, Event>(permission));
-}
-
-// ============================================================================
-// Адаптеры для обработчиков
-// ============================================================================
-
-template <typename State, typename Event, typename Handler>
-auto withResolvers(ResolverChain<State, Event> &&chain, Handler &&handler) {
+template <typename State, typename Event, typename Value, typename Err,
+          typename... Stages, typename Handler>
+auto withResolvers(ResolverChain<State, Event, Value, Err, Stages...> chain,
+                   Handler &&handler) {
   return [chain = std::move(chain), handler = std::forward<Handler>(handler)](
              State &state, const Event &event) mutable {
-    return chain(state, event).and_then([&](auto container) {
-      return handler(state, event, container);
+    return chain(state, event).and_then([&](Value v) {
+      return handler(state, event, std::move(v));
     });
   };
 }
 
-template <typename State, typename Event, typename Handler,
-          typename ErrorHandler>
-auto withResolvers(ResolverChain<State, Event> &&chain, Handler &&handler,
-                   ErrorHandler &&error_handler) {
-
+template <typename State, typename Event, typename Value, typename Err,
+          typename... Stages, typename Handler, typename ErrorHandler>
+auto withResolvers(ResolverChain<State, Event, Value, Err, Stages...> chain,
+                   Handler &&handler, ErrorHandler &&error_handler) {
   return [chain = std::move(chain), handler = std::forward<Handler>(handler),
           error_handler = std::forward<ErrorHandler>(error_handler)](
              State &state, const Event &event) mutable {
-    return chain(state, event)
-        .and_then(
-            [&](auto container) { return handler(state, event, container); })
-        .handle([&](const auto &value) { return value; },
-                [&](const auto &error) {
-                  error_handler(state, event, error);
-                  return core::Result<
-                      typename std::invoke_result_t<
-                          Handler, State &, Event,
-                          std::shared_ptr<IKnowledgeContainer>>::value_type,
-                      std::runtime_error>::Error(error);
-                });
+    auto result = chain(state, event).and_then([&](Value v) {
+      return handler(state, event, std::move(v));
+    });
+
+    if (!result.is_ok()) {
+      error_handler(state, event, result.error());
+    }
+
+    return result;
   };
 }
 
 template <typename State, typename Event, typename Handler>
 auto composeHandler(Handler &&handler) {
   auto chain = createContainerResolverChain<State, Event>();
-  return withResolvers(std::move(chain), std::forward<Handler>(handler));
+  using Chain = decltype(chain);
+  using Value = typename Chain::ValueType;
+  using Err = typename Chain::ErrorType;
+  return withResolvers<State, Event, Value, Err>(
+      std::move(chain), std::forward<Handler>(handler));
 }
 
-template <typename State, typename Event, typename... Resolvers,
-          typename Handler>
-auto composeHandlerWithChain(ResolverChain<State, Event, Resolvers...> &&chain,
-                             Handler &&handler) {
-
-  return withResolvers(std::move(chain), std::forward<Handler>(handler));
+template <typename State, typename Event, typename Value, typename Err,
+          typename... Resolvers, typename Handler>
+auto composeHandlerWithChain(
+    ResolverChain<State, Event, Value, Err, Resolvers...> chain,
+    Handler &&handler) {
+  return withResolvers<State, Event, Value, Err>(
+      std::move(chain), std::forward<Handler>(handler));
 }
 
 } // namespace owl
 
-#endif // OWL_MQ_OPERATORS_RESOLVERS_RESOLVER
+#endif // OWL_MQ_OPERATORS_RESOLVERS_RESOLVER_HPP

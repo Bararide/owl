@@ -21,7 +21,7 @@ public:
   virtual std::vector<std::string> get_commands() const = 0;
   virtual std::map<std::string, std::string> get_labels() const = 0;
   virtual std::vector<std::string>
-  list_files(const std::string &path = "/") const = 0;
+  listFiles(const std::string &path = "/") const = 0;
   virtual std::string get_metrics() const = 0;
 
   virtual bool set_resource_limit(const std::string &resource_name,
@@ -39,7 +39,7 @@ public:
   semantic_search(const std::string &query, int limit = 10) = 0;
   virtual std::vector<std::string>
   search_files(const std::string &pattern) const = 0;
-  virtual bool is_available() const = 0;
+  virtual bool isAvailable() const = 0;
   virtual size_t get_size() const = 0;
   virtual std::string get_status() const = 0;
   virtual std::string get_data_path() const = 0;

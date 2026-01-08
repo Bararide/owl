@@ -45,7 +45,7 @@ public:
   }
 
   std::vector<std::string>
-  list_files(const std::string &virtual_path) const override {
+  listFiles(const std::string &virtual_path) const override {
     auto data_path = container_->get_container().data_path;
 
     std::string real_path = virtual_path;
@@ -57,7 +57,7 @@ public:
 
     std::vector<std::string> files;
 
-    spdlog::info("📁 list_files: FUSE='{}' -> REAL='{}'", virtual_path,
+    spdlog::info("📁 listFiles: FUSE='{}' -> REAL='{}'", virtual_path,
                  data_path.string());
 
     try {
@@ -430,7 +430,7 @@ public:
   }
 
   void initialize_search() {
-    auto files = list_files("/");
+    auto files = listFiles("/");
     size_t indexed_count = 0;
 
     for (const auto &file : files) {
@@ -662,7 +662,7 @@ public:
   }
 
   bool update_all_embeddings() override {
-    auto files = list_files(container_->get_container().data_path.string());
+    auto files = listFiles(container_->get_container().data_path.string());
     size_t updated_count = 0;
 
     for (const auto &file : files) {
@@ -703,7 +703,7 @@ public:
     return ss.str();
   }
 
-  bool is_available() const override {
+  bool isAvailable() const override {
     return container_ && container_->is_running();
   }
 
