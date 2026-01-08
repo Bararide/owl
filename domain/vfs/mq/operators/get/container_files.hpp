@@ -7,41 +7,22 @@
 namespace owl {
 
 template <typename EventSchema>
-class GetContainerFiles
-    : public EventHandlerBase<GetContainerFiles<EventSchema>, EventSchema> {
-public:
+struct GetContainerFiles
+    : EventHandlerBase<GetContainerFiles<EventSchema>, EventSchema> {
   using Base = EventHandlerBase<GetContainerFiles<EventSchema>, EventSchema>;
   using Base::Base;
 
-  void operator()(const EventSchema &event) {
-    using Value = std::shared_ptr<IKnowledgeContainer>;
-    using Err = std::runtime_error;
-
-    auto chain = createFullContainerResolverChain<State, EventSchema>();
-
-    auto handler = [this](State &state, const EventSchema &event,
-                          Value container) -> core::Result<int, Err> {
-      spdlog::critical("Обработчик работает, container: {}",
-                       container->getId());
-
-      auto files = container->listFiles("/");
-      spdlog::info("Found {} files", files.size());
-
-      return core::Result<int, Err>::Ok(static_cast<int>(files.size()));
-    };
-
-    auto wrapped = withResolvers<State, EventSchema, Value, Err>(
-        std::move(chain), std::move(handler));
-
-    auto result = wrapped(this->state_, event);
-
-    result.match(
-        [](int file_count) {
-          spdlog::info("Successfully processed {} files", file_count);
-        },
-        [](const Err &error) {
-          spdlog::error("Error in GetContainerFiles: {}", error.what());
-        });
+  void operator()(const EventSchema &e) {
+    withResolvers(createFullContainerResolverChain<State, EventSchema>(),
+                  [this](auto &, auto &, auto c) {
+                    auto files = c->listFiles("/");
+                    return core::Result<int>::Ok(files.size());
+                  })(this->state_, e)
+        .handle(
+            [](int c) { spdlog::info("Successfully processed {} files", c); },
+            [](auto &e) {
+              spdlog::error("Error in GetContainerFiles: {}", e.what());
+            });
   }
 };
 

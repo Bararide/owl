@@ -1,7 +1,7 @@
 #ifndef OWL_MQ_OPERATORS_RESOLVERS_CHECK_CONTAINER_ACTIVE
 #define OWL_MQ_OPERATORS_RESOLVERS_CHECK_CONTAINER_ACTIVE
 
-#include "resolver.hpp"
+#include "vfs/mq/operators/resolvers/resolver.hpp"
 
 namespace owl {
 

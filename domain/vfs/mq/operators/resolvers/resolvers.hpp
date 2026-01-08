@@ -1,9 +1,9 @@
 #ifndef OWL_MQ_OPERATORS_RESOLVERS_RESOLVERS
 #define OWL_MQ_OPERATORS_RESOLVERS_RESOLVERS
 
-#include "container_active.hpp"
-#include "container_exists.hpp"
-#include "container_ownership.hpp"
+#include "container/active.hpp"
+#include "container/exists.hpp"
+#include "container/ownership.hpp"
 
 namespace owl {
 
