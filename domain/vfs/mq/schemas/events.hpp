@@ -34,6 +34,7 @@ struct GetContainerFilesEvent : BaseEvent {
 };
 
 struct ContainerDeleteEvent : BaseEvent {
+  std::string user_id;
   std::string container_id;
 };
 

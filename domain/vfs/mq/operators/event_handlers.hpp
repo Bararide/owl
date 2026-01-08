@@ -2,6 +2,7 @@
 #define OWL_MQ_OPERATORS_EVENT_HANDLERS
 
 #include "vfs/mq/operators/create_container.hpp"
+#include "vfs/mq/operators/delete_container.hpp"
 #include "vfs/mq/operators/get_container_files.hpp"
 #include "vfs/mq/schemas/events.hpp"
 
@@ -9,7 +10,8 @@ namespace owl {
 
 using Operators = EventHandlers<GetContainerFiles<GetContainerFilesEvent>,
                                 GetContainerFiles<SemanticSearchEvent>,
-                                CreateContainer<ContainerCreateEvent>>;
+                                CreateContainer<ContainerCreateEvent>,
+                                DeleteContainer<ContainerDeleteEvent>>;
 
 }
 

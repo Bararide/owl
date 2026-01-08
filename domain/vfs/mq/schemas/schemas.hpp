@@ -75,6 +75,7 @@ struct ContainerStopSchema {
 
 struct ContainerDeleteSchema {
   std::string request_id;
+  std::string user_id;
   std::string container_id;
 };
 
@@ -97,6 +98,7 @@ BOOST_HANA_ADAPT_STRUCT(owl::SemanticSearchSchema, request_id, query, limit,
 BOOST_HANA_ADAPT_STRUCT(owl::SemanticSearchGlobalSchema, request_id, query,
                         limit);
 BOOST_HANA_ADAPT_STRUCT(owl::ContainerStopSchema, request_id, container_id);
-BOOST_HANA_ADAPT_STRUCT(owl::ContainerDeleteSchema, request_id, container_id);
+BOOST_HANA_ADAPT_STRUCT(owl::ContainerDeleteSchema, request_id, user_id,
+                        container_id);
 
 #endif // OWL_MQ_SCHEMAS
