@@ -8,6 +8,12 @@
 
 namespace owl {
 
+inline std::string thread_id_to_string() {
+    std::stringstream ss;
+    ss << std::this_thread::get_id();
+    return ss.str();
+}
+
 template <typename Derived, typename EventSchema> class EventHandlerBase {
 public:
   using StateType = State;
@@ -117,6 +123,7 @@ public:
   }
 
   template <typename Event> void dispatch(const Event &event) {
+    spdlog::critical("this thread 1: {}", thread_id_to_string());
     loop_->post([this, event]() {
       std::apply(
           [&event](auto &...handlers) {
