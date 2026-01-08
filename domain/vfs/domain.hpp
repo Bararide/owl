@@ -4,7 +4,6 @@
 #include <fuse3/fuse.h>
 
 #include "container_manager.hpp"
-#include "env/cppenv.hpp"
 #include <infrastructure/event.hpp>
 #include <infrastructure/result.hpp>
 #include <memory/container_builder.hpp>
@@ -17,8 +16,6 @@ constexpr static auto kModelPath =
 namespace owl {
 
 struct State {
-  cppenv::EnvManager env_manager_;
-
   core::Event events_;
 
   ContainerManager container_manager_;
