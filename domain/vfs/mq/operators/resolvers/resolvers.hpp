@@ -92,6 +92,9 @@ using CreateContainerHandler = ContainerHandlerImpl<Derived, EventSchema, bool, 
 template <typename Derived, typename EventSchema>
 using CreateFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<IKnowledgeContainer>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileNotExists<State, EventSchema>>;
 
+template <typename Derived, typename EventSchema>
+using DeleteFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<IKnowledgeContainer>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileExists<State, EventSchema>>;
+
 } // namespace owl
 
 #endif // OWL_VFS_CORE_CONTAINER_HANDLER_HPP
