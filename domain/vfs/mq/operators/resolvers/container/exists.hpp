@@ -7,17 +7,29 @@ namespace owl {
 
 template <typename State, typename Event> struct ContainerExists {
   auto operator()(State &state, const Event &event) const
-      -> Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error> {
+      -> Result<std::shared_ptr<IKnowledgeContainer>> {
     auto container = state.container_manager_.getContainer(event.container_id);
 
     if (!container) {
-      return Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error>::
-          Error(std::runtime_error("IKnowledgeContainer not found: " +
-                                   event.container_id));
+      return Result<std::shared_ptr<IKnowledgeContainer>>::Error(
+          std::runtime_error("IKnowledgeContainer not found: " +
+                             event.container_id));
     }
 
-    return Result<std::shared_ptr<IKnowledgeContainer>, std::runtime_error>::Ok(
-        container);
+    return Result<std::shared_ptr<IKnowledgeContainer>>::Ok(container);
+  }
+};
+
+template <typename State, typename Event> struct ContainerNotExists {
+  auto operator()(State &state, const Event &event) const -> Result<bool> {
+    auto container = state.container_manager_.getContainer(event.container_id);
+
+    if (container) {
+      return Result<bool>::Error(std::runtime_error(
+          "Container already exists: " + event.container_id));
+    }
+
+    return Result<bool>::Ok(true);
   }
 };
 

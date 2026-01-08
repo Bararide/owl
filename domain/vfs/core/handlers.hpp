@@ -7,6 +7,8 @@ namespace owl {
 
 template <typename Derived, typename EventSchema> class EventHandlerBase {
 public:
+  using StateType = State;
+  
   explicit EventHandlerBase(State &state) : state_{state} {
     state_.events_.Subscribe<EventSchema>([this](const EventSchema &event) {
       static_cast<Derived &>(*this)(event);

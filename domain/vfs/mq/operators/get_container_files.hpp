@@ -1,29 +1,27 @@
 #ifndef OWL_VFS_CORE_OPERATORS_GET_CONTAINER_FILES_HPP
 #define OWL_VFS_CORE_OPERATORS_GET_CONTAINER_FILES_HPP
 
-#include "vfs/core/handlers.hpp"
 #include "vfs/mq/operators/resolvers/resolvers.hpp"
 
 namespace owl {
 
 template <typename EventSchema>
 struct GetContainerFiles
-    : EventHandlerBase<GetContainerFiles<EventSchema>, EventSchema> {
-  using Base = EventHandlerBase<GetContainerFiles<EventSchema>, EventSchema>;
+    : ExistingContainerHandler<GetContainerFiles<EventSchema>, EventSchema> {
+  using Base =
+      ExistingContainerHandler<GetContainerFiles<EventSchema>, EventSchema>;
   using Base::Base;
 
-  void operator()(const EventSchema &e) {
-    processContainer(this->state_, e,
-                     [](auto &, auto &, auto c) {
-                       auto files = c->listFiles("/");
-                       return core::Result<int>::Ok(files.size());
-                     })
-        .handle(
-            [](int c) { spdlog::info("Processed {} files", c); },
-            [](auto &e) { spdlog::error("GetContainerFiles: {}", e.what()); });
+  void operator()(const EventSchema &event) {
+    this->process(event, [](auto &, auto &, auto c) {
+      return core::Result<int>::Ok(c->listFiles("/").size());
+    });
   }
+
+private:
+  void onSuccess(int count) { spdlog::info("Files: {}", count); }
 };
 
 } // namespace owl
 
-#endif // OWL_VFS_CORE_OPERATORS_GET_CONTAINER_FILES_HPP
+#endif

@@ -1,49 +1,105 @@
-#ifndef OWL_MQ_OPERATORS_RESOLVERS_RESOLVERS
-#define OWL_MQ_OPERATORS_RESOLVERS_RESOLVERS
+#ifndef OWL_VFS_CORE_CONTAINER_HANDLER_HPP
+#define OWL_VFS_CORE_CONTAINER_HANDLER_HPP
 
-#include "container/active.hpp"
-#include "container/exists.hpp"
-#include "container/ownership.hpp"
+#include "vfs/core/handlers.hpp"
+#include "vfs/mq/operators/resolvers/container/active.hpp"
+#include "vfs/mq/operators/resolvers/container/exists.hpp"
+#include "vfs/mq/operators/resolvers/container/ownership.hpp"
+#include "vfs/mq/operators/resolvers/resolver.hpp"
+#include <type_traits>
 
 namespace owl {
 
-template <typename State, typename Event>
-using ContainerResolverChain =
-    ResolverChain<State, Event, std::shared_ptr<IKnowledgeContainer>,
-                  std::runtime_error, ContainerExists<State, Event>,
-                  ContainerOwnership<State, Event>>;
+template <typename Derived, typename EventSchema, typename ValueType,
+          typename... Resolvers>
+class ContainerHandlerImpl : public EventHandlerBase<Derived, EventSchema> {
+protected:
+  using Base = EventHandlerBase<Derived, EventSchema>;
+  using Base::Base;
 
-template <typename State, typename Event>
-using FullContainerResolverChain =
-    ResolverChain<State, Event, std::shared_ptr<IKnowledgeContainer>,
-                  std::runtime_error, ContainerExists<State, Event>,
-                  ContainerOwnership<State, Event>,
-                  ContainerIsActive<State, Event>>;
+  template <typename Handler>
+  auto process(const EventSchema &event, Handler &&handler) {
+    auto chain =
+        ResolverChain<State, EventSchema,
+                      ValueType,
+                      std::runtime_error, Resolvers...>{Resolvers{}...};
 
-template <typename State, typename Event> inline auto resolveContainer() {
-  return ContainerResolverChain<State, Event>(
-      ContainerExists<State, Event>{}, ContainerOwnership<State, Event>{});
-}
+    auto result = withResolvers(
+        std::move(chain), std::forward<Handler>(handler))(this->state_, event);
 
-template <typename State, typename Event> inline auto resolveFullContainer() {
-  return FullContainerResolverChain<State, Event>(
-      ContainerExists<State, Event>{}, ContainerOwnership<State, Event>{},
-      ContainerIsActive<State, Event>{});
-}
+    handleResult(result);
 
-template <typename State, typename Event, typename Handler>
-inline auto processContainer(State &state, const Event &event,
-                             Handler &&handler) {
-  return makeContainerHandler<State, Event>(std::forward<Handler>(handler))(
-      state, event);
-}
+    return result;
+  }
 
-template <typename State, typename Event, typename Handler>
-inline auto makeContainerHandler(Handler &&handler) {
-  return withResolvers(resolveFullContainer<State, Event>(),
-                       std::forward<Handler>(handler));
-}
+private:
+  friend Derived;
+
+  template <typename T, typename R>
+  static constexpr bool has_on_success = requires(T t, R r) {
+    { t.onSuccess(r) } -> std::same_as<void>;
+  };
+
+  template <typename T, typename E>
+  static constexpr bool has_on_error = requires(T t, E e) {
+    { t.onError(e) } -> std::same_as<void>;
+  };
+
+  template <typename Value>
+  auto callOnSuccess(Value &&value, std::true_type /* has_method */) {
+    static_cast<Derived *>(this)->onSuccess(std::forward<Value>(value));
+  }
+
+  template <typename Value>
+  auto callOnSuccess(Value &&, std::false_type /* has_method */) {}
+
+  template <typename Error>
+  auto callOnError(Error &&error, std::true_type /* has_method */) {
+    static_cast<Derived *>(this)->onError(std::forward<Error>(error));
+  }
+
+  template <typename Error>
+  auto callOnError(Error &&error, std::false_type /* has_method */) {
+    spdlog::error("Error: {}", error.what());
+  }
+
+  template <typename ResultType> void handleResult(ResultType &result) {
+    result.match(
+        [this](auto &&value) {
+          using ValueTypeL = decltype(value);
+          callOnSuccess(
+              std::forward<ValueTypeL>(value),
+              std::bool_constant<has_on_success<Derived, ValueTypeL>>{});
+        },
+        [this](auto &&error) {
+          using ErrorType = decltype(error);
+          callOnError(std::forward<ErrorType>(error),
+                      std::bool_constant<has_on_error<Derived, ErrorType>>{});
+        });
+  }
+};
+
+template <typename Derived, typename EventSchema>
+using ExistingContainerHandler =
+    ContainerHandlerImpl<Derived, EventSchema,
+                         std::shared_ptr<IKnowledgeContainer>,
+                         ContainerExists<State, EventSchema>,
+                         ContainerOwnership<State, EventSchema>>;
+
+template <typename Derived, typename EventSchema>
+using FullContainerHandler =
+    ContainerHandlerImpl<Derived, EventSchema,
+                         std::shared_ptr<IKnowledgeContainer>,
+                         ContainerExists<State, EventSchema>,
+                         ContainerOwnership<State, EventSchema>,
+                         ContainerIsActive<State, EventSchema>>;
+
+template <typename Derived, typename EventSchema>
+using CreateContainerHandler =
+    ContainerHandlerImpl<Derived, EventSchema,
+                         bool,
+                         ContainerNotExists<State, EventSchema>>;
 
 } // namespace owl
 
-#endif // OWL_MQ_OPERATORS_RESOLVERS_RESOLVERS
+#endif // OWL_VFS_CORE_CONTAINER_HANDLER_HPP
