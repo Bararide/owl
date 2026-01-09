@@ -81,19 +81,19 @@ private:
 };
 
 template <typename Derived, typename EventSchema>
-using ExistingContainerHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>>;
+using ExistingContainerHandler = ContainerHandlerImpl<Derived, EventSchema, OssecContainerPtr, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
-using FullContainerHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>>;
+using FullContainerHandler = ContainerHandlerImpl<Derived, EventSchema, OssecContainerPtr, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
 using CreateContainerHandler = ContainerHandlerImpl<Derived, EventSchema, bool, ContainerNotExists<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
-using CreateFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileNotExists<State, EventSchema>>;
+using CreateFileHandler = ContainerHandlerImpl<Derived, EventSchema, OssecContainerPtr, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileNotExists<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
-using DeleteFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileExists<State, EventSchema>>;
+using DeleteFileHandler = ContainerHandlerImpl<Derived, EventSchema, OssecContainerPtr, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileExists<State, EventSchema>>;
 
 } // namespace owl
 

@@ -6,16 +6,16 @@
 namespace owl {
 
 template <typename State, typename Event> struct ContainerExists final {
-  auto operator()(State &state, const Event &event) const
-      -> Result<std::shared_ptr<OssecContainer<>>> {
+  auto operator()(State &state,
+                  const Event &event) const -> Result<OssecContainerPtr> {
     auto container = state.container_manager_.getContainer(event.container_id);
 
     if (!container.is_ok()) {
-      return Result<std::shared_ptr<OssecContainer<>>>::Error(std::runtime_error(
+      return Result<OssecContainerPtr>::Error(std::runtime_error(
           "OssecContainer<> not found: " + event.container_id));
     }
 
-    return Result<std::shared_ptr<OssecContainer<>>>::Ok(container);
+    return Result<OssecContainerPtr>::Ok(container);
   }
 };
 

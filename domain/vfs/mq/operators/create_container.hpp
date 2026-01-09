@@ -15,18 +15,18 @@ struct CreateContainer final
   void operator()(const EventSchema &e) {
     this->process(e, [this](auto &s, auto &ev, bool not_exist) {
       if (not_exist) {
-        return core::Result<std::shared_ptr<OssecContainer<>>>::Ok(
+        return core::Result<OssecContainerPtr>::Ok(
             {} // s.container_manager_.createContainer(ev.container_id)
         );
       }
 
-      return core::Result<std::shared_ptr<OssecContainer<>>>::Error(
+      return core::Result<OssecContainerPtr>::Error(
           std::runtime_error("Container exists"));
     });
   }
 
 private:
-  void onSuccess(std::shared_ptr<OssecContainer<>> container) {
+  void onSuccess(OssecContainerPtr container) {
     spdlog::info("Create success");
   }
 };

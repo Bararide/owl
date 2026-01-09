@@ -6,7 +6,7 @@
 namespace owl {
 
 template <typename State, typename Event> struct ContainerIsActive {
-  auto operator()(State &, const std::shared_ptr<OssecContainer<>> &container,
+  auto operator()(State &, const OssecContainerPtr &container,
                   const Event &) const -> Result<void, std::runtime_error> {
     if (!container->isAvailable()) {
       return Result<void, std::runtime_error>::Error(
