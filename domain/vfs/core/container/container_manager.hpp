@@ -98,8 +98,11 @@ public:
     for (const auto &kv : containers_) {
       auto labels = kv.second->getLabels();
       auto it = labels.find(key);
-      if (it == labels.end())
+
+      if (it == labels.end()) {
         continue;
+      }
+
       if (value.empty() || it->second == value) {
         out.push_back(kv.second);
       }
@@ -114,6 +117,7 @@ public:
       auto c = kv.second->getCommands();
       cmds.insert(cmds.end(), c.begin(), c.end());
     }
+
     return cmds;
   }
 
@@ -126,8 +130,9 @@ public:
     std::lock_guard lock(mutex_);
     std::size_t count = 0;
     for (const auto &kv : containers_) {
-      if (kv.second->isAvailable())
+      if (kv.second->isAvailable()) {
         ++count;
+      }
     }
     return count;
   }

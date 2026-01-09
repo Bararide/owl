@@ -261,8 +261,10 @@ public:
 
     try {
       for (const auto &entry : fs::recursive_directory_iterator(data_path)) {
-        if (!entry.is_regular_file())
+        if (!entry.is_regular_file()) {
           continue;
+        }
+
         std::string filename = entry.path().filename().string();
         if (filename.find(pattern) != std::string::npos) {
           results.push_back(fs::relative(entry.path(), data_path).string());
@@ -398,7 +400,6 @@ public:
 
     auto r = search_->enhancedSemanticSearch(query, limit);
     if (!r.is_ok()) {
-      // fallback на semanticSearch
       return semanticSearch(query, limit);
     }
 
@@ -420,8 +421,9 @@ public:
       auto predictions = search_->predictNextFiles();
       if (predictions.is_ok()) {
         auto v = predictions.value();
-        if ((int)v.size() > limit)
+        if ((int)v.size() > limit) {
           v.resize(limit);
+        }
         return core::Result<std::vector<std::string>, Error>::Ok(std::move(v));
       }
       return core::Result<std::vector<std::string>, Error>::Error(
@@ -513,12 +515,15 @@ public:
 
   std::string getStatus() const {
     auto native_status = native_ ? native_->is_running() : false;
-    if (!native_)
+    if (!native_) {
       return "invalid";
-    if (native_status)
+    }
+    if (native_status) {
       return "running";
-    if (native_->is_owned())
+    }
+    if (native_->is_owned()) {
       return "stopped";
+    }
     return "unknown";
   }
 
