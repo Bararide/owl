@@ -4,121 +4,124 @@
 #include "container_base.hpp"
 #include <infrastructure/result.hpp>
 
+#include <algorithm>
 #include <map>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
 
 namespace owl {
 
 template <typename ContainerT> class ContainerManager {
 public:
   using ContainerPtr = std::shared_ptr<ContainerT>;
+  using ContainerMap = std::map<std::string, ContainerPtr>;
+  using ContainerList = std::vector<ContainerPtr>;
   using Error = std::runtime_error;
 
   ContainerManager() = default;
 
   ContainerManager(const ContainerManager &) = delete;
   ContainerManager &operator=(const ContainerManager &) = delete;
+  ContainerManager(ContainerManager &&) = default;
+  ContainerManager &operator=(ContainerManager &&) = default;
 
   core::Result<void> registerContainer(ContainerPtr container) {
-    if (!container) {
-      return core::Result<void, Error>::Error(Error("null container"));
+    if (!validateContainer(container)) {
+      return core::Result<void, Error>::Error(Error("Invalid container"));
     }
+
     std::lock_guard lock(mutex_);
-    const auto id = container->getId();
-    auto [it, inserted] = containers_.emplace(id, std::move(container));
-    if (!inserted) {
+    const auto &id = container->getId();
+
+    if (containers_.find(id) != containers_.end()) {
       return core::Result<void, Error>::Error(
-          Error("container already registered: " + id));
+          Error("Container already registered: " + id));
     }
+
+    containers_.emplace(id, std::move(container));
     return core::Result<void, Error>::Ok();
   }
 
   core::Result<void> unregisterContainer(const std::string &id) {
-    std::lock_guard lock(mutex_);
-    auto it = containers_.find(id);
-    if (it == containers_.end()) {
-      return core::Result<void, Error>::Error(
-          Error("no such container: " + id));
+    if (!validateContainerId(id)) {
+      return core::Result<void, Error>::Error(Error("Invalid container ID"));
     }
-    containers_.erase(it);
+
+    std::lock_guard lock(mutex_);
+
+    if (!removeContainerUnsafe(id)) {
+      return core::Result<void, Error>::Error(
+          Error("No such container: " + id));
+    }
+
     return core::Result<void, Error>::Ok();
   }
 
   core::Result<ContainerPtr> getContainer(const std::string &id) const {
-    std::lock_guard lock(mutex_);
-    auto it = containers_.find(id);
-    if (it == containers_.end()) {
+    if (!validateContainerId(id)) {
       return core::Result<ContainerPtr, Error>::Error(
-          Error("no such container: " + id));
+          Error("Invalid container ID"));
     }
-    return core::Result<ContainerPtr, Error>::Ok(it->second);
+
+    std::lock_guard lock(mutex_);
+    auto container = findContainerUnsafe(id);
+
+    if (!container) {
+      return core::Result<ContainerPtr, Error>::Error(
+          Error("No such container: " + id));
+    }
+
+    return core::Result<ContainerPtr, Error>::Ok(container);
   }
 
   core::Result<void> deleteContainer(const std::string &id) {
     return unregisterContainer(id);
   }
 
-  std::vector<ContainerPtr> getAllContainers() const {
+  ContainerList getAllContainers() const {
     std::lock_guard lock(mutex_);
-    std::vector<ContainerPtr> out;
-    out.reserve(containers_.size());
-    for (const auto &kv : containers_) {
-      out.push_back(kv.second);
-    }
-    return out;
+    return filterContainersUnsafe([](const ContainerPtr &) { return true; });
   }
 
-  std::vector<ContainerPtr>
-  getContainersByOwner(const std::string &owner) const {
+  ContainerList getContainersByOwner(const std::string &owner) const {
     std::lock_guard lock(mutex_);
-    std::vector<ContainerPtr> out;
-    for (const auto &kv : containers_) {
-      if (kv.second->getOwner() == owner) {
-        out.push_back(kv.second);
-      }
-    }
-    return out;
+    return filterContainersUnsafe([&owner](const ContainerPtr &container) {
+      return container->getOwner() == owner;
+    });
   }
 
-  std::vector<ContainerPtr> getAvailableContainers() const {
+  ContainerList getAvailableContainers() const {
     std::lock_guard lock(mutex_);
-    std::vector<ContainerPtr> out;
-    for (const auto &kv : containers_) {
-      if (kv.second->isAvailable()) {
-        out.push_back(kv.second);
-      }
-    }
-    return out;
+    return filterContainersUnsafe(
+        [](const ContainerPtr &container) { return container->isAvailable(); });
   }
 
-  std::vector<ContainerPtr>
-  findContainersByLabel(const std::string &key,
-                        const std::string &value = "") const {
+  ContainerList findContainersByLabel(const std::string &key,
+                                      const std::string &value = "") const {
     std::lock_guard lock(mutex_);
-    std::vector<ContainerPtr> out;
-    for (const auto &kv : containers_) {
-      auto labels = kv.second->getLabels();
-      auto it = labels.find(key);
+    return filterContainersUnsafe(
+        [&key, &value](const ContainerPtr &container) {
+          auto labels = container->getLabels();
+          auto it = labels.find(key);
 
-      if (it == labels.end()) {
-        continue;
-      }
+          if (it == labels.end()) {
+            return false;
+          }
 
-      if (value.empty() || it->second == value) {
-        out.push_back(kv.second);
-      }
-    }
-    return out;
+          return value.empty() || it->second == value;
+        });
   }
 
   std::vector<std::string> getCommands() const {
     std::lock_guard lock(mutex_);
-    std::vector<std::string> cmds;
-    for (const auto &kv : containers_) {
-      auto c = kv.second->getCommands();
-      cmds.insert(cmds.end(), c.begin(), c.end());
+    std::vector<std::string> result;
+    for (const auto &[id, container] : containers_) {
+      auto commands = container->getCommands();
+      result.insert(result.end(), commands.begin(), commands.end());
     }
-
-    return cmds;
+    return result;
   }
 
   std::size_t getContainerCount() const {
@@ -128,13 +131,9 @@ public:
 
   std::size_t getAvailableContainerCount() const {
     std::lock_guard lock(mutex_);
-    std::size_t count = 0;
-    for (const auto &kv : containers_) {
-      if (kv.second->isAvailable()) {
-        ++count;
-      }
-    }
-    return count;
+    return std::count_if(
+        containers_.begin(), containers_.end(),
+        [](const auto &pair) { return pair.second->isAvailable(); });
   }
 
   void clear() {
@@ -142,9 +141,49 @@ public:
     containers_.clear();
   }
 
+  bool contains(const std::string &id) const {
+    if (!validateContainerId(id)) {
+      return false;
+    }
+
+    std::lock_guard lock(mutex_);
+    return containers_.find(id) != containers_.end();
+  }
+
+  bool isEmpty() const {
+    std::lock_guard lock(mutex_);
+    return containers_.empty();
+  }
+
 private:
+  bool validateContainer(const ContainerPtr &container) const {
+    return container != nullptr && !container->getId().empty();
+  }
+
+  bool validateContainerId(const std::string &id) const { return !id.empty(); }
+
+  ContainerPtr findContainerUnsafe(const std::string &id) const {
+    auto it = containers_.find(id);
+    return it != containers_.end() ? it->second : nullptr;
+  }
+
+  bool removeContainerUnsafe(const std::string &id) {
+    return containers_.erase(id) > 0;
+  }
+
+  template <typename Predicate>
+  ContainerList filterContainersUnsafe(Predicate predicate) const {
+    ContainerList result;
+    for (const auto &[id, container] : containers_) {
+      if (predicate(container)) {
+        result.push_back(container);
+      }
+    }
+    return result;
+  }
+
   mutable std::mutex mutex_;
-  std::map<std::string, ContainerPtr> containers_;
+  ContainerMap containers_;
 };
 
 } // namespace owl
