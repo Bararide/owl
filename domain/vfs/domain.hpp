@@ -16,6 +16,10 @@ constexpr static auto kModelPath =
 
 namespace owl {
 
+auto pre = env::prefix("OWL");
+
+const auto kBaseContainerPath = pre.register_variable<std::filesystem::path>("BASE_CONTAINERS_PATH");
+
 struct State {
   core::Event events_;
 
