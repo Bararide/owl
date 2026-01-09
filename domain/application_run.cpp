@@ -12,9 +12,15 @@ int Application::run(int argc, char *argv[]) {
     return -1;
   }
 
-
+  setupFileSystem(parse_dir_result.value());
 
   return fs_observer_.run(argc, argv);
+}
+
+void Application::setupFileSystem(const std::vector<ContainerMetadata>& containers) {
+    for(auto &a : containers) {
+        spdlog::critical("ID: {}", a.container_id);
+    }
 }
 
 void Application::stop() {}
