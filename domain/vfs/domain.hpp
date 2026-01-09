@@ -3,37 +3,31 @@
 
 #include <fuse3/fuse.h>
 
-#include "container_manager.hpp"
+#include "vfs/core/container/container_manager.hpp"
+#include "vfs/core/container/ossec_container.hpp"
 #include "vfs/fs/processor/processor_base.hpp"
+
 #include <infrastructure/event.hpp>
-#include <infrastructure/result.hpp>
 #include <libenvpp/env.hpp>
-#include <memory/container_builder.hpp>
 #include <semantic/semantic_chunker.hpp>
+#include <spdlog/spdlog.h>
 
 namespace owl {
 
-// auto pre = env::prefix("OWL");
+constexpr auto kBaseContainerPath = "/home/bararide/.vectorfs/containers/";
 
-const auto kBaseContainerPath = "/home/bararide/.vectorfs/containers/";
-
-const auto kModelPath = "/home/bararide/code/models/crawl-300d-2M-subword/crawl-300d-2M-subword.bin";
-
-// const auto kParsedAndValidatedPre = pre.parse_and_validate();
+constexpr auto kModelPath = "/home/bararide/code/models/crawl-300d-2M-subword/"
+                            "crawl-300d-2M-subword.bin";
 
 struct State {
   core::Event events_;
 
-  ContainerManager container_manager_;
-  EmbedderManager<> embedder_manager_{kModelPath};
+  using OssecContainerT = OssecContainer<EmbedderManager<>, chunkees::Search>;
+  ContainerManager<OssecContainerT> container_manager_;
 
-  chunkees::Search search_{embedder_manager_};
-  semantic::SemanticChunker<> text_chunker_{embedder_manager_};
-
-  // std::shared_ptr<chunkees::Search> search_;
-  // ContainerManager container_manager_;
-  // EmbedderManager<> embedder_manager_;
-  // semantic::SemanticChunker<> text_chunker_;
+  EmbedderManager<> global_embedder_{kModelPath};
+  chunkees::Search global_search_{global_embedder_};
+  semantic::SemanticChunker<> text_chunker_{global_embedder_};
 };
 
 } // namespace owl

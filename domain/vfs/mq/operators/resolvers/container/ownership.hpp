@@ -7,8 +7,7 @@ namespace owl {
 
 template <typename State, typename Event> struct ContainerOwnership {
   auto
-  operator()(State &state,
-             const std::shared_ptr<IKnowledgeContainer> &container,
+  operator()(State &state, const std::shared_ptr<OssecContainer<>> &container,
              const Event &event) const -> Result<void, std::runtime_error> {
     if (container->getOwner() != event.user_id) {
       return Result<void, std::runtime_error>::Error(

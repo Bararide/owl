@@ -6,12 +6,11 @@
 namespace owl {
 
 template <typename State, typename Event> struct ContainerIsActive {
-  auto operator()(State &,
-                  const std::shared_ptr<IKnowledgeContainer> &container,
+  auto operator()(State &, const std::shared_ptr<OssecContainer<>> &container,
                   const Event &) const -> Result<void, std::runtime_error> {
     if (!container->isAvailable()) {
       return Result<void, std::runtime_error>::Error(
-          std::runtime_error("IKnowledgeContainer is not active"));
+          std::runtime_error("OssecContainer<> is not active"));
     }
     return Result<void, std::runtime_error>::Ok();
   }

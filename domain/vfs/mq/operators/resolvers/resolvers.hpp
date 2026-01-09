@@ -2,12 +2,12 @@
 #define OWL_VFS_CORE_CONTAINER_HANDLER_HPP
 
 #include "vfs/core/handlers.hpp"
+#include "vfs/core/container/ossec_container.hpp"
 #include "vfs/mq/operators/resolvers/container/active.hpp"
 #include "vfs/mq/operators/resolvers/container/exists.hpp"
 #include "vfs/mq/operators/resolvers/container/ownership.hpp"
 #include "vfs/mq/operators/resolvers/file/exists.hpp"
 #include "vfs/mq/operators/resolvers/resolver.hpp"
-#include <type_traits>
 
 namespace owl {
 
@@ -81,19 +81,19 @@ private:
 };
 
 template <typename Derived, typename EventSchema>
-using ExistingContainerHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<IKnowledgeContainer>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>>;
+using ExistingContainerHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
-using FullContainerHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<IKnowledgeContainer>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>>;
+using FullContainerHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
 using CreateContainerHandler = ContainerHandlerImpl<Derived, EventSchema, bool, ContainerNotExists<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
-using CreateFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<IKnowledgeContainer>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileNotExists<State, EventSchema>>;
+using CreateFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileNotExists<State, EventSchema>>;
 
 template <typename Derived, typename EventSchema>
-using DeleteFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<IKnowledgeContainer>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileExists<State, EventSchema>>;
+using DeleteFileHandler = ContainerHandlerImpl<Derived, EventSchema, std::shared_ptr<OssecContainer<>>, ContainerExists<State, EventSchema>, ContainerOwnership<State, EventSchema>, ContainerIsActive<State, EventSchema>, FileExists<State, EventSchema>>;
 
 } // namespace owl
 

@@ -14,7 +14,7 @@ struct GetContainerFiles final
 
   void operator()(const EventSchema &event) {
     this->process(event, [](auto &, auto &, auto c) {
-      return core::Result<int>::Ok(c->listFiles("/").size());
+      return core::Result<int>::Ok(c->listFiles("/").unwrap().size());
     });
   }
 
