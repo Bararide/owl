@@ -7,12 +7,12 @@ int Application::run(int argc, char *argv[]) {
 
   auto parse_dir_result = fs_processor_.parseBaseDir();
 
-  if (!parse_dir_result.is_ok()) {
+  if (parse_dir_result.size() == 0) {
     spdlog::critical("Don't correct parse base dir");
     return -1;
   }
 
-  setupFileSystem(parse_dir_result.value());
+  setupFileSystem(parse_dir_result);
 
   return fs_observer_.run(argc, argv);
 }

@@ -28,7 +28,7 @@ private:
   MQObserver<> mq_observer_;
   Operators event_handlers_;
 
-  FSProcessor fs_processor_{kParsedAndValidatedPre.get(kBaseContainerPath).value()};
+  FSProcessor fs_processor_{kBaseContainerPath};
 };
 
 } // namespace owl

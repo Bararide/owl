@@ -13,21 +13,19 @@
 
 namespace owl {
 
-auto pre = env::prefix("OWL");
+// auto pre = env::prefix("OWL");
 
-const auto kBaseContainerPath =
-    pre.register_variable<std::string_view>("BASE_CONTAINERS_PATH");
+const auto kBaseContainerPath = "/home/bararide/.vectorfs/containers/";
 
-const auto kModelPath =
-    pre.register_variable<std::string>("FASTEXT_MODEL_PATH");
+const auto kModelPath = "/home/bararide/code/models/crawl-300d-2M-subword/crawl-300d-2M-subword.bin";
 
-const auto kParsedAndValidatedPre = pre.parse_and_validate();
+// const auto kParsedAndValidatedPre = pre.parse_and_validate();
 
 struct State {
   core::Event events_;
 
   ContainerManager container_manager_;
-  EmbedderManager<> embedder_manager_{kParsedAndValidatedPre.get(kModelPath).value()};
+  EmbedderManager<> embedder_manager_{kModelPath};
 
   chunkees::Search search_{embedder_manager_};
   semantic::SemanticChunker<> text_chunker_{embedder_manager_};

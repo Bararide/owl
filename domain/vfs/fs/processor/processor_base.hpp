@@ -9,79 +9,62 @@ namespace owl {
 class FSProcessor {
 public:
   explicit FSProcessor(const std::string_view &base_path)
-      : base_path_(base_path) {}
-
-  core::Result<std::vector<ContainerMetadata>> parseBaseDir() const {
-    return parseBaseDirImpl(base_path_);
+      : base_path_(base_path) {
+    spdlog::info("FSProcessor created with base path: {}", base_path);
   }
 
-  core::Result<std::vector<ContainerMetadata>>
-  parseDir(const std::string_view &path) const {
-    return parseBaseDirImpl(path);
+  std::vector<ContainerMetadata> parseBaseDir() const {
+    spdlog::info("parseBaseDir called for: {}", base_path_);
+
+    if (!isDirectory(base_path_)) {
+      spdlog::error("Base directory does not exist or is not a directory: {}",
+                    base_path_);
+      return {};
+    }
+
+    auto subdirs = listSubdirectories(base_path_);
+    spdlog::info("Found {} subdirectories in {}", subdirs.size(), base_path_);
+
+    std::vector<ContainerMetadata> containers;
+
+    for (const auto &subdir : subdirs) {
+      auto container_path = (fs::path(base_path_) / subdir).string();
+      spdlog::info("Processing container: {} at {}", subdir, container_path);
+
+      try {
+        auto metadata = loadContainerMetadata(container_path);
+        containers.push_back(std::move(metadata));
+        spdlog::info("Successfully loaded container: {}", subdir);
+      } catch (const std::exception &e) {
+        spdlog::warn("Failed to load container {}: {}", subdir, e.what());
+      }
+    }
+
+    spdlog::info("Loaded {}/{} containers", containers.size(), subdirs.size());
+    return containers;
   }
 
 private:
   std::string base_path_;
 
-  core::Result<std::vector<ContainerMetadata>>
-  parseBaseDirImpl(const std::string_view &path) const {
-    return checkPath(path).and_then([this, path]() {
-      return dirIsEmpty(path).and_then(
-          [this,
-           path](bool empty) -> core::Result<std::vector<ContainerMetadata>> {
-            if (empty) {
-              spdlog::info("Base directory is empty: {}", path);
-              return core::Result<std::vector<ContainerMetadata>>::Ok({});
-            }
-            return scanContainerDirectories(path);
-          });
-    });
-  }
-
-  core::Result<std::vector<ContainerMetadata>>
-  scanContainerDirectories(const std::string_view &path) const {
-    return listSubdirectories(path).and_then(
-        [this, path](std::vector<std::string> subdirs)
-            -> core::Result<std::vector<ContainerMetadata>> {
-          std::vector<ContainerMetadata> containers;
-
-          for (auto &subdir : subdirs) {
-            auto container_path = (fs::path(path) / subdir).string();
-            auto result = loadContainerMetadata(container_path);
-
-            result.match(
-                [&containers](ContainerMetadata container) {
-                  containers.push_back(std::move(container));
-                },
-                [&subdir](const std::runtime_error &error) {
-                  spdlog::warn("Failed to load container {}: {}", subdir,
-                               error.what());
-                });
-          }
-
-          return core::Result<std::vector<ContainerMetadata>>::Ok(
-              std::move(containers));
-        });
-  }
-
-  core::Result<ContainerMetadata>
+  ContainerMetadata
   loadContainerMetadata(const std::string &container_path) const {
-    return getAbsolutePath(container_path)
-        .and_then([this, container_path](const fs::path &abs_path) {
-          std::string container_id = abs_path.filename().string();
+    spdlog::info("loadContainerMetadata: {}", container_path);
 
-          return readJsonFile((abs_path / "container_config.json").string())
-              .and_then([this, container_id, &abs_path](nlohmann::json config) {
-                return createContainerMetadata(config, container_id,
-                                               abs_path.string());
-              });
-        });
-  }
+    if (!isDirectory(container_path)) {
+      throw std::runtime_error("Container path is not a directory: " +
+                               container_path);
+    }
 
-  core::Result<ContainerMetadata>
-  createContainerMetadata(const nlohmann::json &config,
-                          const std::string &container_id,
-                          const std::string &container_path) const {
+    auto abs_path = getAbsolutePath(container_path);
+    std::string container_id = abs_path.filename().string();
+
+    std::string config_path = (abs_path / "container_config.json").string();
+    if (!fileExists(config_path)) {
+      throw std::runtime_error("Config file does not exist: " + config_path);
+    }
+
+    auto config = readJsonFile(config_path);
 
     ContainerMetadata metadata;
     metadata.container_id = container_id;
@@ -100,10 +83,10 @@ private:
         {"environment", config.value("environment", "development")},
         {"type", config.value("type", "default")}};
 
-    spdlog::info("Loaded container metadata: {} (owner: {}, status: {})",
-                 metadata.container_id, metadata.owner_id, metadata.status);
+    spdlog::info("Created metadata for {}: owner={}, status={}", container_id,
+                 metadata.owner_id, metadata.status);
 
-    return core::Result<ContainerMetadata>::Ok(metadata);
+    return metadata;
   }
 };
 
