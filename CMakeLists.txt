@@ -47,6 +47,11 @@ add_subdirectory(3dparty/fastText EXCLUDE_FROM_ALL)
 
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(3dparty/spdlog EXCLUDE_FROM_ALL)
+
+if(NOT TARGET fmt::fmt)
+    message(FATAL_ERROR "fmt library not found, but required by libenvpp")
+endif()
+
 add_subdirectory(3dparty/libenvpp EXCLUDE_FROM_ALL)
 
 add_subdirectory(lib)
@@ -75,7 +80,17 @@ target_link_libraries(owl domain)
 target_link_libraries(owl ossec)
 target_link_libraries(owl chunkees)
 target_link_libraries(owl cppcore)
-target_link_libraries(owl libenvpp)
+
+target_link_libraries(owl fmt::fmt)
+
+if(TARGET libenvpp)
+    target_link_libraries(owl libenvpp)
+elseif(TARGET libenvpp::libenvpp)
+    target_link_libraries(owl libenvpp::libenvpp)
+else()
+    message(FATAL_ERROR "libenvpp target not found")
+endif()
+
 target_link_libraries(owl ${FUSE3_LIBRARIES})
 target_link_libraries(owl sentencepiece)
 target_link_libraries(owl fasttext-shared)
@@ -83,7 +98,6 @@ target_link_libraries(owl spdlog)
 target_link_libraries(owl ${JSONCPP_LIBRARIES})
 target_link_libraries(owl pistache)
 target_link_libraries(owl Boost::url)
-target_link_libraries(owl fmt::fmt)
 target_link_libraries(owl ${LZ4_LIBRARIES})
 target_link_libraries(owl OpenSSL::SSL OpenSSL::Crypto)
 target_link_libraries(owl ${ZMQ_LIBRARIES})
