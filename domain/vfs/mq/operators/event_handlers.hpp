@@ -7,7 +7,7 @@
 #include "vfs/mq/operators/file_create.hpp"
 #include "vfs/mq/operators/file_delete.hpp"
 #include "vfs/mq/operators/get_container_files.hpp"
-#include "vfs/mq/schemas/events.hpp"
+#include "vfs/core/schemas/events.hpp"
 
 namespace owl {
 

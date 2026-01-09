@@ -1,5 +1,5 @@
-#ifndef OWL_MQ_SCHEMAS
-#define OWL_MQ_SCHEMAS
+#ifndef OWL_VFS_CORE_SCHEMAS
+#define OWL_VFS_CORE_SCHEMAS
 
 #include <boost/hana.hpp>
 #include <boost/preprocessor.hpp>
@@ -101,4 +101,4 @@ BOOST_HANA_ADAPT_STRUCT(owl::ContainerStopSchema, request_id, container_id);
 BOOST_HANA_ADAPT_STRUCT(owl::ContainerDeleteSchema, request_id, user_id,
                         container_id);
 
-#endif // OWL_MQ_SCHEMAS
+#endif // OWL_VFS_CORE_SCHEMAS

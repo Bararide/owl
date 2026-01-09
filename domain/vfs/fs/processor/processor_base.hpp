@@ -2,20 +2,9 @@
 #define OWL_FS_PROCESSOR_PROCESSOR_BASE
 
 #include "utils.hpp"
+#include "vfs/core/schemas/filesystem_schemas.hpp"
 
 namespace owl {
-
-struct ContainerMetadata {
-  std::string container_id;
-  std::string owner_id;
-  std::string status;
-  std::string data_path;
-  std::vector<std::string> commands;
-  std::map<std::string, std::string> labels;
-  size_t memory_limit = 0;
-  size_t storage_quota = 0;
-  size_t file_limit = 0;
-};
 
 class FSProcessor {
 public:

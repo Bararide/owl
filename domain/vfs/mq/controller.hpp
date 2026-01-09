@@ -3,6 +3,7 @@
 
 #include "validator.hpp"
 #include "vfs/domain.hpp"
+#include "vfs/core/schemas/schemas.hpp"
 
 namespace owl {
 

@@ -1,8 +1,7 @@
 #ifndef OWL_MQ_CONTROLLERS_SEMANTIC_SEARCH
 #define OWL_MQ_CONTROLLERS_SEMANTIC_SEARCH
 
-#include "../controller.hpp"
-#include "../schemas/events.hpp"
+#include "vfs/mq/controller.hpp"
 
 namespace owl {
 

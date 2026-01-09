@@ -1,8 +1,7 @@
 #ifndef OWL_MQ_CONTROLLERS_FILE_DELETE
 #define OWL_MQ_CONTROLLERS_FILE_DELETE
 
-#include "../controller.hpp"
-#include "../schemas/events.hpp"
+#include "vfs/mq/controller.hpp"
 
 namespace owl {
 

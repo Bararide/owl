@@ -12,8 +12,8 @@
 #include "vfs/mq/core/dispatcher.hpp"
 #include "vfs/mq/core/routing.hpp"
 
-#include "vfs/mq/schemas/events.hpp"
-#include "vfs/mq/schemas/schemas.hpp"
+#include "vfs/core/schemas/events.hpp"
+#include "vfs/core/schemas/schemas.hpp"
 
 namespace owl {
 

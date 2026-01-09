@@ -19,6 +19,7 @@ public:
 
   int run(int argc, char *argv[]);
 
+  void setupFileSystem();
   void stop();
 
 private:

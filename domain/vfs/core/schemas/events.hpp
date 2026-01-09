@@ -1,5 +1,5 @@
-#ifndef OWL_VFS_MQ_SCHEMAS_EVENTS
-#define OWL_VFS_MQ_SCHEMAS_EVENTS
+#ifndef OWL_VFS_CORE_SCHEMAS_EVENTS
+#define OWL_VFS_CORE_SCHEMAS_EVENTS
 
 #include <boost/fusion/functional.hpp>
 #include <boost/hana.hpp>
@@ -86,4 +86,4 @@ BOOST_HANA_ADAPT_STRUCT(owl::ContainerStopEvent, container_id);
 
 BOOST_HANA_ADAPT_STRUCT(owl::BaseEvent, request_id, type, data);
 
-#endif // OWL_VFS_MQ_SCHEMAS_EVENTS
+#endif // OWL_VFS_CORE_SCHEMAS_EVENTS

@@ -1,8 +1,7 @@
 #ifndef OWL_MQ_CONTROLLERS_CONTAINER_GET_FILES
 #define OWL_MQ_CONTROLLERS_CONTAINER_GET_FILES
 
-#include "../controller.hpp"
-#include "../schemas/events.hpp"
+#include "vfs/mq/controller.hpp"
 
 namespace owl {
 
