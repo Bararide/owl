@@ -2,7 +2,6 @@
 #define OWL_API_RESPONSES_HPP
 
 #include "infrastructure/result.hpp"
-#include "instance/instance.hpp"
 #include "utils/http_helpers.hpp"
 
 #include <functional>
