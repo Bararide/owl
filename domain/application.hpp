@@ -14,11 +14,11 @@ class Application {
 public:
   Application()
       : state_{}, fs_observer_{state_}, mq_observer_{state_},
-        event_handlers_{state_} {}
+        event_handlers_{state_}, fs_processor_{kBaseContainerPath} {}
 
   int run(int argc, char *argv[]);
 
-  void setupFileSystem(const std::vector<ContainerMetadata>& containers);
+  void setupFileSystem(const std::vector<ContainerMetadata> &containers);
   void stop();
 
 private:
@@ -27,7 +27,7 @@ private:
   MQObserver<> mq_observer_;
   Operators event_handlers_;
 
-  FSProcessor fs_processor_{kBaseContainerPath};
+  FSProcessor fs_processor_;
 };
 
 } // namespace owl

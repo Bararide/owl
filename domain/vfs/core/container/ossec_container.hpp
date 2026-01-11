@@ -87,8 +87,6 @@ public:
           std::move(files));
     }
 
-    // без try/catch: let it throw? — но по требованию
-    // Result лучше поймаем и завернём:
     try {
       for (const auto &entry : fs::directory_iterator(data_path)) {
         if (entry.is_regular_file() || entry.is_directory()) {
@@ -547,6 +545,29 @@ public:
     return core::Result<void, Error>::Ok();
   }
 
+  static core::Result<std::shared_ptr<OssecContainer>>
+  createFromMetadata(const ContainerMetadata &metadata,
+                     const std::string &model_path) {
+    ossec::Container native;
+    native.container_id = metadata.container_id;
+    native.owner_id = metadata.owner_id;
+    native.data_path = metadata.data_path;
+    native.labels = metadata.labels;
+
+    native.vectorfs_config.commands = metadata.commands;
+    native.vectorfs_config.mount_namespace = metadata.container_id;
+
+    native.resources.memory_capacity = metadata.memory_limit;
+    native.resources.storage_quota = metadata.storage_quota;
+    native.resources.max_open_files = metadata.file_limit;
+
+    auto pid_container =
+        std::make_shared<ossec::PidContainer>(std::move(native));
+
+    return core::Result<std::shared_ptr<OssecContainer>>::Ok(
+        std::make_shared<OssecContainer>(std::move(pid_container), model_path));
+  }
+
   std::shared_ptr<ossec::PidContainer> getNative() const { return native_; }
 
   EmbedderT &embedder() { return embedder_manager_; }
@@ -591,7 +612,7 @@ private:
 
   void recordFileAccess(const std::string &file_path,
                         const std::string &operation) {
-    auto r = search_->recordFileAccess(file_path, operation);
+    auto r = search_->recordFileAccessImpl(file_path, operation);
     if (!r.is_ok()) {
       spdlog::debug("Failed to record file access: {} - {}", file_path,
                     r.error().what());
