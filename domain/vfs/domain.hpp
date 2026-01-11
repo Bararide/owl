@@ -20,6 +20,7 @@ constexpr auto kModelPath = "/home/bararide/code/models/crawl-300d-2M-subword/"
                             "crawl-300d-2M-subword.bin";
 
 using OssecContainerPtr = std::shared_ptr<OssecContainer<>>;
+using Containers = std::vector<ossec::Container>;
 
 struct State {
   core::Event events_;

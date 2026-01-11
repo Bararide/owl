@@ -18,7 +18,7 @@ public:
 
   int run(int argc, char *argv[]);
 
-  void setupFileSystem(const std::vector<ContainerMetadata> &containers);
+  void setupFileSystem(const Containers &containers);
   void stop();
 
 private:

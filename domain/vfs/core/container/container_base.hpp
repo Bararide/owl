@@ -7,8 +7,6 @@
 #include "vfs/core/container/base/search_container.hpp"
 #include "vfs/core/container/base/stateful_container.hpp"
 
-#include "vfs/core/schemas/filesystem_schemas.hpp"
-
 namespace owl {
 
 template <typename Derived>

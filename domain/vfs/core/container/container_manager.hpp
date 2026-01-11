@@ -27,6 +27,27 @@ public:
   ContainerManager(ContainerManager &&) = default;
   ContainerManager &operator=(ContainerManager &&) = default;
 
+  template <typename... Args>
+  core::Result<void> createAndRegisterContainer(Args &&...args) {
+    std::lock_guard lock(mutex_);
+
+    auto container = std::make_shared<ContainerT>(std::forward<Args>(args)...);
+
+    if (!validateContainer(container)) {
+      return core::Result<void, Error>::Error(Error("Invalid container"));
+    }
+
+    const auto &id = container->getId();
+
+    if (containers_.find(id) != containers_.end()) {
+      return core::Result<void, Error>::Error(
+          Error("Container already registered: " + id));
+    }
+
+    containers_.emplace(id, std::move(container));
+    return core::Result<void, Error>::Ok();
+  }
+
   core::Result<void> registerContainer(ContainerPtr container) {
     if (!validateContainer(container)) {
       return core::Result<void, Error>::Error(Error("Invalid container"));

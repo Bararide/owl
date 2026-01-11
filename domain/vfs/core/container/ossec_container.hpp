@@ -21,6 +21,8 @@
 #include "container_states.hpp"
 #include <infrastructure/result.hpp>
 
+namespace fs = std::filesystem;
+
 namespace owl {
 
 template <typename EmbedderT = EmbedderManager<>,
@@ -65,7 +67,6 @@ public:
 
   core::Result<std::vector<std::string>>
   listFiles(const std::string &virtual_path) const {
-    namespace fs = std::filesystem;
 
     auto data_path = native_->get_container().data_path;
 
@@ -123,8 +124,6 @@ public:
   }
 
   core::Result<bool> isDirectory(const std::string &virtual_path) const {
-    namespace fs = std::filesystem;
-
     auto data_path = native_->get_container().data_path;
 
     std::string real_path = virtual_path;
@@ -151,8 +150,6 @@ public:
       return core::Result<std::string, Error>::Ok(std::string{});
     }
 
-    namespace fs = std::filesystem;
-
     auto data_path = native_->get_container().data_path;
     std::string real_path = virtual_path;
     if (!real_path.empty() && real_path.front() == '/') {
@@ -161,7 +158,7 @@ public:
 
     auto full_path = data_path / real_path;
 
-    spdlog::info("📖 get_file_content: FUSE='{}' -> REAL='{}'", virtual_path,
+    spdlog::info("get_file_content: FUSE='{}' -> REAL='{}'", virtual_path,
                  full_path.string());
 
     try {
@@ -225,7 +222,7 @@ public:
   }
 
   core::Result<void> removeFile(const std::string &path) {
-    namespace fs = std::filesystem;
+    
 
     auto data_path = native_->get_container().data_path;
     auto full_path = data_path / path;
@@ -252,7 +249,7 @@ public:
 
   core::Result<std::vector<std::string>>
   searchFiles(const std::string &pattern) const {
-    namespace fs = std::filesystem;
+    
 
     auto data_path = native_->get_container().data_path;
     std::vector<std::string> results;
@@ -277,7 +274,7 @@ public:
   }
 
   core::Result<size_t> getSize() const {
-    namespace fs = std::filesystem;
+    
 
     auto data_path = native_->get_container().data_path;
 
@@ -543,29 +540,6 @@ public:
       return core::Result<void, Error>::Ok();
     }
     return core::Result<void, Error>::Ok();
-  }
-
-  static core::Result<std::shared_ptr<OssecContainer>>
-  createFromMetadata(const ContainerMetadata &metadata,
-                     const std::string &model_path) {
-    ossec::Container native;
-    native.container_id = metadata.container_id;
-    native.owner_id = metadata.owner_id;
-    native.data_path = metadata.data_path;
-    native.labels = metadata.labels;
-
-    native.vectorfs_config.commands = metadata.commands;
-    native.vectorfs_config.mount_namespace = metadata.container_id;
-
-    native.resources.memory_capacity = metadata.memory_limit;
-    native.resources.storage_quota = metadata.storage_quota;
-    native.resources.max_open_files = metadata.file_limit;
-
-    auto pid_container =
-        std::make_shared<ossec::PidContainer>(std::move(native));
-
-    return core::Result<std::shared_ptr<OssecContainer>>::Ok(
-        std::make_shared<OssecContainer>(std::move(pid_container), model_path));
   }
 
   std::shared_ptr<ossec::PidContainer> getNative() const { return native_; }

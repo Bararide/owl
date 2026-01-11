@@ -5,41 +5,51 @@ namespace owl {
 int Application::run(int argc, char *argv[]) {
   mq_observer_.start();
 
-  auto parse_dir_result = fs_processor_.parseBaseDir();
+  auto containers = fs_processor_.parseBaseDir();
 
-  if (parse_dir_result.size() == 0) {
-    spdlog::critical("Don't correct parse base dir");
-    return -1;
+  if (containers.empty()) {
+    spdlog::warn("No containers found in base directory");
   }
 
-  setupFileSystem(parse_dir_result);
+  setupFileSystem(containers);
 
   return fs_observer_.run(argc, argv);
 }
 
-void Application::setupFileSystem(
-    const std::vector<ContainerMetadata> &containers) {
-  for (auto &metadata : containers) {
-    spdlog::info("Registering container: {}", metadata.container_id);
+void Application::setupFileSystem(const Containers &containers) {
+  for (auto &container_data : containers) {
+    spdlog::info("Setting up container: {}", container_data.container_id);
 
-    auto container_result =
-        State::OssecContainerT::createFromMetadata(metadata, kModelPath);
+    try {
+      auto pid_container =
+          std::make_shared<ossec::PidContainer>(std::move(container_data));
 
-    if (!container_result.is_ok()) {
-      spdlog::error("Failed to create container {}: {}", metadata.container_id,
-                    container_result.error().what());
-      continue;
-    }
+      auto result = state_.container_manager_.createAndRegisterContainer(
+          std::move(pid_container), kModelPath);
 
-    auto register_result =
-        state_.container_manager_.registerContainer(container_result.value());
+      if (!result.is_ok()) {
+        spdlog::error("Failed to register container: {}",
+                      result.error().what());
+      } else {
+        spdlog::info("Successfully registered container: {}",
+                     container_data.container_id);
 
-    if (!register_result.is_ok()) {
-      spdlog::error("Failed to register container {}: {}",
-                    metadata.container_id, register_result.error().what());
-    } else {
-      spdlog::info("Successfully registered container: {}",
-                   metadata.container_id);
+        auto container_result =
+            state_.container_manager_.getContainer(container_data.container_id);
+
+        if (container_result.is_ok()) {
+          auto start_result = container_result.value()->ensureRunning();
+          if (!start_result.is_ok()) {
+            spdlog::warn("Container {} not started: {}",
+                         container_data.container_id,
+                         start_result.error().what());
+          }
+        }
+      }
+
+    } catch (const std::exception &e) {
+      spdlog::error("Error setting up container {}: {}",
+                    container_data.container_id, e.what());
     }
   }
 }
