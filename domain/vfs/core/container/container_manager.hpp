@@ -1,7 +1,6 @@
 #ifndef OWL_VFS_CORE_CONTAINER_MANAGER_HPP
 #define OWL_VFS_CORE_CONTAINER_MANAGER_HPP
 
-#include "container_base.hpp"
 #include <infrastructure/result.hpp>
 
 #include <algorithm>
