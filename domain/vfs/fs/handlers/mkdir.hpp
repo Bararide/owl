@@ -11,19 +11,19 @@ struct Mkdir final : public Handler<Mkdir> {
     spdlog::info("Mkdir handler called for path: {}", path);
 
     if (strncmp(path, "/.containers/", 13) == 0) {
-      return handle_container_write(path, mode);
+      return handleContainerWrite(path, mode);
     }
 
-    return handle_virtual_file_write(path, mode);
+    return handleVirtualFilesWrite(path, mode);
   }
 
 private:
-  int handle_container_write(const char *path, mode_t mode) const {
+  int handleContainerWrite(const char *path, mode_t mode) const {
     spdlog::info("Container write: {}", path);
     return 0;
   }
 
-  int handle_virtual_file_write(const char *path, mode_t mode) const {
+  int handleVirtualFilesWrite(const char *path, mode_t mode) const {
     spdlog::info("Virtual file write: {}", path);
     return 0;
   }

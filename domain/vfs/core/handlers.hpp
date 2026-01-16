@@ -8,11 +8,8 @@
 
 namespace owl {
 
-template <typename Derived, typename EventSchema> class EventHandlerBase {
+template <typename Derived, typename EventType> class EventHandlerBase {
 public:
-  using StateType = State;
-  using EventType = EventSchema;
-
   explicit EventHandlerBase(State &state, EventLoop &loop)
       : state_{state}, loop_{loop} {}
 

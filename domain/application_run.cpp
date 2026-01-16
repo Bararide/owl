@@ -11,9 +11,14 @@ int Application::run(int argc, char *argv[]) {
     spdlog::warn("No containers found in base directory");
   }
 
+  setupBaseFileSystem();
   setupFileSystem(containers);
 
   return fs_observer_.run(argc, argv);
+}
+
+void Application::setupBaseFileSystem() {
+  fs_observer_.mkdir("/.containers/")
 }
 
 void Application::setupFileSystem(const Containers &containers) {
@@ -45,7 +50,7 @@ void Application::setupFileSystem(const Containers &containers) {
                          start_result.error().what());
           }
 
-          
+          fs_observer_.mkdir(container_result.value()->);
         }
       }
 

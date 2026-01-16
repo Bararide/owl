@@ -18,6 +18,7 @@ public:
 
   int run(int argc, char *argv[]);
 
+  void setupBaseFileSystem();
   void setupFileSystem(const Containers &containers);
   void stop();
 

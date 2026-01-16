@@ -29,9 +29,6 @@ public:
     return fuse_main(args.argc, args.argv, &ops_, this);
   }
 
-private:
-  State &state_;
-
   static FileSystemObserver *getSelf() {
     return static_cast<FileSystemObserver *>(fuse_get_context()->private_data);
   }
@@ -95,6 +92,9 @@ private:
   static int listxattr(const char *path, char *list, size_t size) {
     return Handler<Listxattr>::callback(path, list, size);
   }
+
+private:
+  State &state_;
 
   static inline struct fuse_operations ops_ = {
       .getattr = getattr,

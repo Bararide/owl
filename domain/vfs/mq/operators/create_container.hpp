@@ -14,14 +14,14 @@ struct CreateContainer final
 
   void operator()(const EventSchema &e) {
     this->process(e, [this](auto &s, auto &ev, bool not_exist) {
-      if (not_exist) {
-        return core::Result<OssecContainerPtr>::Ok(
-            {} // s.container_manager_.createContainer(ev.container_id)
-        );
+      if (!not_exist) {
+        return core::Result<OssecContainerPtr>::Error(
+            std::runtime_error("Container exists"));
       }
 
-      return core::Result<OssecContainerPtr>::Error(
-          std::runtime_error("Container exists"));
+      return core::Result<OssecContainerPtr>::Ok(
+          {} // s.container_manager_.createContainer(ev.container_id)
+      );
     });
   }
 
